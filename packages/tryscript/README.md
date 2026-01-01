@@ -2,6 +2,10 @@
 
 Golden testing for CLI applications - a TypeScript port of [trycmd](https://github.com/assert-rs/trycmd).
 
+## Requirements
+
+- **Node.js 20+** (tested with v20, v22, v24)
+
 ## Installation
 
 ```bash

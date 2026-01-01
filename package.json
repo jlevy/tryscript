@@ -29,18 +29,18 @@
     "upgrade:major": "ncu --target latest --interactive --format group"
   },
   "devDependencies": {
-    "@changesets/cli": "^2.28.0",
+    "@changesets/cli": "^2.29.0",
     "@eslint/js": "^9.0.0",
     "@types/node": "^22.0.0",
     "eslint": "^9.0.0",
     "eslint-config-prettier": "^10.0.0",
-    "lefthook": "^1.11.0",
+    "lefthook": "^2.0.0",
     "npm-check-updates": "^17.0.0",
     "prettier": "^3.0.0",
     "publint": "^0.3.0",
-    "tsdown": "^0.11.0",
+    "tsdown": "^0.18.0",
     "typescript": "^5.0.0",
     "typescript-eslint": "^8.0.0",
-    "vitest": "^3.0.0"
+    "vitest": "^4.0.0"
   }
 }

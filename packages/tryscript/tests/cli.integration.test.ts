@@ -10,7 +10,7 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 describe('tryscript CLI', () => {
   let tempDir: string;
   const pkgDir = join(__dirname, '..');
-  const binPath = join(pkgDir, 'dist/bin.js');
+  const binPath = join(pkgDir, 'dist/bin.mjs');
 
   beforeAll(() => {
     tempDir = mkdtempSync(join(tmpdir(), 'tryscript-cli-test-'));

@@ -51,7 +51,6 @@ export default defineConfig({
   define: {
     __VERSION__: JSON.stringify(getGitVersion()),
   },
-  // @ts-expect-error -- banner is a valid tsdown option but types may be out of sync
   banner: ({ fileName }: { fileName: string }) =>
     fileName.startsWith('bin.') ? '#!/usr/bin/env node\n' : '',
 });
