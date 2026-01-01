@@ -276,13 +276,14 @@ tryscript/
 {
   "dependencies": {
     "atomically": "^2.0.0",
-    "commander": "^13.0.0",
-    "diff": "^7.0.0",
+    "commander": "^14.0.0",
+    "diff": "^8.0.0",
     "fast-glob": "^3.3.0",
     "picocolors": "^1.1.0",
     "strip-ansi": "^7.1.0",
     "tree-kill": "^1.2.0",
-    "yaml": "^2.6.0"
+    "yaml": "^2.6.0",
+    "zod": "^4.0.0"
   }
 }
 ```
@@ -498,8 +499,8 @@ conflicts as the CLI grows.
 
 1. **Merged stdout/stderr in captured output**: Combine streams for deterministic
    ordering (like trycmd).
-   Both streams are captured separately, then concatenated (stdout first, then stderr).
-   This loses exact interleaving but is reproducible.
+   Streams are merged at the source (piped to a single collector) to preserve
+   interleaving as it appears to the user.
 
 2. **Temp directory per test file**: Each test file gets a fresh temp directory.
    All commands in that file run in the same temp dir, allowing multi-step workflows
@@ -767,22 +768,20 @@ export { matchOutput, normalizeOutput } from './lib/matcher.js';
 
 ```typescript
 // types.ts
+import { z } from 'zod';
+
+export const TestConfigSchema = z.object({
+  bin: z.string().optional().describe('Path to the binary to test'),
+  env: z.record(z.string()).optional().describe('Environment variables'),
+  timeout: z.number().optional().describe('Timeout per command in ms'),
+  patterns: z.record(z.union([z.string(), z.instanceof(RegExp)])).optional().describe('Custom elision patterns'),
+  tests: z.array(z.string()).optional().describe('Test file glob patterns'),
+});
 
 /**
  * Configuration for a test file or global config.
  */
-export interface TestConfig {
-  /** Path to the binary to test (relative to test file or absolute) */
-  bin?: string;
-  /** Environment variables to set for all commands */
-  env?: Record<string, string>;
-  /** Timeout per command in milliseconds (default: 30000) */
-  timeout?: number;
-  /** Custom elision patterns: [NAME] -> regex or string pattern */
-  patterns?: Record<string, RegExp | string>;
-  /** Test file glob patterns (config file only) */
-  tests?: string[];
-}
+export type TestConfig = z.infer<typeof TestConfigSchema>;
 
 /**
  * A single command block within a test file.
@@ -1064,6 +1063,7 @@ import { spawn } from 'node:child_process';
 import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import treeKill from 'tree-kill';
 import type { TestConfig, TestBlock, TestBlockResult } from './types.js';
 
 /** Default timeout in milliseconds */
@@ -1130,14 +1130,13 @@ export async function runBlock(
   const startTime = Date.now();
 
   try {
-    const { stdout, stderr, exitCode } = await executeCommand(
+    const { output, exitCode } = await executeCommand(
       block.command,
       ctx,
     );
 
-    // Merge stdout and stderr (trycmd behavior for deterministic ordering)
-    // Note: This means we lose exact interleaving, but it's reproducible
-    const actualOutput = stdout + stderr;
+    // output already contains merged stdout/stderr with correct interleaving
+    const actualOutput = output;
 
     const duration = Date.now() - startTime;
 
@@ -1169,35 +1168,34 @@ export async function runBlock(
 async function executeCommand(
   command: string,
   ctx: ExecutionContext,
-): Promise<{ stdout: string; stderr: string; exitCode: number }> {
+): Promise<{ output: string; exitCode: number }> {
   return new Promise((resolve, reject) => {
     const proc = spawn(command, {
       shell: true,
       cwd: ctx.tempDir,
       env: ctx.env as NodeJS.ProcessEnv,
+      // Pipe both to capture
+      stdio: ['ignore', 'pipe', 'pipe'],
     });
 
-    let stdout = '';
-    let stderr = '';
+    const chunks: Buffer[] = [];
 
-    proc.stdout.on('data', (data) => {
-      stdout += data.toString();
-    });
-
-    proc.stderr.on('data', (data) => {
-      stderr += data.toString();
-    });
+    // Capture data as it comes in to preserve order
+    proc.stdout.on('data', (data) => chunks.push(data));
+    proc.stderr.on('data', (data) => chunks.push(data));
 
     const timeoutId = setTimeout(() => {
-      proc.kill('SIGKILL');
+      if (proc.pid) {
+        treeKill(proc.pid, 'SIGKILL');
+      }
       reject(new Error(`Command timed out after ${ctx.timeout}ms`));
     }, ctx.timeout);
 
     proc.on('close', (code) => {
       clearTimeout(timeoutId);
+      const output = Buffer.concat(chunks).toString('utf-8');
       resolve({
-        stdout,
-        stderr,
+        output,
         exitCode: code ?? 0,
       });
     });
