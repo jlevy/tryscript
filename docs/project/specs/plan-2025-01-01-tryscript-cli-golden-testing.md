@@ -21,6 +21,13 @@ Golden testing captures CLI output and compares it against known-good “golden�
 This approach is powerful for CLI tools but lacks good cross-platform, language-agnostic
 tooling outside the Rust ecosystem.
 
+**Why tryscript?** The Rust ecosystem has excellent golden testing via
+[trycmd](https://docs.rs/trycmd/latest/trycmd/) (part of the
+[assert-rs/snapbox](https://github.com/assert-rs/snapbox) project).
+However, trycmd is tightly coupled to Cargo and Rust binaries.
+tryscript brings the same format and patterns to the TypeScript/Node.js ecosystem,
+enabling golden testing for any CLI regardless of implementation language.
+
 **Related Documentation**:
 
 - [CLI Golden Testing
@@ -38,7 +45,11 @@ tooling outside the Rust ecosystem.
   Patterns](https://github.com/jlevy/speculate/blob/main/docs/general/research/current/research-modern-typescript-monorepo-patterns.md)
   — pnpm workspace setup, tsdown build, Changesets, CI/CD
 
-**Reference Implementation**:
+**Reference Implementations**:
+
+- [trycmd](https://github.com/assert-rs/snapbox/tree/main/crates/trycmd) — The Rust
+  reference implementation.
+  tryscript aims for format compatibility with trycmd’s `.trycmd`/`.md` format.
 
 - [markform](https://github.com/jlevy/markform) — Modern TypeScript CLI following all
   patterns above. Use as a reference for project structure, build configuration, CI/CD
@@ -68,9 +79,12 @@ Not applicable — new standalone tool.
 
 ### Goals
 
-1. **Language-agnostic**: Test any CLI binary, not just Node/TypeScript
+1. **Language-agnostic**: Test any CLI binary, not just Node/TypeScript (Unlike trycmd
+   which is tightly integrated with Cargo)
 
-2. **trycmd-compatible format**: Same markdown syntax and elision patterns
+2. **trycmd-compatible format**: Same markdown syntax and elision patterns.
+   See [trycmd docs](https://docs.rs/trycmd/latest/trycmd/#trycmd) for the reference
+   format.
 
 3. **Minimal dependencies**: Node.js only, no Docker
 
@@ -100,21 +114,35 @@ Not applicable — new standalone tool.
 
 - CI/CD with GitHub Actions
 
-**Out of scope for v1**:
+**Out of scope for v1** (trycmd features deferred):
 
-- `.in/` and `.out/` directory verification (file system assertions)
+- `.in/` and `.out/` directory verification — trycmd’s
+  [file system assertions](https://docs.rs/trycmd/latest/trycmd/#in)
 
-- Parallel test execution
+- Parallel test execution — trycmd uses rayon for concurrent test runs
 
 - Watch mode
 
-- TOML format (trycmd’s alternative format)
+- TOML format — trycmd’s
+  [alternative structured format](https://docs.rs/trycmd/latest/trycmd/#toml) with
+  separate `.stdout`/`.stderr` files
+
+- Named exit codes — trycmd supports `? success`, `? failed`, `? interrupted`, `?
+  skipped`
 
 - Interactive command testing (spawn with waitForText)
+
+- Binary file comparison — trycmd’s `binary = true` mode
 
 - npm publishing (stretch goal)
 
 ### Test Format Specification
+
+> **trycmd compatibility**: The test format mirrors
+> [trycmd’s `.trycmd`/`.md` format](https://docs.rs/trycmd/latest/trycmd/#trycmd).
+> Key syntax elements (`$ `, `> `, `? <code>`) are identical.
+> See [Appendix: trycmd Compatibility](#appendix-trycmd-compatibility) for full
+> comparison.
 
 See [research doc: Test File
 Format](https://github.com/jlevy/speculate/blob/main/docs/general/research/current/research-cli-golden-testing.md#test-file-format-tryscriptmd)
@@ -140,14 +168,16 @@ Usage: my-cli [OPTIONS]
 ```
 ````
 
-**Parsing rules**:
+**Parsing rules** (matching
+[trycmd syntax](https://docs.rs/trycmd/latest/trycmd/#trycmd)):
 
-- Lines starting with `$` are commands; the `$` and leading space are stripped
+- Lines starting with `$ ` are commands; the `$` and leading space are stripped
 
-- Lines starting with `>` are command continuations, appended with a space
+- Lines starting with `> ` are command continuations, appended with a space
 
 - The `? <code>` exit directive may appear anywhere after command output; default is `?
-  0` if absent
+  0` if absent. **Note**: trycmd also supports `? success`, `? failed`, `? interrupted`,
+  `? skipped` — tryscript v1 only supports numeric codes.
 
 - The `$` prompt and `>` continuation markers are not part of expected output
 
@@ -155,19 +185,27 @@ Usage: my-cli [OPTIONS]
 
 - Trailing blank lines in expected output are ignored by default (configurable)
 
+- **Command splitting**: trycmd uses [shlex](https://crates.io/crates/shlex) for command
+  parsing. tryscript uses `shell: true` with Node.js spawn, achieving similar
+  shell-native parsing.
+
 **Environment from frontmatter**: Merged shallowly with `process.env`. Frontmatter `env`
 values take precedence.
 
 ### Elision Patterns
 
-| Pattern | Matches | Example |
-| --- | --- | --- |
-| `[..]` | Any characters on line | `Done in [..]ms` |
-| `...` | Zero or more lines | See full output below `...` |
-| `[EXE]` | `.exe` on Windows, empty otherwise | `my-cli[EXE]` |
-| `[ROOT]` | Test root directory path | `[ROOT]/output.txt` |
-| `[CWD]` | Current working directory | `[CWD]/file.txt` |
-| `[NAME]` | Custom pattern from config | `Created: [TIMESTAMP]` |
+> **trycmd reference**:
+> [Eliding Content](https://docs.rs/trycmd/latest/trycmd/#stdout-and-stderr) — These
+> patterns match trycmd’s elision syntax exactly.
+
+| Pattern | Matches | trycmd Regex | Example |
+| --- | --- | --- | --- |
+| `[..]` | Any characters on line | `[^\n]*?` | `Done in [..]ms` |
+| `...` | Zero or more lines | `\n(([^\n]*\n)*)?` | See full output below `...` |
+| `[EXE]` | `.exe` on Windows, empty otherwise | `.exe` or `` | `my-cli[EXE]` |
+| `[ROOT]` | Test root directory path | Literal substitution | `[ROOT]/output.txt` |
+| `[CWD]` | Current working directory | Literal substitution | `[CWD]/file.txt` |
+| `[NAME]` | Custom pattern from config | Via `TestCases::insert_var` | `Created: [TIMESTAMP]` |
 
 * * *
 
@@ -497,28 +535,36 @@ conflicts as the CLI grows.
 
 ### Key Design Decisions
 
+> **trycmd alignment**: These decisions mirror trycmd’s behavior unless noted.
+> See [trycmd source](https://github.com/assert-rs/snapbox/tree/main/crates/trycmd/src)
+> for reference implementation.
+
 1. **Merged stdout/stderr in captured output**: Combine streams for deterministic
-   ordering (like trycmd).
-   Streams are merged at the source (piped to a single collector) to preserve
-   interleaving as it appears to the user.
+   ordering. **trycmd correspondence**: trycmd merges streams for `.trycmd`/`.md` files
+   but keeps them separate for `.toml` format with `.stdout`/`.stderr` sidecar files.
+   tryscript only supports merged output (simpler for v1).
 
 2. **Temp directory per test file**: Each test file gets a fresh temp directory.
    All commands in that file run in the same temp dir, allowing multi-step workflows
    (create file in one block, verify in next).
    The temp dir is cleaned up after the file completes.
+   **trycmd correspondence**: Identical behavior.
 
 3. **Pattern-to-regex conversion**: Expected output with elision patterns is converted
    to a regex. Special characters are escaped, then placeholders like `[..]` are
    converted to regex patterns.
    Matching is done on normalized output.
+   **trycmd correspondence**: Same approach; patterns defined in
+   [snapbox/src/data](https://github.com/assert-rs/snapbox/tree/main/crates/snapbox/src/data).
 
 4. **In-place updates**: `--update` rewrites the original `.tryscript.md` file.
    The updater preserves markdown structure and attempts to keep elision patterns where
-   they still apply.
+   they still apply. **trycmd discrepancy**: trycmd uses `TRYCMD=overwrite` env var;
+   tryscript uses `--update` flag for better discoverability.
 
 5. **Fail on first mismatch per block**: When a block fails, show detailed diff and
    continue to the next block (unless `--fail-fast`). This allows seeing all failures in
-   a single run.
+   a single run. **trycmd correspondence**: Similar behavior.
 
 6. **Exit codes**:
 
@@ -528,9 +574,21 @@ conflicts as the CLI grows.
 
    - `2` = configuration or runtime error (can’t run tests)
 
+7. **Binary discovery**: The `bin` config option specifies an explicit path to the
+   binary. **trycmd discrepancy**: trycmd uses `bin.name` to look up binaries from
+   `Cargo.toml` via the `cargo_bin!` macro.
+   tryscript uses explicit paths since it’s language-agnostic and can’t assume Cargo
+   integration.
+
+8. **Config format**: TypeScript config file (`tryscript.config.ts`) with `defineConfig`
+   helper. **trycmd discrepancy**: trycmd uses TOML and Cargo.toml integration.
+   TypeScript config allows type-safe `RegExp` objects for custom patterns: `patterns: {
+   TIMESTAMP: /\d{4}-\d{2}-\d{2}/ }`
+
 ### Important Implementation Notes
 
-**Output normalization** (applied before matching):
+**Output normalization** (applied before matching, matching
+[snapbox normalization](https://docs.rs/snapbox/latest/snapbox/)):
 
 - Convert `\r\n` and `\r` to `\n`
 
@@ -1258,6 +1316,10 @@ to test with itself.
 
 **Pattern conversion logic**:
 
+> **trycmd reference**: Pattern matching is implemented in
+> [snapbox/src/data](https://github.com/assert-rs/snapbox/tree/main/crates/snapbox/src/data).
+> The regex conversions below match trycmd’s documented behavior.
+
 ```typescript
 // matcher.ts
 
@@ -1271,13 +1333,13 @@ function escapeRegex(str: string): string {
 /**
  * Convert expected output with elision patterns to a regex.
  *
- * Handles:
- * - [..] — matches any characters on the same line (non-greedy)
- * - ... — matches zero or more complete lines
+ * Handles (matching trycmd):
+ * - [..] — matches any characters on the same line (trycmd: [^\n]*?)
+ * - ... — matches zero or more complete lines (trycmd: \n(([^\n]*\n)*)?)
  * - [EXE] — matches .exe on Windows, empty otherwise
  * - [ROOT] — replaced with test root directory (pre-processed)
  * - [CWD] — replaced with current working directory (pre-processed)
- * - Custom [NAME] patterns from config
+ * - Custom [NAME] patterns from config (trycmd: TestCases::insert_var)
  */
 function patternToRegex(
   expected: string,
@@ -2091,9 +2153,19 @@ Use tryscript to test:
 
 ### Future Work (Post-v1)
 
-- `.in/` and `.out/` directory verification (file system assertions)
+> **trycmd parity**: Most of these features exist in trycmd and could be ported.
 
-- Parallel test execution (run files concurrently)
+- `.in/` and `.out/` directory verification — [trycmd file system
+  assertions](https://docs.rs/trycmd/latest/trycmd/#in)
+
+- Parallel test execution (run files concurrently) — trycmd uses rayon
+
+- Named exit codes (`? success`, `? failed`) —
+  [trycmd status values](https://docs.rs/trycmd/latest/trycmd/#trycmd)
+
+- TOML format alternative —
+  [trycmd .toml format](https://docs.rs/trycmd/latest/trycmd/#toml) with separate
+  `.stdout`/`.stderr` files
 
 - Watch mode (re-run on file changes)
 
@@ -2109,7 +2181,47 @@ Use tryscript to test:
 
 ## References
 
-- [trycmd](https://github.com/assert-rs/trycmd) — Rust golden testing tool (inspiration)
+### trycmd (Rust Reference Implementation)
+
+tryscript is a TypeScript port of trycmd, aiming for format compatibility where
+practical.
+
+**Documentation**:
+
+- [trycmd docs.rs](https://docs.rs/trycmd/latest/trycmd/) — Official API documentation
+
+- [trycmd File Formats](https://docs.rs/trycmd/latest/trycmd/#file-formats) —
+  `.trycmd`/`.md` and `.toml` format specifications
+
+- [trycmd Eliding Content](https://docs.rs/trycmd/latest/trycmd/#stdout-and-stderr) —
+  Elision pattern documentation
+
+- [TestCases struct](https://docs.rs/trycmd/latest/trycmd/struct.TestCases.html) — Test
+  harness API
+
+**Source Code** (trycmd is now part of the snapbox monorepo):
+
+- [snapbox monorepo](https://github.com/assert-rs/snapbox) — Parent repository
+
+- [trycmd crate](https://github.com/assert-rs/snapbox/tree/main/crates/trycmd) — trycmd
+  source
+
+- [trycmd/src](https://github.com/assert-rs/snapbox/tree/main/crates/trycmd/src) —
+  Implementation
+
+- [snapbox crate](https://github.com/assert-rs/snapbox/tree/main/crates/snapbox) —
+  Underlying snapshot testing library (handles elisions, normalization)
+
+**Examples**:
+
+- [demo_trycmd](https://github.com/assert-rs/snapbox/tree/main/examples/demo_trycmd) —
+  Example project using trycmd
+
+- [typos](https://github.com/crate-ci/typos) — Production project using trycmd
+
+- [clap](https://github.com/clap-rs/clap) — CLI parser that uses trycmd for testing
+
+### Related Documentation
 
 - [markform](https://github.com/jlevy/markform) — Reference TypeScript CLI project
 
@@ -2121,3 +2233,57 @@ Use tryscript to test:
 
 - [Modern TypeScript Monorepo
   Patterns](https://github.com/jlevy/speculate/blob/main/docs/general/research/current/research-modern-typescript-monorepo-patterns.md)
+
+* * *
+
+## Appendix: trycmd Compatibility
+
+This section documents how tryscript aligns with or diverges from trycmd.
+
+### Correspondences (Matching trycmd)
+
+| Feature | trycmd | tryscript | Notes |
+| --- | --- | --- | --- |
+| File extension | `.trycmd`, `.md` | `.tryscript.md` | Same markdown format |
+| Command prefix | `$ ` | `$ ` | Identical |
+| Continuation prefix | `> ` | `> ` | Identical |
+| Exit code syntax | `? <code>` | `? <code>` | Identical |
+| `[..]` pattern | `[^\n]*?` | `[^\n]*` | Same semantics |
+| `...` pattern | `\n(([^\n]*\n)*)?` | `(?:[^\n]*\n)*` | Same semantics |
+| `[EXE]` pattern | `.exe` on Windows | `.exe` on Windows | Identical |
+| `[ROOT]` pattern | Test root dir | Test root dir | Identical |
+| `[CWD]` pattern | Current working dir | Current working dir | Identical |
+| Custom patterns | `TestCases::insert_var` | `patterns` config | Same concept |
+| Merged stdout/stderr | Yes (in `.trycmd`) | Yes | Same approach |
+| Temp dir per file | Yes | Yes | Identical |
+| Shared temp across blocks | Yes | Yes | Identical |
+| Output normalization | Line endings, trailing ws | Line endings, trailing ws | Same rules |
+| Command parsing | shlex | shell: true | Similar result |
+
+### Discrepancies (Intentional Differences)
+
+| Feature | trycmd | tryscript | Rationale |
+| --- | --- | --- | --- |
+| Binary discovery | `bin.name` from Cargo.toml | Explicit `bin` path in config | Language-agnostic design |
+| Config format | `.toml` + Cargo integration | `tryscript.config.ts` | TypeScript-native, type-safe RegExp |
+| Update mode | `TRYCMD=overwrite` env var | `--update` CLI flag | More discoverable |
+| Named exit codes | `? success`, `? failed`, `? skipped` | Numeric only (`? 0`, `? 1`) | Simpler for v1 |
+| Separate stdout/stderr | `.stdout`/`.stderr` files with `.toml` | Merged only | Simpler for v1 |
+| `.in/` directories | Auto-CWD from input dir | Not supported in v1 | Future work |
+| `.out/` directories | File system verification | Not supported in v1 | Future work |
+| TOML format | Full `.toml` test format | Not supported | Markdown-only for v1 |
+| Parallel execution | Yes (via rayon) | Not in v1 | Future work |
+| Binary file support | `binary = true` in TOML | Not supported | Text-only for v1 |
+| Sandbox mode | `fs.sandbox = true` | Always sandboxed (temp dir) | Implicit |
+
+### Future Alignment Opportunities
+
+These trycmd features could be added in future versions:
+
+1. **Named exit codes**: Add `? success` (alias for `? 0`) and `? failed` (non-zero)
+
+2. **`.in/` and `.out/` directories**: File system verification
+
+3. **Parallel execution**: Run test files concurrently
+
+4. **TOML format**: Alternative structured format for complex tests
