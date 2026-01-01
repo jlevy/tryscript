@@ -145,14 +145,14 @@ pnpm tryscript tests/basic.tryscript.md
 pnpm tryscript tests/ --verbose
 
 # Testing built output (requires pnpm build first)
-node packages/tryscript/dist/bin.js --help
+node packages/tryscript/dist/bin.mjs --help
 ```
 
 **Why two approaches?**
 
 - `pnpm tryscript` — Runs source via `tsx`. Use this during development—always current,
   no build step needed.
-- `node dist/bin.js` — Runs the built binary from `dist/`. Use this to verify the
+- `node dist/bin.mjs` — Runs the built binary from `dist/`. Use this to verify the
   published output works correctly before release.
 
 ### CLI Commands
@@ -208,6 +208,74 @@ pnpm test:golden
 
 Golden tests run tryscript against .tryscript.md files to validate the golden testing
 works correctly.
+
+### Coverage
+
+tryscript supports two types of coverage measurement:
+
+**Unit Test Coverage** (vitest):
+
+```bash
+pnpm test:coverage          # Unit tests with coverage
+```
+
+**Golden Test Coverage** (c8):
+
+```bash
+pnpm test:golden:coverage   # Golden tests with subprocess coverage
+```
+
+**Combined Coverage**:
+
+```bash
+pnpm test:all:coverage      # Both coverage types
+```
+
+#### Why c8 for Golden Tests?
+
+Standard coverage tools like `vitest --coverage` only track code executed in the main
+process. When tryscript runs CLI commands as subprocesses, that execution isn't tracked.
+
+[c8](https://github.com/bcoe/c8) solves this by leveraging Node's built-in V8 coverage
+collection via the `NODE_V8_COVERAGE` environment variable. When c8 wraps a command:
+
+1. c8 sets `NODE_V8_COVERAGE` to a temp directory
+2. Node.js writes coverage data when each process exits
+3. c8 collects coverage from all subprocesses
+4. Coverage is mapped back to source files via sourcemaps
+
+#### c8 Configuration
+
+The golden test coverage script uses these flags:
+
+```bash
+c8 --src src --all --include 'dist/**' --reporter text --reporter html \
+   --reports-dir coverage-golden node dist/bin.mjs 'tests/**/*.tryscript.md'
+```
+
+| Flag | Purpose |
+|------|---------|
+| `--src src` | Map coverage back to source directory |
+| `--all` | Include files with 0% coverage in report |
+| `--include 'dist/**'` | Only track your built CLI (not node_modules) |
+| `--reporter text` | Terminal output |
+| `--reporter html` | HTML report for detailed analysis |
+| `--reports-dir coverage-golden` | Separate from vitest coverage |
+
+#### For Users Testing Their Own CLIs
+
+The same technique works for any CLI tested with tryscript. Add to your `package.json`:
+
+```json
+{
+  "scripts": {
+    "test:golden": "tryscript 'tests/**/*.tryscript.md'",
+    "test:golden:coverage": "c8 --src src --all --include 'dist/**' tryscript 'tests/**/*.tryscript.md'"
+  }
+}
+```
+
+This provides realistic coverage metrics from actual CLI usage rather than just unit tests.
 
 ### Watch Mode
 

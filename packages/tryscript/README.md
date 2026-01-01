@@ -184,6 +184,32 @@ for (const block of testFile.blocks) {
 }
 ```
 
+## Measuring Coverage
+
+When testing CLI tools as subprocesses, standard coverage tools don't track execution. Use [c8](https://github.com/bcoe/c8) which leverages Node's V8 coverage collection:
+
+```bash
+npm install -D c8
+```
+
+Add scripts to your `package.json`:
+
+```json
+{
+  "scripts": {
+    "test:golden": "tryscript 'tests/**/*.tryscript.md'",
+    "test:golden:coverage": "c8 --src src --all --include 'dist/**' tryscript 'tests/**/*.tryscript.md'"
+  }
+}
+```
+
+Key c8 flags:
+- `--src src` — Map coverage back to source files
+- `--all` — Include files with 0% coverage
+- `--include 'dist/**'` — Track your built CLI output
+
+This captures coverage from actual CLI usage—the most realistic testing possible.
+
 ## Comparison with trycmd
 
 tryscript is a TypeScript port of the Rust [trycmd](https://github.com/assert-rs/trycmd) crate. Key differences:
