@@ -5,6 +5,9 @@ function escapeRegex(str: string): string {
   return str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
 
+// Marker prefix for patterns (uses Unicode private use chars that won't appear in normal output)
+const MARKER = '\uE000';
+
 /**
  * Convert expected output with elision patterns to a regex.
  *
@@ -20,36 +23,50 @@ function patternToRegex(
   expected: string,
   customPatterns: Record<string, string | RegExp> = {},
 ): RegExp {
-  // First, handle custom patterns BEFORE escaping (they may contain special chars)
+  // Build a map of markers to their regex replacements
+  const replacements = new Map<string, string>();
+  let markerIndex = 0;
+
+  const getMarker = (): string => {
+    return `${MARKER}${markerIndex++}${MARKER}`;
+  };
+
   let processed = expected;
+
+  // Replace [..] with marker
+  const dotdotMarker = getMarker();
+  replacements.set(dotdotMarker, '[^\\n]*');
+  processed = processed.replaceAll('[..]', dotdotMarker);
+
+  // Replace ... (followed by newline) with marker
+  const ellipsisMarker = getMarker();
+  replacements.set(ellipsisMarker, '(?:[^\\n]*\\n)*');
+  processed = processed.replace(/\.\.\.\n/g, ellipsisMarker);
+
+  // Replace [EXE] with marker
+  const exeMarker = getMarker();
+  const exe = process.platform === 'win32' ? '\\.exe' : '';
+  replacements.set(exeMarker, exe);
+  processed = processed.replaceAll('[EXE]', exeMarker);
+
+  // Replace custom patterns with markers
   for (const [name, pattern] of Object.entries(customPatterns)) {
     const placeholder = `[${name}]`;
     const patternStr = pattern instanceof RegExp ? pattern.source : pattern;
-    // Replace placeholders with a unique marker that won't be escaped
-    processed = processed.replaceAll(placeholder, `\x00CUSTOM:${name}:${patternStr}\x00`);
+    const marker = getMarker();
+    replacements.set(marker, `(${patternStr})`);
+    processed = processed.replaceAll(placeholder, marker);
   }
 
   // Escape special regex characters
   let regex = escapeRegex(processed);
 
-  // Restore custom patterns (the markers were escaped, so unescape them)
-  regex = regex.replace(/\\x00CUSTOM:([^:]+):([^\\]+)\\x00/g, '($2)');
+  // Restore markers to their regex replacements
+  for (const [marker, replacement] of replacements) {
+    regex = regex.replaceAll(escapeRegex(marker), replacement);
+  }
 
-  // [..] matches any characters on the line (non-greedy, stops at newline)
-  // After escaping, [..] becomes \[\.\.\]
-  regex = regex.replace(/\\\[\\\.\\\.\\\]/g, '[^\\n]*');
-
-  // ... matches zero or more complete lines (including the newline after ...)
-  // After escaping, ... becomes \.\.\.
-  // Match: optional content before newline, then zero or more complete lines
-  regex = regex.replace(/\\\.\\\.\\\.(\r?\\n)?/g, '(?:[^\\n]*\\n)*');
-
-  // [EXE] platform-specific executable extension
-  // After escaping, [EXE] becomes \[EXE\]
-  const exe = process.platform === 'win32' ? '\\.exe' : '';
-  regex = regex.replace(/\\\[EXE\\\]/g, exe);
-
-  // Match the entire string (multiline mode for ^ and $ to match line boundaries)
+  // Match the entire string (dotall mode for . to match newlines if needed)
   return new RegExp(`^${regex}$`, 's');
 }
 
