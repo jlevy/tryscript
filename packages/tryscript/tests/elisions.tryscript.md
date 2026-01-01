@@ -65,3 +65,31 @@ $ node -e "process.exit(0)"
 $ node -e "process.exit(42)"
 ? 42
 ```
+
+# Test: [CWD] pattern matches working directory
+
+The `[CWD]` pattern matches the current working directory.
+
+```console
+$ pwd
+[CWD]
+? 0
+```
+
+# Test: [ROOT] pattern matches temp root
+
+The `[ROOT]` pattern matches the test root directory (same as [CWD] for tryscript).
+
+```console
+$ node -e "console.log('Running from: ' + process.cwd())"
+Running from: [ROOT]
+? 0
+```
+
+# Test: [CWD] with file path
+
+```console
+$ touch testfile.txt && realpath testfile.txt
+[CWD]/testfile.txt
+? 0
+```

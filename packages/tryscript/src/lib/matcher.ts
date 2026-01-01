@@ -1,3 +1,5 @@
+import stripAnsi from 'strip-ansi';
+
 /**
  * Escape special regex characters in a string.
  */
@@ -86,13 +88,17 @@ function preprocessPaths(expected: string, context: { root: string; cwd: string 
 
 /**
  * Normalize actual output for comparison.
+ * - Remove ANSI escape codes (colors, etc.)
  * - Normalize line endings to \n
  * - Normalize paths (Windows backslashes to forward slashes)
  * - Trim trailing whitespace from lines
  * - Ensure single trailing newline
  */
 export function normalizeOutput(output: string): string {
-  let normalized = output
+  // Remove ANSI escape codes first
+  let normalized = stripAnsi(output);
+
+  normalized = normalized
     .replace(/\r\n/g, '\n')
     .replace(/\r/g, '\n')
     .split('\n')
