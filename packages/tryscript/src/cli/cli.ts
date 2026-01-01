@@ -2,6 +2,8 @@ import { Command } from 'commander';
 import pc from 'picocolors';
 import { VERSION } from '../index.js';
 import { runCommand } from './commands/run.js';
+import { registerReadmeCommand } from './commands/readme.js';
+import { registerDocsCommand } from './commands/docs.js';
 
 export function run(argv: string[]): void {
   const program = new Command()
@@ -18,6 +20,10 @@ export function run(argv: string[]): void {
     .option('--verbose', 'Show detailed output including passing test output')
     .option('--quiet', 'Suppress non-essential output (only show failures)')
     .action(runCommand);
+
+  // Register subcommands
+  registerReadmeCommand(program);
+  registerDocsCommand(program);
 
   program.parseAsync(argv).catch((err: Error) => {
     console.error(pc.red(`Error: ${err.message}`));

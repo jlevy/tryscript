@@ -2,11 +2,13 @@ name: Release
 
 on:
   push:
-    branches: [main]
+    tags:
+      - 'v*'
 
 permissions:
   contents: write
   pull-requests: write
+  id-token: write # Required for OIDC trusted publishing
 
 jobs:
   release:
@@ -17,8 +19,6 @@ jobs:
           fetch-depth: 0
 
       - uses: pnpm/action-setup@v4
-        with:
-          version: 10
 
       - uses: actions/setup-node@v4
         with:
@@ -28,10 +28,40 @@ jobs:
 
       - run: pnpm install --frozen-lockfile
 
-      - name: Create Release PR or Publish
-        uses: changesets/action@v1
+      - name: Build and validate
+        run: pnpm build && pnpm publint
+
+      # Publish with OIDC trusted publishing (no NPM_TOKEN needed)
+      - name: Publish to npm
+        run: pnpm -r publish --access public --no-git-checks
+        env:
+          NPM_CONFIG_PROVENANCE: true
+
+      # Extract version from tag and get changelog section
+      - name: Extract release notes
+        id: release_notes
+        run: |
+          VERSION="${GITHUB_REF_NAME#v}"
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+
+          # Extract changelog section for this version
+          # Matches from "## $VERSION" until the next "## " header
+          NOTES=$(awk -v ver="$VERSION" '
+            /^## / { if (found) exit; if ($2 == ver) found=1; next }
+            found { print }
+          ' packages/tryscript/CHANGELOG.md)
+
+          # Use delimiter for multiline output
+          echo "notes<<EOF" >> $GITHUB_OUTPUT
+          echo "$NOTES" >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
         with:
-          publish: pnpm release
+          name: v${{ steps.release_notes.outputs.version }}
+          body: ${{ steps.release_notes.outputs.notes }}
+          draft: false
+          prerelease: ${{ contains(steps.release_notes.outputs.version, '-') }}
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          NPM_TOKEN: ${{ secrets.NPM_TOKEN }}

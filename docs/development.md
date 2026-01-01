@@ -1,84 +1,235 @@
-## Developer Workflows
+# Development Guide
 
-### Initial Setup
+> This document covers essential developer workflows for this project.
+> **Update this document** as new patterns and workflows are established during
+> implementation.
 
-Install dependencies:
+## Prerequisites
+
+- **Node.js 20+** — We recommend v24 (current) or v22 LTS.
+  Minimum supported is v20. [nodejs.org](https://nodejs.org/)
+
+- **pnpm 10.x** — Install via `corepack enable` or `npm install -g pnpm`
+
+### Node.js Setup
+
+This project requires Node.js 20 or higher. We recommend Node 24 (current) for best
+performance.
+
+**Option 1: Direct installation**
+
+Download from [nodejs.org](https://nodejs.org/) and install Node.js 24 (current) or
+Node.js 22 LTS.
+
+**Option 2: Using a version manager**
 
 ```bash
-# Install all dependencies (pnpm workspaces installs for both root and packages/)
-pnpm install     # Installs dependencies + git hooks via prepare script
+# Using nvm (recommended: install latest)
+nvm install 24
+nvm use 24
+
+# Using fnm
+fnm install 24
+fnm use 24
+
+# Using mise
+mise use node@24
 ```
 
-### Development Environment
-
-For local development, tryscript uses pnpm workspaces with a modern TypeScript monorepo
-structure.
-
-### Building
+**Verify Installation**
 
 ```bash
+node --version   # Should show v20.x.x or higher (v24 recommended)
+pnpm --version   # Should show 10.x.x
+```
+
+## Project Structure
+
+This is a pnpm monorepo with packages in `packages/`:
+
+```
+tryscript/
+  packages/
+    tryscript/           # Main package (CLI, parser, runner)
+      src/
+        cli/             # CLI commands
+        lib/             # Core: parsing, matching, running
+      tests/             # Self-tests (.tryscript.md) and unit tests
+      docs/              # Package documentation
+  docs/                  # Project documentation
+  .changeset/            # Version management
+  .github/workflows/     # CI/CD
+```
+
+## Common Commands
+
+Run from repository root:
+
+```bash
+# Install dependencies
+pnpm install
+
 # Build all packages
 pnpm build
 
-# Build specific package
+# Type checking (no emit)
+pnpm typecheck
+
+# Run tests
+pnpm test
+
+# Lint
+pnpm lint
+
+# Validate package exports
+pnpm publint
+```
+
+Run commands for a specific package:
+
+```bash
+# Build only tryscript package
 pnpm --filter tryscript build
 
-# Watch mode for development
+# Watch mode during development
 pnpm --filter tryscript dev
+
+# Run tests for tryscript
+pnpm --filter tryscript test
 ```
 
-### Running Tests
+## Development Workflow
+
+### Making Changes
+
+1. Create a feature branch from `main`
+
+2. Make changes and ensure tests pass
+
+3. Run full validation: `pnpm lint && pnpm typecheck && pnpm build && pnpm test`
+
+4. Commit and push
+
+### Pre-commit Checklist
+
+Before committing, ensure:
 
 ```bash
-# View all test-related scripts
-pnpm run help | grep test
-
-# Formatting and linting
-pnpm format           # Format all files
-pnpm lint             # Lint all files with auto-fix
-
-# Check-only (for CI)
-pnpm format:check     # Check formatting
-pnpm lint:check       # Lint without auto-fix
-
-# Common test commands
-pnpm test             # Run all tests
-pnpm test:golden      # Run golden tests with tryscript
-pnpm test:coverage    # Run with coverage report
-pnpm precommit        # Full precommit check (format, lint, typecheck, test)
+pnpm format:check  # Formatting correct
+pnpm lint          # No lint errors
+pnpm typecheck     # No type errors
+pnpm build         # Build succeeds
+pnpm publint       # Package exports valid
+pnpm test          # Tests pass
 ```
 
-### Running tryscript CLI
+Or run the full check:
 
 ```bash
-# Run during development (using tsx)
+pnpm precommit     # Runs format, lint, typecheck, test
+```
+
+### Releases
+
+Changesets are created at release time, not per-PR. Just merge your work to `main`. See
+[Publishing](publishing.md) for the release workflow.
+
+## CLI Usage
+
+Run the CLI from the repository root:
+
+```bash
+# Development: runs TypeScript source directly via tsx (always current, no build needed)
+pnpm tryscript --help
 pnpm tryscript tests/basic.tryscript.md
+pnpm tryscript tests/ --verbose
 
-# Run with built version
-pnpm build && node packages/tryscript/dist/bin.js tests/
-
-# Run specific test file
-pnpm tryscript packages/tryscript/tests/basic.tryscript.md
+# Testing built output (requires pnpm build first)
+node packages/tryscript/dist/bin.js --help
 ```
+
+**Why two approaches?**
+
+- `pnpm tryscript` — Runs source via `tsx`. Use this during development—always current,
+  no build step needed.
+- `node dist/bin.js` — Runs the built binary from `dist/`. Use this to verify the
+  published output works correctly before release.
+
+### CLI Commands
+
+| Command             | Description                               |
+| ------------------- | ----------------------------------------- |
+| `[files...]`        | Run golden tests (default command)        |
+| `readme`            | Display README documentation              |
+| `docs`              | Display concise syntax reference          |
 
 ### CLI Options
 
-```
-tryscript [options] [files...]
+| Option             | Description                              |
+| ------------------ | ---------------------------------------- |
+| `--update`         | Update golden files with actual output   |
+| `--diff`           | Show diff on failure (default: true)     |
+| `--no-diff`        | Hide diff on failure                     |
+| `--fail-fast`      | Stop on first failure                    |
+| `--filter <regex>` | Filter tests by name pattern             |
+| `--verbose`        | Show detailed output                     |
+| `--quiet`          | Suppress non-essential output            |
 
-Options:
-  --version          Show version number
-  --update           Update golden files with actual output
-  --diff             Show diff on failure (default: true)
-  --no-diff          Hide diff on failure
-  --fail-fast        Stop on first failure
-  --filter <pattern> Filter tests by name pattern
-  --verbose          Show detailed output
-  --quiet            Suppress non-essential output (only show failures)
-  --help             Display help
+## Testing
+
+### Quick Reference
+
+```bash
+# Full precommit check (format, lint, typecheck, test)
+pnpm precommit
+
+# Individual commands
+pnpm build           # Build all packages
+pnpm lint            # ESLint
+pnpm typecheck       # TypeScript type checking
+pnpm test            # All tests
+pnpm test:golden     # Golden self-tests only
+pnpm publint         # Validate package exports
 ```
 
-### Writing Test Files
+### Test Categories
+
+**Unit Tests** (`tests/*.test.ts`): Test individual modules
+
+```bash
+pnpm test
+```
+
+**Golden Tests** (`tests/*.tryscript.md`): Self-tests using tryscript on itself
+
+```bash
+pnpm test:golden
+```
+
+Golden tests run tryscript against .tryscript.md files to validate the golden testing
+works correctly.
+
+### Watch Mode
+
+```bash
+# Run tests in watch mode during development
+pnpm --filter tryscript test:watch
+```
+
+### CI Consistency
+
+The CI workflow (`.github/workflows/ci.yml`) runs these commands in order:
+
+1. `pnpm install`
+2. `pnpm format:check`
+3. `pnpm lint:check`
+4. `pnpm build`
+5. `pnpm publint`
+6. `pnpm test:coverage`
+
+To match CI behavior locally, run `pnpm precommit` which executes the same checks.
+
+## Writing Test Files
 
 Test files use the `.tryscript.md` extension and contain markdown with console code blocks:
 
@@ -101,30 +252,15 @@ Usage: my-cli [options]
 
 ### Elision Patterns
 
-| Pattern | Matches                       | Example              |
-| ------- | ----------------------------- | -------------------- |
-| `[..]`  | Any characters on line        | `Done in [..]ms`     |
-| `...`   | Zero or more lines            | See output below ... |
-| `[EXE]` | `.exe` on Windows, empty else | `my-cli[EXE]`        |
-| `[ROOT]`| Test root directory path      | `[ROOT]/output.txt`  |
-| `[CWD]` | Current working directory     | `[CWD]/file.txt`     |
+| Pattern  | Matches                       | Example             |
+| -------- | ----------------------------- | ------------------- |
+| `[..]`   | Any characters on line        | `Done in [..]ms`    |
+| `...`    | Zero or more lines            | `...\nDone`         |
+| `[EXE]`  | `.exe` on Windows, empty else | `my-cli[EXE]`       |
+| `[ROOT]` | Test root directory path      | `[ROOT]/output.txt` |
+| `[CWD]`  | Current working directory     | `[CWD]/file.txt`    |
 
-### Creating a Release
-
-This project uses Changesets for version management:
-
-```bash
-# Add a changeset for your changes
-pnpm changeset
-
-# Version packages (updates package.json and changelog)
-pnpm version-packages
-
-# Publish to npm
-pnpm release
-```
-
-### Git Hooks
+## Git Hooks
 
 Pre-commit and pre-push hooks are managed by Lefthook:
 
@@ -138,7 +274,7 @@ git commit --no-verify
 git push --no-verify
 ```
 
-### Issue Tracking
+## Issue Tracking
 
 This project uses **bd (beads)** for issue tracking. See
 `docs/general/agent-setup/beads-setup.md` for setup instructions.
@@ -156,3 +292,8 @@ bd update <id> --status in_progress
 # Close an issue
 bd close <id>
 ```
+
+---
+
+> **Note:** This is an initial version created during Phase 0 scaffolding.
+> Update as implementation progresses and new patterns emerge.
