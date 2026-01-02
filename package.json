@@ -1,0 +1,46 @@
+{
+  "name": "tryscript-workspace",
+  "type": "module",
+  "private": true,
+  "packageManager": "pnpm@10.11.0",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "build": "pnpm -r build",
+    "dev": "pnpm -r --parallel dev",
+    "typecheck": "pnpm -r typecheck",
+    "test": "pnpm -r test",
+    "test:golden": "pnpm -r test:golden",
+    "test:coverage": "pnpm -r test:coverage",
+    "publint": "pnpm -r publint",
+    "format": "prettier --write --log-level warn .",
+    "format:check": "prettier --check --log-level warn .",
+    "lint": "eslint . --fix && pnpm typecheck && eslint . --max-warnings 0",
+    "lint:check": "pnpm typecheck && eslint . --max-warnings 0",
+    "precommit": "pnpm format && pnpm lint:check && pnpm test",
+    "tryscript": "pnpm --filter tryscript tryscript",
+    "prepare": "lefthook install",
+    "changeset": "changeset",
+    "version-packages": "changeset version",
+    "release": "pnpm build && pnpm publint && changeset publish",
+    "upgrade:check": "ncu --format group",
+    "upgrade": "ncu --target minor -u && pnpm install && pnpm test",
+    "upgrade:major": "ncu --target latest --interactive --format group"
+  },
+  "devDependencies": {
+    "@changesets/cli": "^2.29.0",
+    "@eslint/js": "^9.0.0",
+    "@types/node": "^22.0.0",
+    "eslint": "^9.0.0",
+    "eslint-config-prettier": "^10.0.0",
+    "lefthook": "^2.0.0",
+    "npm-check-updates": "^17.0.0",
+    "prettier": "^3.0.0",
+    "publint": "^0.3.0",
+    "tsdown": "^0.18.0",
+    "typescript": "^5.0.0",
+    "typescript-eslint": "^8.0.0",
+    "vitest": "^4.0.0"
+  }
+}

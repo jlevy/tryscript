@@ -1,3 +1,6 @@
+# Project-specific
+attic/
+
 # Logs
 logs
 *.log
@@ -20,6 +23,7 @@ lib-cov
 
 # Coverage directory used by tools like istanbul
 coverage
+coverage-golden
 *.lcov
 
 # nyc test coverage
