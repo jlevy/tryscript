@@ -15,6 +15,7 @@ that confuses npm):
 
 ```bash
 cd packages/tryscript
+npm login
 npm publish --access public
 ```
 
@@ -24,21 +25,25 @@ This will prompt for web-based authentication in your browser.
 
 1. Go to https://www.npmjs.com/package/tryscript/access
 
-2. Under "Publishing access", click "Add a trusted publisher" or "Configure Trusted
-   Publishing"
+2. Under “Publishing access”, click “Add a trusted publisher” or “Configure Trusted
+   Publishing”
 
 3. Select **GitHub Actions** as the publisher
 
 4. Fill in the form:
+
    - **Organization or user**: `jlevy`
+
    - **Repository**: `tryscript`
+
    - **Workflow filename**: `release.yml`
+
    - **Environment name**: Leave blank (not required unless using GitHub environments)
 
-5. For **Publishing access**, select **"Require two-factor authentication and disallow
-   tokens (recommended)"** - OIDC trusted publishers work regardless of this setting
+5. For **Publishing access**, select **“Require two-factor authentication and disallow
+   tokens (recommended)”** - OIDC trusted publishers work regardless of this setting
 
-6. Click "Set up connection"
+6. Click “Set up connection”
 
 ### 3. Verify Repository is Public
 
@@ -149,7 +154,8 @@ gh api repos/jlevy/tryscript/git/refs -X POST \
   -f sha="$MERGE_SHA"
 ```
 
-The release workflow will automatically create the GitHub Release when the tag is pushed.
+The release workflow will automatically create the GitHub Release when the tag is
+pushed.
 
 ### Step 6: Verify
 
@@ -199,7 +205,7 @@ gh run list -R jlevy/tryscript --limit 3
 
 ## How OIDC Publishing Works
 
-This project uses npm's trusted publishing via OIDC (OpenID Connect):
+This project uses npm’s trusted publishing via OIDC (OpenID Connect):
 
 - **No tokens to manage**: GitHub Actions presents an OIDC identity to npm
 
@@ -218,7 +224,8 @@ The release workflow automatically creates a GitHub Release when a tag is pushed
 
 - **Release notes**: Extracted from the CHANGELOG for the tagged version
 
-- **Pre-release flag**: Automatically set for versions containing `-` (e.g., `1.0.0-beta.1`)
+- **Pre-release flag**: Automatically set for versions containing `-` (e.g.,
+  `1.0.0-beta.1`)
 
 After pushing a tag, verify the release appears at:
 `https://github.com/jlevy/tryscript/releases`
@@ -235,7 +242,7 @@ After pushing a tag, verify the release appears at:
 
 - Verify OIDC is configured: https://www.npmjs.com/package/tryscript/access
 
-- Check repository is listed under "Trusted Publishing"
+- Check repository is listed under “Trusted Publishing”
 
 - Ensure the repository is public
 

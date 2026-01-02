@@ -6,15 +6,15 @@
 
 ## Prerequisites
 
-- **Node.js 20+** — We recommend v24 (current) or v22 LTS.
-  Minimum supported is v20. [nodejs.org](https://nodejs.org/)
+- **Node.js 20+** — We recommend v24 (current) or v22 LTS. Minimum supported is v20.
+  [nodejs.org](https://nodejs.org/)
 
 - **pnpm 10.x** — Install via `corepack enable` or `npm install -g pnpm`
 
 ### Node.js Setup
 
-This project requires Node.js 20 or higher. We recommend Node 24 (current) for best
-performance.
+This project requires Node.js 20 or higher.
+We recommend Node 24 (current) for best performance.
 
 **Option 1: Direct installation**
 
@@ -152,28 +152,29 @@ node packages/tryscript/dist/bin.mjs --help
 
 - `pnpm tryscript` — Runs source via `tsx`. Use this during development—always current,
   no build step needed.
+
 - `node dist/bin.mjs` — Runs the built binary from `dist/`. Use this to verify the
   published output works correctly before release.
 
 ### CLI Commands
 
-| Command             | Description                               |
-| ------------------- | ----------------------------------------- |
-| `[files...]`        | Run golden tests (default command)        |
-| `readme`            | Display README documentation              |
-| `docs`              | Display concise syntax reference          |
+| Command | Description |
+| --- | --- |
+| `[files...]` | Run golden tests (default command) |
+| `readme` | Display README documentation |
+| `docs` | Display concise syntax reference |
 
 ### CLI Options
 
-| Option             | Description                              |
-| ------------------ | ---------------------------------------- |
-| `--update`         | Update golden files with actual output   |
-| `--diff`           | Show diff on failure (default: true)     |
-| `--no-diff`        | Hide diff on failure                     |
-| `--fail-fast`      | Stop on first failure                    |
-| `--filter <regex>` | Filter tests by name pattern             |
-| `--verbose`        | Show detailed output                     |
-| `--quiet`          | Suppress non-essential output            |
+| Option | Description |
+| --- | --- |
+| `--update` | Update golden files with actual output |
+| `--diff` | Show diff on failure (default: true) |
+| `--no-diff` | Hide diff on failure |
+| `--fail-fast` | Stop on first failure |
+| `--filter <regex>` | Filter tests by name pattern |
+| `--verbose` | Show detailed output |
+| `--quiet` | Suppress non-essential output |
 
 ## Testing
 
@@ -234,14 +235,18 @@ pnpm test:all:coverage      # Both coverage types
 #### Why c8 for Golden Tests?
 
 Standard coverage tools like `vitest --coverage` only track code executed in the main
-process. When tryscript runs CLI commands as subprocesses, that execution isn't tracked.
+process. When tryscript runs CLI commands as subprocesses, that execution isn’t tracked.
 
-[c8](https://github.com/bcoe/c8) solves this by leveraging Node's built-in V8 coverage
-collection via the `NODE_V8_COVERAGE` environment variable. When c8 wraps a command:
+[c8](https://github.com/bcoe/c8) solves this by leveraging Node’s built-in V8 coverage
+collection via the `NODE_V8_COVERAGE` environment variable.
+When c8 wraps a command:
 
 1. c8 sets `NODE_V8_COVERAGE` to a temp directory
+
 2. Node.js writes coverage data when each process exits
+
 3. c8 collects coverage from all subprocesses
+
 4. Coverage is mapped back to source files via sourcemaps
 
 #### c8 Configuration
@@ -254,7 +259,7 @@ c8 --src src --all --include 'dist/**' --reporter text --reporter html \
 ```
 
 | Flag | Purpose |
-|------|---------|
+| --- | --- |
 | `--src src` | Map coverage back to source directory |
 | `--all` | Include files with 0% coverage in report |
 | `--include 'dist/**'` | Only track your built CLI (not node_modules) |
@@ -264,7 +269,8 @@ c8 --src src --all --include 'dist/**' --reporter text --reporter html \
 
 #### For Users Testing Their Own CLIs
 
-The same technique works for any CLI tested with tryscript. Add to your `package.json`:
+The same technique works for any CLI tested with tryscript.
+Add to your `package.json`:
 
 ```json
 {
@@ -275,7 +281,8 @@ The same technique works for any CLI tested with tryscript. Add to your `package
 }
 ```
 
-This provides realistic coverage metrics from actual CLI usage rather than just unit tests.
+This provides realistic coverage metrics from actual CLI usage rather than just unit
+tests.
 
 ### Watch Mode
 
@@ -289,17 +296,23 @@ pnpm --filter tryscript test:watch
 The CI workflow (`.github/workflows/ci.yml`) runs these commands in order:
 
 1. `pnpm install`
+
 2. `pnpm format:check`
+
 3. `pnpm lint:check`
+
 4. `pnpm build`
+
 5. `pnpm publint`
+
 6. `pnpm test:coverage`
 
 To match CI behavior locally, run `pnpm precommit` which executes the same checks.
 
 ## Writing Test Files
 
-Test files use the `.tryscript.md` extension and contain markdown with console code blocks:
+Test files use the `.tryscript.md` extension and contain markdown with console code
+blocks:
 
 ````markdown
 ---
@@ -320,19 +333,20 @@ Usage: my-cli [options]
 
 ### Elision Patterns
 
-| Pattern  | Matches                       | Example             |
-| -------- | ----------------------------- | ------------------- |
-| `[..]`   | Any characters on line        | `Done in [..]ms`    |
-| `...`    | Zero or more lines            | `...\nDone`         |
-| `[EXE]`  | `.exe` on Windows, empty else | `my-cli[EXE]`       |
-| `[ROOT]` | Test root directory path      | `[ROOT]/output.txt` |
-| `[CWD]`  | Current working directory     | `[CWD]/file.txt`    |
+| Pattern | Matches | Example |
+| --- | --- | --- |
+| `[..]` | Any characters on line | `Done in [..]ms` |
+| `...` | Zero or more lines | `...\nDone` |
+| `[EXE]` | `.exe` on Windows, empty else | `my-cli[EXE]` |
+| `[ROOT]` | Test root directory path | `[ROOT]/output.txt` |
+| `[CWD]` | Current working directory | `[CWD]/file.txt` |
 
 ## Git Hooks
 
 Pre-commit and pre-push hooks are managed by Lefthook:
 
 - **Pre-commit**: Format, lint, and typecheck
+
 - **Pre-push**: Run tests
 
 To skip hooks temporarily:
@@ -344,8 +358,8 @@ git push --no-verify
 
 ## Issue Tracking
 
-This project uses **bd (beads)** for issue tracking. See
-`docs/general/agent-setup/beads-setup.md` for setup instructions.
+This project uses **bd (beads)** for issue tracking.
+See `docs/general/agent-setup/beads-setup.md` for setup instructions.
 
 ```bash
 # Check what's ready to work on
@@ -361,7 +375,7 @@ bd update <id> --status in_progress
 bd close <id>
 ```
 
----
+* * *
 
 > **Note:** This is an initial version created during Phase 0 scaffolding.
 > Update as implementation progresses and new patterns emerge.
