@@ -1,7 +1,7 @@
 import { spawn } from 'node:child_process';
-import { mkdtemp, rm } from 'node:fs/promises';
+import { mkdtemp, realpath, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
-import { join, dirname } from 'node:path';
+import { join, dirname, resolve } from 'node:path';
 import treeKill from 'tree-kill';
 import type { TestBlock, TestBlockResult } from './types.js';
 import type { TryscriptConfig } from './config.js';
@@ -14,8 +14,10 @@ const DEFAULT_TIMEOUT = 30_000;
  * Created once per file, contains the temp directory.
  */
 export interface ExecutionContext {
-  /** Temporary directory for this test file */
+  /** Temporary directory for this test file (resolved, no symlinks) */
   tempDir: string;
+  /** Directory containing the test file (for portable test commands) */
+  testDir: string;
   /** Resolved binary path */
   binPath: string;
   /** Environment variables */
@@ -31,16 +33,23 @@ export async function createExecutionContext(
   config: TryscriptConfig,
   testFilePath: string,
 ): Promise<ExecutionContext> {
-  const tempDir = await mkdtemp(join(tmpdir(), 'tryscript-'));
+  // Create temp directory and resolve symlinks (e.g., /var -> /private/var on macOS)
+  // This ensures [CWD] and [ROOT] patterns match pwd output
+  const rawTempDir = await mkdtemp(join(tmpdir(), 'tryscript-'));
+  const tempDir = await realpath(rawTempDir);
+
+  // Resolve test file directory for portable test commands
+  const testDir = resolve(dirname(testFilePath));
 
   // Resolve binary path relative to test file directory
   let binPath = config.bin ?? '';
   if (binPath && !binPath.startsWith('/')) {
-    binPath = join(dirname(testFilePath), binPath);
+    binPath = join(testDir, binPath);
   }
 
   return {
     tempDir,
+    testDir,
     binPath,
     env: {
       ...process.env,
@@ -48,6 +57,8 @@ export async function createExecutionContext(
       // Disable colors by default for deterministic output
       NO_COLOR: config.env?.NO_COLOR ?? '1',
       FORCE_COLOR: '0',
+      // Provide test directory for portable test commands
+      TRYSCRIPT_TEST_DIR: testDir,
     } as Record<string, string>,
     timeout: config.timeout ?? DEFAULT_TIMEOUT,
   };

@@ -49,7 +49,7 @@
     "test:all:coverage": "pnpm test:golden:coverage && pnpm test:coverage",
     "publint": "publint",
     "prepack": "pnpm build",
-    "tryscript": "node --experimental-strip-types src/bin.ts"
+    "tryscript": "tsx src/bin.ts"
   },
   "dependencies": {
     "atomically": "^2.0.0",
@@ -69,6 +69,7 @@
     "c8": "^10.1.3",
     "publint": "^0.3.0",
     "tsdown": "^0.18.0",
+    "tsx": "^4.21.0",
     "typescript": "^5.0.0",
     "vitest": "^4.0.0"
   }

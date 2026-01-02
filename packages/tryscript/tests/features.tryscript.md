@@ -57,7 +57,7 @@ stdout message
 # Test: Working directory is temp
 
 ```console
-$ node -e "console.log(process.cwd().startsWith('/tmp') ? 'In temp' : 'Not in temp')"
+$ node -e "console.log(process.cwd().includes('tryscript-') ? 'In temp' : 'Not in temp')"
 In temp
 ? 0
 ```
