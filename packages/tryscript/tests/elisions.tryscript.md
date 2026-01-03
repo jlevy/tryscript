@@ -1,4 +1,5 @@
 ---
+sandbox: true
 bin: ../dist/bin.mjs
 env:
   NO_COLOR: "1"
@@ -76,13 +77,13 @@ $ pwd
 ? 0
 ```
 
-# Test: [ROOT] pattern matches temp root
+# Test: [ROOT] pattern matches test file directory
 
-The `[ROOT]` pattern matches the test root directory (same as [CWD] for tryscript).
+The `[ROOT]` pattern matches the directory containing the test file.
 
 ```console
-$ node -e "console.log('Running from: ' + process.cwd())"
-Running from: [ROOT]
+$ node -e "console.log('Test dir: ' + process.env.TRYSCRIPT_TEST_DIR)"
+Test dir: [ROOT]
 ? 0
 ```
 
