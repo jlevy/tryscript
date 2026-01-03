@@ -38,7 +38,9 @@
     "node": ">=20"
   },
   "scripts": {
-    "build": "tsdown",
+    "copy-docs": "cp ../../README.md . && mkdir -p docs && cp ../../docs/tryscript-reference.md docs/",
+    "build": "pnpm copy-docs && tsdown",
+    "prepare": "pnpm copy-docs",
     "dev": "tsdown --watch",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "test": "vitest run",

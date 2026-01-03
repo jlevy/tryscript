@@ -212,6 +212,7 @@ Patterns in expected output that match variable content:
 | `...` | Any lines (multiline wildcard) | See below |
 | `[CWD]` | Current working directory (sandbox when enabled) | `[CWD]/output.txt` |
 | `[ROOT]` | Test file directory | `[ROOT]/fixtures/` |
+| `[EXE]` | `.exe` on Windows, empty on Unix | `my-cli[EXE]` |
 | `[PATTERN]` | Custom pattern from config | User-defined |
 
 **Multiline example**:
@@ -330,6 +331,7 @@ $ cat [CWD]/file.txt
 
 ## References
 
+- **Reference doc**: `docs/tryscript-reference.md` - Complete syntax reference for developers
 - [trycmd](https://docs.rs/trycmd) - Rust CLI testing tool (inspiration)
 - [cram](https://bitheap.org/cram/) - Python CLI testing tool
 - Plan spec: `docs/project/specs/active/plan-2026-01-03-tryscript-enhancements.md`
