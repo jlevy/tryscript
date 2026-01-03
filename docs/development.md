@@ -11,6 +11,8 @@
 
 - **pnpm 10.x** — Install via `corepack enable` or `npm install -g pnpm`
 
+- **GitHub CLI** (for releases) — See [GitHub CLI Setup](general/agent-setup/github-cli-setup.md)
+
 ### Node.js Setup
 
 This project requires Node.js 20 or higher.
@@ -132,7 +134,8 @@ pnpm precommit     # Runs format, lint, typecheck, test
 ### Releases
 
 Changesets are created at release time, not per-PR. Just merge your work to `main`. See
-[Publishing](publishing.md) for the release workflow.
+[Publishing](publishing.md) for the release workflow. The release process requires the
+GitHub CLI (`gh`) — see [GitHub CLI Setup](general/agent-setup/github-cli-setup.md).
 
 ## CLI Usage
 
