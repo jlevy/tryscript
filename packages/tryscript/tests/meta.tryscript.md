@@ -1,5 +1,5 @@
 ---
-cwd: temp
+sandbox: true
 env:
   NO_COLOR: "1"
 ---
@@ -7,7 +7,7 @@ env:
 # Meta-tests: tryscript testing itself
 
 These tests verify that tryscript can correctly test CLI applications.
-Uses cwd: temp to isolate test file creation.
+Uses sandbox: true to isolate test file creation.
 
 # Test: Create and run a passing test file
 

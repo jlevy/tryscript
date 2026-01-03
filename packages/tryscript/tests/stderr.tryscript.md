@@ -1,5 +1,5 @@
 ---
-cwd: temp
+sandbox: true
 ---
 
 # Stderr Assertion Tests
