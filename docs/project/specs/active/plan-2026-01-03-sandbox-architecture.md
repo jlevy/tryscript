@@ -1,5 +1,7 @@
 # Plan Spec: Sandbox Architecture Implementation
 
+**Status: COMPLETED** (2026-01-03)
+
 ## Purpose
 
 This plan covers the implementation of the simplified sandbox architecture for tryscript,
@@ -159,48 +161,48 @@ The `tryscript-reference.md` must be updated to:
 
 ### Phase 1: Remove Deprecated Features
 
-- [ ] **types.ts**: Remove `bin`, `binName`, `vars` from TestConfigSchema
-- [ ] **config.ts**: Remove `bin`, `binName`, `vars` from TryscriptConfig interface
-- [ ] **config.ts**: Remove `vars` merging from mergeConfig()
-- [ ] **runner.ts**: Remove `expandVars()` function
-- [ ] **runner.ts**: Remove `binPath`, `binName`, `vars` from ExecutionContext
-- [ ] **runner.ts**: Remove `resolveCommand()` function (binName handling)
-- [ ] **runner.ts**: Remove `cwd: "temp"` magic in resolveCwd()
-- [ ] **run.ts**: Remove any vars expansion calls
+- [x] **types.ts**: Remove `bin`, `binName`, `vars` from TestConfigSchema
+- [x] **config.ts**: Remove `bin`, `binName`, `vars` from TryscriptConfig interface
+- [x] **config.ts**: Remove `vars` merging from mergeConfig()
+- [x] **runner.ts**: Remove `expandVars()` function
+- [x] **runner.ts**: Remove `binPath`, `binName`, `vars` from ExecutionContext
+- [x] **runner.ts**: Remove `resolveCommand()` function (binName handling)
+- [x] **runner.ts**: Remove `cwd: "temp"` magic in resolveCwd()
+- [x] **run.ts**: No changes needed (vars expansion was in runner.ts)
 
 ### Phase 2: Add Sandbox Feature
 
-- [ ] **types.ts**: Add `sandbox` to TestConfigSchema (`z.union([z.boolean(), z.string()])`)
-- [ ] **config.ts**: Add `sandbox` to TryscriptConfig interface
-- [ ] **runner.ts**: Add `sandbox` to ExecutionContext
-- [ ] **runner.ts**: Implement sandbox logic in createExecutionContext()
-- [ ] **runner.ts**: Update fixtures to only copy when sandbox enabled
-- [ ] **runner.ts**: Ensure `[CWD]` pattern matches sandbox directory when enabled
+- [x] **types.ts**: Add `sandbox` to TestConfigSchema (`z.union([z.boolean(), z.string()])`)
+- [x] **config.ts**: Add `sandbox` to TryscriptConfig interface
+- [x] **runner.ts**: Add `sandbox` to ExecutionContext
+- [x] **runner.ts**: Implement sandbox logic in createExecutionContext()
+- [x] **runner.ts**: Update fixtures to only copy when sandbox enabled
+- [x] **runner.ts**: `[CWD]` pattern matches sandbox directory when enabled (via ctx.cwd)
 
 ### Phase 3: Update Documentation
 
-- [ ] **tryscript-reference.md**: Remove deprecated options (bin, binName, vars)
-- [ ] **tryscript-reference.md**: Add sandbox section with examples
-- [ ] **tryscript-reference.md**: Update config options table
-- [ ] **tryscript-reference.md**: Update config file example
-- [ ] **tryscript-reference.md**: Add fixtures section (requires sandbox)
+- [x] **tryscript-reference.md**: Remove deprecated options (bin, binName, vars)
+- [x] **tryscript-reference.md**: Add sandbox section with examples
+- [x] **tryscript-reference.md**: Update config options table
+- [x] **tryscript-reference.md**: Update config file example
+- [x] **tryscript-reference.md**: Add fixtures section (requires sandbox)
 
 ### Phase 4: Update Tests
 
-- [ ] Remove golden tests that use `bin`, `binName`, `vars`
-- [ ] Update golden tests that use `cwd: temp` to use `sandbox: true`
-- [ ] Add golden test for `sandbox: true` (empty sandbox)
-- [ ] Add golden test for `sandbox: ./fixtures` (copy to sandbox)
-- [ ] Update unit tests in runner.test.ts
-- [ ] Run all tests to verify no regressions
+- [x] Update test files that use `bin`, `binName`, `vars` to use `env`
+- [x] Update test files that use `cwd: temp` to use `sandbox: true`
+- [x] Add unit test for `sandbox: true` (empty sandbox)
+- [x] Add unit test for `sandbox: ./path` (copy to sandbox)
+- [x] Update unit tests in runner.test.ts
+- [x] Run all tests to verify no regressions (51 tests pass)
 
 ## Validation Checklist
 
-- [ ] All 50+ unit tests pass
-- [ ] All golden tests pass
-- [ ] `tryscript docs` shows updated reference
-- [ ] `sandbox: true` creates empty temp dir
-- [ ] `sandbox: ./path` copies directory to temp
-- [ ] `cwd: ./path` runs directly (no sandbox)
-- [ ] `env` variables work with shell expansion
-- [ ] Fixtures copy correctly when sandbox enabled
+- [x] All 51 unit tests pass
+- [x] All golden tests pass
+- [x] `tryscript docs` shows updated reference
+- [x] `sandbox: true` creates empty temp dir
+- [x] `sandbox: ./path` copies directory to temp
+- [x] `cwd: ./path` runs directly (no sandbox)
+- [x] `env` variables work with shell expansion
+- [x] Fixtures copy correctly when sandbox enabled
