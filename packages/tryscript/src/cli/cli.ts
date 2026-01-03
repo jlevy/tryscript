@@ -2,7 +2,7 @@ import { Command } from 'commander';
 import pc from 'picocolors';
 import { VERSION } from '../index.js';
 import { registerRunCommand } from './commands/run.js';
-import { registerReadmeCommand, showReadme } from './commands/readme.js';
+import { registerReadmeCommand } from './commands/readme.js';
 import { registerDocsCommand } from './commands/docs.js';
 
 export function run(argv: string[]): void {
@@ -17,9 +17,9 @@ export function run(argv: string[]): void {
   registerReadmeCommand(program);
   registerDocsCommand(program);
 
-  // Default action: show README when no command given
+  // Default action: show help when no command given
   program.action(() => {
-    showReadme();
+    program.help();
   });
 
   program.parseAsync(argv).catch((err: Error) => {
