@@ -19,6 +19,36 @@ functionality works well, real-world usage has revealed:
 2. **Ergonomic issues** requiring excessive path repetition and awkward workarounds
 3. **Missing features** that would significantly improve test authoring
 
+### The Core Path Problem
+
+Currently, commands always run in a temp directory (`/tmp/tryscript-xxx/`). The only
+workaround is the `TRYSCRIPT_TEST_DIR` environment variable:
+
+```console
+# Current: Verbose and awkward
+$ node $TRYSCRIPT_TEST_DIR/../dist/bin.mjs --help
+$ node $TRYSCRIPT_TEST_DIR/../dist/bin.mjs validate $TRYSCRIPT_TEST_DIR/examples/test.md
+```
+
+Compare to Rust's [trycmd](https://docs.rs/trycmd/latest/trycmd/), which automatically
+uses `*.in/` directories as CWD and provides TOML config for "precise control over
+current dir."
+
+### Design Goals
+
+After this enhancement, tests should be clean and natural:
+
+```yaml
+---
+cwd: .                    # Run from test file's directory
+bin: ./dist/bin.mjs       # Resolved relative to test file
+binName: mycli            # Alias to use in commands
+---
+
+$ mycli --help            # Clean command name
+$ mycli validate examples/test.md   # Relative paths work
+```
+
 Current test files require absolute paths everywhere, manual inline setup commands, and
 redundant output verification across tests. A 265-line test file could be reduced to ~60
 lines with proper tooling.
@@ -348,6 +378,46 @@ TBD - Will be filled after implementation.
 
 3. **stderr syntax:** Is `!` prefix intuitive, or should we use explicit blocks?
    - Recommendation: Support both for flexibility
+
+## Design Alternatives Considered
+
+### Alternative A: Environment Variables Only
+
+Expose more env vars but keep temp as CWD:
+
+| Variable | Value |
+|----------|-------|
+| `TRYSCRIPT_TEST_DIR` | Test file directory (exists) |
+| `TRYSCRIPT_PROJECT_ROOT` | Git root or package.json dir |
+| `TRYSCRIPT_TEMP` | Temp directory |
+
+**Rejected:** Still requires verbose `$TRYSCRIPT_TEST_DIR/../path` in every command.
+
+### Alternative B: Trycmd-style `*.in/` Auto-Detection
+
+If `tests/cli.tryscript.md` has companion `tests/cli.in/`, auto-use as CWD.
+
+**Rejected:** Too implicit, requires specific directory structure, not Markdown-first.
+
+### Alternative C: Change Default CWD
+
+Make `cwd: .` the default (run from test file directory).
+
+**Rejected:** Breaking change for existing tests that rely on temp isolation.
+
+### Chosen: Explicit `cwd` Config
+
+```yaml
+cwd: .      # Test file directory
+cwd: temp   # Temp directory (default, backward compatible)
+cwd: ./sub  # Relative to test file
+```
+
+**Rationale:**
+1. Explicit over implicit (no magic directory detection)
+2. Backward compatible (existing tests unchanged)
+3. Progressive disclosure (simple default, advanced when needed)
+4. Consistent with trycmd's TOML config approach
 
 ## Dependencies
 
