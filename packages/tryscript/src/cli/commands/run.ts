@@ -3,7 +3,12 @@ import fg from 'fast-glob';
 import pc from 'picocolors';
 import { loadConfig, mergeConfig } from '../../lib/config.js';
 import { parseTestFile } from '../../lib/parser.js';
-import { runBlock, createExecutionContext, cleanupExecutionContext } from '../../lib/runner.js';
+import {
+  runBlock,
+  createExecutionContext,
+  cleanupExecutionContext,
+  runAfterHook,
+} from '../../lib/runner.js';
 import { matchOutput } from '../../lib/matcher.js';
 import { createDiff, reportFile, reportSummary } from '../../lib/reporter.js';
 import { updateTestFile } from '../../lib/updater.js';
@@ -67,6 +72,12 @@ export async function runCommand(files: string[], options: RunOptions): Promise<
       blocksToRun = blocksToRun.filter((b) => (b.name ? filterPattern.test(b.name) : true));
     }
 
+    // Handle "only" mode - if any block has only=true, run only those
+    const onlyBlocks = blocksToRun.filter((b) => b.only);
+    if (onlyBlocks.length > 0) {
+      blocksToRun = onlyBlocks;
+    }
+
     if (blocksToRun.length === 0) {
       continue;
     }
@@ -78,17 +89,38 @@ export async function runCommand(files: string[], options: RunOptions): Promise<
       for (const block of blocksToRun) {
         const result = await runBlock(block, ctx);
 
+        // Skip checking for skipped tests
+        if (result.skipped) {
+          results.push(result);
+          continue;
+        }
+
         // Check if output matches expected
         // [ROOT] = test file directory, [CWD] = command working directory
-        const matches = matchOutput(
-          result.actualOutput,
+        // If expectedStderr is set, compare stdout only (not combined output)
+        const outputToCheck = block.expectedStderr
+          ? (result.actualStdout ?? '')
+          : result.actualOutput;
+        const outputMatches = matchOutput(
+          outputToCheck,
           block.expectedOutput,
           { root: ctx.testDir, cwd: ctx.cwd },
           config.patterns ?? {},
         );
 
+        // Check stderr if expected (using actualStderr if available)
+        let stderrMatches = true;
+        if (block.expectedStderr) {
+          stderrMatches = matchOutput(
+            result.actualStderr ?? '',
+            block.expectedStderr,
+            { root: ctx.testDir, cwd: ctx.cwd },
+            config.patterns ?? {},
+          );
+        }
+
         const exitCodeMatches = result.actualExitCode === block.expectedExitCode;
-        result.passed = matches && exitCodeMatches && !result.error;
+        result.passed = outputMatches && stderrMatches && exitCodeMatches && !result.error;
 
         if (!result.passed && opts.diff) {
           result.diff = createDiff(
@@ -105,6 +137,9 @@ export async function runCommand(files: string[], options: RunOptions): Promise<
           break;
         }
       }
+
+      // Run after hook if configured
+      await runAfterHook(ctx);
     } finally {
       await cleanupExecutionContext(ctx);
     }

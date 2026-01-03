@@ -1,5 +1,14 @@
 import { z } from 'zod';
 
+/** Schema for fixture configuration */
+export const FixtureSchema = z.union([
+  z.string().describe('Source path (copied to same name in temp)'),
+  z.object({
+    source: z.string().describe('Source path (relative to test file)'),
+    dest: z.string().optional().describe('Destination path (relative to temp dir)'),
+  }),
+]);
+
 export const TestConfigSchema = z.object({
   bin: z.string().optional().describe('Path to the binary to test'),
   binName: z.string().optional().describe('Command name alias for bin'),
@@ -7,6 +16,10 @@ export const TestConfigSchema = z.object({
     .string()
     .optional()
     .describe('Working directory: "." = test file dir (default), "temp" = temp dir'),
+  vars: z.record(z.string()).optional().describe('User-defined variables for $VAR expansion'),
+  fixtures: z.array(FixtureSchema).optional().describe('Files to copy to temp before tests'),
+  before: z.string().optional().describe('Script to run before first test'),
+  after: z.string().optional().describe('Script to run after all tests'),
   env: z.record(z.string()).optional().describe('Environment variables'),
   timeout: z.number().optional().describe('Timeout per command in ms'),
   patterns: z
@@ -31,12 +44,18 @@ export interface TestBlock {
   command: string;
   /** Expected output (may include elision patterns) */
   expectedOutput: string;
+  /** Expected stderr output (lines starting with ! in expected output) */
+  expectedStderr?: string;
   /** Expected exit code (default: 0) */
   expectedExitCode: number;
   /** Line number where this block starts (1-indexed, for error reporting) */
   lineNumber: number;
   /** Raw content of the block for update mode */
   rawContent: string;
+  /** Skip this test (from <!-- skip --> annotation) */
+  skip?: boolean;
+  /** Run only this test (from <!-- only --> annotation) */
+  only?: boolean;
 }
 
 /**
@@ -60,6 +79,10 @@ export interface TestBlockResult {
   block: TestBlock;
   passed: boolean;
   actualOutput: string;
+  /** Separate stdout (when stderr is captured separately) */
+  actualStdout?: string;
+  /** Separate stderr (when stderr is captured separately) */
+  actualStderr?: string;
   actualExitCode: number;
   /** Diff if test failed (unified diff format) */
   diff?: string;
@@ -67,6 +90,8 @@ export interface TestBlockResult {
   duration: number;
   /** Error message if execution failed */
   error?: string;
+  /** Test was skipped */
+  skipped?: boolean;
 }
 
 /**

@@ -10,6 +10,12 @@ const CODE_BLOCK_REGEX = /```(console|bash)\r?\n([\s\S]*?)```/g;
 /** Regex to match markdown headings (for test names) */
 const HEADING_REGEX = /^#+\s+(?:Test:\s*)?(.+)$/m;
 
+/** Regex to match skip annotation in heading or nearby HTML comment */
+const SKIP_ANNOTATION_REGEX = /<!--\s*skip\s*-->/i;
+
+/** Regex to match only annotation in heading or nearby HTML comment */
+const ONLY_ANNOTATION_REGEX = /<!--\s*only\s*-->/i;
+
 /**
  * Parse a .tryscript.md file into structured test data.
  */
@@ -48,6 +54,13 @@ export function parseTestFile(content: string, filePath: string): TestFile {
     ].pop();
     const name = lastHeadingMatch?.[1]?.trim();
 
+    // Check for skip/only annotations in the heading line or nearby comments
+    const headingContext = lastHeadingMatch
+      ? contentBefore.slice(contentBefore.lastIndexOf(lastHeadingMatch[0]))
+      : '';
+    const skip = SKIP_ANNOTATION_REGEX.test(headingContext);
+    const only = ONLY_ANNOTATION_REGEX.test(headingContext);
+
     // Parse the block content
     const parsed = parseBlockContent(blockContent);
     if (parsed) {
@@ -55,9 +68,12 @@ export function parseTestFile(content: string, filePath: string): TestFile {
         name,
         command: parsed.command,
         expectedOutput: parsed.expectedOutput,
+        expectedStderr: parsed.expectedStderr,
         expectedExitCode: parsed.expectedExitCode,
         lineNumber,
         rawContent: match[0],
+        skip,
+        only,
       });
     }
   }
@@ -71,11 +87,13 @@ export function parseTestFile(content: string, filePath: string): TestFile {
 function parseBlockContent(content: string): {
   command: string;
   expectedOutput: string;
+  expectedStderr?: string;
   expectedExitCode: number;
 } | null {
   const lines = content.split('\n');
   const commandLines: string[] = [];
   const outputLines: string[] = [];
+  const stderrLines: string[] = [];
   let expectedExitCode = 0;
   let inCommand = false;
 
@@ -91,8 +109,12 @@ function parseBlockContent(content: string): {
       // Exit code specification
       inCommand = false;
       expectedExitCode = parseInt(line.slice(2).trim(), 10);
+    } else if (line.startsWith('! ')) {
+      // Stderr line (prefixed with !)
+      inCommand = false;
+      stderrLines.push(line.slice(2));
     } else {
-      // Output line
+      // Output line (stdout or combined)
       inCommand = false;
       outputLines.push(line);
     }
@@ -123,5 +145,15 @@ function parseBlockContent(content: string): {
     expectedOutput += '\n';
   }
 
-  return { command: command.trim(), expectedOutput, expectedExitCode };
+  // Join stderr lines if any
+  let expectedStderr: string | undefined;
+  if (stderrLines.length > 0) {
+    expectedStderr = stderrLines.join('\n');
+    expectedStderr = expectedStderr.replace(/\n+$/, '');
+    if (expectedStderr) {
+      expectedStderr += '\n';
+    }
+  }
+
+  return { command: command.trim(), expectedOutput, expectedStderr, expectedExitCode };
 }

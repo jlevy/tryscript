@@ -1,10 +1,10 @@
 import { spawn } from 'node:child_process';
-import { mkdtemp, realpath, rm } from 'node:fs/promises';
+import { mkdtemp, realpath, rm, cp } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
-import { join, dirname, resolve } from 'node:path';
+import { join, dirname, resolve, basename } from 'node:path';
 import treeKill from 'tree-kill';
 import type { TestBlock, TestBlockResult } from './types.js';
-import type { TryscriptConfig } from './config.js';
+import type { TryscriptConfig, Fixture } from './config.js';
 
 /** Default timeout in milliseconds */
 const DEFAULT_TIMEOUT = 30_000;
@@ -24,10 +24,18 @@ export interface ExecutionContext {
   binPath: string;
   /** Command name alias for binPath (if binName config is set) */
   binName?: string;
+  /** User-defined variables plus built-ins ($TEMP, $ROOT, $CWD) */
+  vars: Record<string, string>;
   /** Environment variables */
   env: Record<string, string>;
   /** Timeout per command */
   timeout: number;
+  /** Before hook script */
+  before?: string;
+  /** After hook script */
+  after?: string;
+  /** Whether before hook has been run */
+  beforeRan?: boolean;
 }
 
 /**
@@ -43,6 +51,48 @@ function resolveCwd(cwdConfig: string | undefined, testDir: string, tempDir: str
   }
   // Relative paths resolved from test file directory
   return resolve(testDir, cwdConfig);
+}
+
+/**
+ * Expand $VAR references in text using provided variables.
+ * Built-in variables: $TEMP, $ROOT, $CWD
+ * Unknown variables are left unexpanded.
+ */
+export function expandVars(text: string, vars: Record<string, string>): string {
+  return text.replace(/\$(\w+)/g, (match, name: string) => {
+    return vars[name] ?? match;
+  });
+}
+
+/**
+ * Normalize fixture config to Fixture object.
+ */
+function normalizeFixture(fixture: string | Fixture): Fixture {
+  if (typeof fixture === 'string') {
+    return { source: fixture };
+  }
+  return fixture;
+}
+
+/**
+ * Setup fixtures by copying files to temp directory.
+ */
+async function setupFixtures(
+  fixtures: (string | Fixture)[] | undefined,
+  ctx: ExecutionContext,
+): Promise<void> {
+  if (!fixtures || fixtures.length === 0) {
+    return;
+  }
+
+  for (const f of fixtures) {
+    const fixture = normalizeFixture(f);
+    const expandedSource = expandVars(fixture.source, ctx.vars);
+    const src = resolve(ctx.testDir, expandedSource);
+    const destName = fixture.dest ? expandVars(fixture.dest, ctx.vars) : basename(expandedSource);
+    const dst = resolve(ctx.tempDir, destName);
+    await cp(src, dst, { recursive: true });
+  }
 }
 
 /**
@@ -69,12 +119,21 @@ export async function createExecutionContext(
     binPath = join(testDir, binPath);
   }
 
-  return {
+  // Build variables with built-ins and user-defined
+  const vars: Record<string, string> = {
+    TEMP: tempDir,
+    ROOT: testDir,
+    CWD: cwd,
+    ...config.vars,
+  };
+
+  const ctx: ExecutionContext = {
     tempDir,
     testDir,
     cwd,
     binPath,
     binName: config.binName,
+    vars,
     env: {
       ...process.env,
       ...config.env,
@@ -85,7 +144,14 @@ export async function createExecutionContext(
       TRYSCRIPT_TEST_DIR: testDir,
     } as Record<string, string>,
     timeout: config.timeout ?? DEFAULT_TIMEOUT,
+    before: config.before,
+    after: config.after,
   };
+
+  // Setup fixtures
+  await setupFixtures(config.fixtures, ctx);
+
+  return ctx;
 }
 
 /**
@@ -96,13 +162,51 @@ export async function cleanupExecutionContext(ctx: ExecutionContext): Promise<vo
 }
 
 /**
+ * Run the before hook if it hasn't run yet.
+ */
+export async function runBeforeHook(ctx: ExecutionContext): Promise<void> {
+  if (ctx.before && !ctx.beforeRan) {
+    ctx.beforeRan = true;
+    const expandedHook = expandVars(ctx.before, ctx.vars);
+    await executeCommand(expandedHook, ctx);
+  }
+}
+
+/**
+ * Run the after hook.
+ */
+export async function runAfterHook(ctx: ExecutionContext): Promise<void> {
+  if (ctx.after) {
+    const expandedHook = expandVars(ctx.after, ctx.vars);
+    await executeCommand(expandedHook, ctx);
+  }
+}
+
+/**
  * Run a single test block and return the result.
  */
 export async function runBlock(block: TestBlock, ctx: ExecutionContext): Promise<TestBlockResult> {
   const startTime = Date.now();
 
+  // Handle skip annotation
+  if (block.skip) {
+    return {
+      block,
+      passed: true,
+      actualOutput: '',
+      actualExitCode: 0,
+      duration: 0,
+      skipped: true,
+    };
+  }
+
   try {
-    const { output, exitCode } = await executeCommand(block.command, ctx);
+    // Run before hook if this is the first test
+    await runBeforeHook(ctx);
+
+    // Expand variables in command
+    const expandedCommand = expandVars(block.command, ctx.vars);
+    const { output, stdout, stderr, exitCode } = await executeCommand(expandedCommand, ctx);
 
     const duration = Date.now() - startTime;
 
@@ -110,6 +214,8 @@ export async function runBlock(block: TestBlock, ctx: ExecutionContext): Promise
       block,
       passed: true, // Matching handled separately
       actualOutput: output,
+      actualStdout: stdout,
+      actualStderr: stderr,
       actualExitCode: exitCode,
       duration,
     };
@@ -145,13 +251,18 @@ function resolveCommand(command: string, ctx: ExecutionContext): string {
   return command;
 }
 
+/** Command execution result with separate stdout/stderr */
+interface CommandResult {
+  output: string;
+  stdout: string;
+  stderr: string;
+  exitCode: number;
+}
+
 /**
  * Execute a command and capture output.
  */
-async function executeCommand(
-  command: string,
-  ctx: ExecutionContext,
-): Promise<{ output: string; exitCode: number }> {
+async function executeCommand(command: string, ctx: ExecutionContext): Promise<CommandResult> {
   // Resolve binName alias to binPath
   const resolvedCommand = resolveCommand(command, ctx);
 
@@ -164,11 +275,19 @@ async function executeCommand(
       stdio: ['ignore', 'pipe', 'pipe'],
     });
 
-    const chunks: Buffer[] = [];
+    const combinedChunks: { data: Buffer; type: 'stdout' | 'stderr' }[] = [];
+    const stdoutChunks: Buffer[] = [];
+    const stderrChunks: Buffer[] = [];
 
     // Capture data as it comes in to preserve order
-    proc.stdout.on('data', (data: Buffer) => chunks.push(data));
-    proc.stderr.on('data', (data: Buffer) => chunks.push(data));
+    proc.stdout.on('data', (data: Buffer) => {
+      combinedChunks.push({ data, type: 'stdout' });
+      stdoutChunks.push(data);
+    });
+    proc.stderr.on('data', (data: Buffer) => {
+      combinedChunks.push({ data, type: 'stderr' });
+      stderrChunks.push(data);
+    });
 
     const timeoutId = setTimeout(() => {
       if (proc.pid) {
@@ -179,9 +298,13 @@ async function executeCommand(
 
     proc.on('close', (code) => {
       clearTimeout(timeoutId);
-      const output = Buffer.concat(chunks).toString('utf-8');
+      const output = Buffer.concat(combinedChunks.map((c) => c.data)).toString('utf-8');
+      const stdout = Buffer.concat(stdoutChunks).toString('utf-8');
+      const stderr = Buffer.concat(stderrChunks).toString('utf-8');
       resolve({
         output,
+        stdout,
+        stderr,
         exitCode: code ?? 0,
       });
     });
