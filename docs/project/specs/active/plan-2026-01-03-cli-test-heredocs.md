@@ -1,29 +1,24 @@
-# Plan: Refactor cli.tryscript.md to Use Heredocs
+# Plan: Refactor cli.tryscript.md to Use Clean File Setup
 
 ## Problem
 
-The `cli.tryscript.md` file uses ugly inline node commands to create test files:
+The `cli.tryscript.md` and `meta.tryscript.md` files used ugly inline node commands to
+create test files:
 
 ```bash
 $ node -e "require('fs').writeFileSync('/tmp/pass-cli.tryscript.md', '# Test: Pass\n\n\`\`\`console\n\$ echo ok\nok\n? 0\n\`\`\`\n')"
 ```
 
 This is:
+
 - Unreadable due to deeply nested escaping
 - Error-prone
 - A poor example for users
 
-## Solution
+## Investigation: Heredocs
 
-Use Bash heredocs with sandbox mode. Heredocs already work since tryscript runs
-commands via shell.
+Initial plan was to use Bash heredocs:
 
-### Before (Ugly)
-```bash
-$ node -e "require('fs').writeFileSync('/tmp/pass-cli.tryscript.md', '...')" && node $TRYSCRIPT_TEST_DIR/../dist/bin.mjs run /tmp/pass-cli.tryscript.md
-```
-
-### After (Clean)
 ```bash
 $ cat > pass.tryscript.md << 'EOF'
 # Test: Pass
@@ -34,75 +29,75 @@ ok
 ? 0
 ```
 EOF
-$ node $TRYSCRIPT_TEST_DIR/../dist/bin.mjs run pass.tryscript.md
 ```
 
-## Changes Required
+**Problem Discovered**: The parser regex `/```(console|bash)\r?\n([\s\S]*?)```/g`
+matches exactly 3 backticks and doesn't support extended fences (4+ backticks).
+This causes nested code fences in heredocs to be parsed as separate test blocks,
+breaking the tests.
 
-### 1. Enable Sandbox Mode
+## Solution: Fixture Files
 
-Add `sandbox: true` to frontmatter so files are created in temp directory and
-cleaned up automatically.
+Use the existing `fixtures:` directive to copy clean, readable fixture files to
+the sandbox:
 
 ```yaml
 ---
 sandbox: true
-env:
-  NO_COLOR: "1"
+fixtures:
+  - cli-fixtures/pass.md
+  - cli-fixtures/fail.md
 ---
 ```
 
-### 2. Convert Each Test
+### Advantages
 
-There are 11 tests using the ugly pattern:
+1. **Clean and readable**: Each fixture is a proper file with syntax highlighting
+2. **No escaping**: Content is exactly what will be tested
+3. **Maintainable**: Easy to edit individual fixtures
+4. **Works today**: No parser changes needed
+5. **Good examples**: Users can copy the pattern for their own tests
 
-| Line | Test Name | Complexity |
-|------|-----------|------------|
-| 93 | Run passing test | Simple - 1 file |
-| 104 | Run failing test | Simple - 1 file |
-| 117 | --verbose | Simple - 1 file |
-| 128 | --quiet | Simple - 1 file |
-| 136 | --filter | Medium - 2 tests in 1 file |
-| 147 | --fail-fast | Medium - 2 tests in 1 file |
-| 169 | Exit code mismatch | Simple - 1 file |
-| 182 | Custom env vars | Medium - frontmatter + test |
-| 193 | Custom patterns | Medium - frontmatter + test |
-| 206 | Multiple files | Complex - 2 separate files |
-| 222 | Summary counts | Medium - 3 tests in 1 file |
+## Changes Made
 
-### 3. Heredoc Format
+### 1. Created `tests/cli-fixtures/` Directory
 
-Use single-quoted delimiter to prevent shell expansion:
+16 fixture files for CLI tests:
 
-```bash
-$ cat > filename.tryscript.md << 'EOF'
-content here
-EOF
-```
+- `pass.md`, `fail.md` - Basic pass/fail tests
+- `verbose.md`, `quiet.md` - CLI option tests
+- `filter.md`, `failfast.md` - Multi-test files
+- `exitcode.md` - Exit code mismatch test
+- `env.md`, `patterns.md` - Frontmatter tests
+- `multi1.md`, `multi2.md` - Multiple file tests
+- `counts.md` - Summary statistics test
+- `meta-pass.md`, `meta-fail.md`, `meta-elision.md`, `meta-multi.md` - Meta-tests
 
-Key points:
-- `'EOF'` (quoted) prevents `$` expansion inside heredoc
-- Files created in sandbox (cwd), not /tmp
-- Use relative paths since we're in sandbox
+### 2. Updated `cli.tryscript.md`
 
-### 4. Handle Special Cases
+- Added `sandbox: true` and `fixtures:` directive
+- Updated all 11 tests to reference fixture files
+- Changed file paths from `/tmp/*.tryscript.md` to `*.md` (sandbox-relative)
+- Updated expected output patterns (`[..]pass.md` instead of `[..]pass.tryscript.md`)
 
-**Tests with frontmatter** (env, patterns): Include YAML in heredoc content
+### 3. Updated `meta.tryscript.md`
 
-**Multiple files**: Use separate heredocs or combine into one command block
+- Added `fixtures:` directive for 4 meta-test fixtures
+- Removed all `node -e` writeFileSync commands
+- Updated to reference fixture files
 
-**Failure tests**: Keep `2>&1; echo "exit: $?"` pattern for capturing exit codes
+## Outcome
 
-## Execution Order
+- All 74 golden tests pass
+- Test files are readable and maintainable
+- Fixtures serve as good examples for users
+- Each fixture file has proper syntax highlighting
 
-1. Add `sandbox: true` to frontmatter
-2. Convert tests one by one, starting with simplest
-3. Run `pnpm test:golden` after each change to verify
-4. Final validation with full test suite
+## Future Consideration
 
-## Expected Outcome
+If heredoc support is desired in the future, the parser would need to:
 
-- All 11 tests converted to heredoc syntax
-- Tests remain functionally equivalent
-- Dramatically improved readability
-- Better example for users to follow
+1. Support extended fences (4+ backticks): `````console ... `````
+2. Match closing fence by counting backticks
+
+This would enable inline file creation without fixture files.
