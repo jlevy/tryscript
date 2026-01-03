@@ -1,19 +1,15 @@
+/**
+ * CLI entry point for tryscript.
+ *
+ * Configures Commander.js with colored help and registers all subcommands.
+ */
+
 import { Command } from 'commander';
-import pc from 'picocolors';
 import { VERSION } from '../index.js';
 import { registerRunCommand } from './commands/run.js';
 import { registerReadmeCommand } from './commands/readme.js';
 import { registerDocsCommand } from './commands/docs.js';
-
-function withColoredHelp<T extends Command>(cmd: T): T {
-  cmd.configureHelp({
-    styleTitle: (str) => pc.bold(pc.cyan(str)),
-    styleCommandText: (str) => pc.green(str),
-    styleOptionText: (str) => pc.yellow(str),
-    showGlobalOptions: true,
-  });
-  return cmd;
-}
+import { withColoredHelp, logError } from './lib/shared.js';
 
 export function run(argv: string[]): void {
   const program = withColoredHelp(
@@ -35,7 +31,7 @@ export function run(argv: string[]): void {
   });
 
   program.parseAsync(argv).catch((err: Error) => {
-    console.error(pc.red(`Error: ${err.message}`));
+    logError(`Error: ${err.message}`);
     process.exit(2);
   });
 }

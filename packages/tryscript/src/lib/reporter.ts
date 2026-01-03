@@ -1,3 +1,9 @@
+/**
+ * Test result reporting utilities.
+ *
+ * Handles output formatting for test results, diffs, and summaries.
+ */
+
 import pc from 'picocolors';
 import { createPatch } from 'diff';
 import type { TestFileResult, TestRunSummary } from './types.js';
@@ -6,6 +12,22 @@ export interface ReporterOptions {
   diff: boolean;
   verbose: boolean;
   quiet: boolean;
+}
+
+// Status indicators for consistent output
+const statusIcon = {
+  pass: pc.green('✓'),
+  fail: pc.red('✗'),
+};
+
+/**
+ * Format a duration in milliseconds for display.
+ */
+function formatDuration(ms: number): string {
+  if (ms < 1000) {
+    return `${ms}ms`;
+  }
+  return `${(ms / 1000).toFixed(2)}s`;
 }
 
 /**
@@ -32,16 +54,6 @@ export function createDiff(expected: string, actual: string, filename: string): 
 }
 
 /**
- * Format a duration in milliseconds for display.
- */
-function formatDuration(ms: number): string {
-  if (ms < 1000) {
-    return `${ms}ms`;
-  }
-  return `${(ms / 1000).toFixed(2)}s`;
-}
-
-/**
  * Report results for a single file.
  */
 export function reportFile(result: TestFileResult, options: ReporterOptions): void {
@@ -61,10 +73,10 @@ export function reportFile(result: TestFileResult, options: ReporterOptions): vo
 
     if (blockResult.passed) {
       if (!options.quiet) {
-        console.error(`  ${pc.green('✓')} ${name}`);
+        console.error(`  ${statusIcon.pass} ${name}`);
       }
     } else {
-      console.error(`  ${pc.red('✗')} ${name}`);
+      console.error(`  ${statusIcon.fail} ${name}`);
 
       // Show error details
       if (blockResult.error) {

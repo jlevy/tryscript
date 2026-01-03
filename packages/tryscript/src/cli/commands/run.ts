@@ -1,9 +1,15 @@
+/**
+ * Run command - executes golden tests against CLI applications.
+ *
+ * Supports filtering, update mode, and detailed diff output for failures.
+ */
+
 import type { Command } from 'commander';
 
 import { readFile } from 'node:fs/promises';
 import fg from 'fast-glob';
-import pc from 'picocolors';
 import { loadConfig, mergeConfig } from '../../lib/config.js';
+import { logWarn, colors, status as statusIndicators } from '../lib/shared.js';
 import { parseTestFile } from '../../lib/parser.js';
 import {
   runBlock,
@@ -65,7 +71,7 @@ async function runCommand(files: string[], options: RunOptions): Promise<void> {
   });
 
   if (testFiles.length === 0) {
-    console.error(pc.yellow('No test files found'));
+    logWarn('No test files found');
     process.exit(1);
   }
 
@@ -178,7 +184,7 @@ async function runCommand(files: string[], options: RunOptions): Promise<void> {
     if (opts.update && !fileResult.passed) {
       const { updated, changes } = await updateTestFile(testFile, results);
       if (updated) {
-        console.error(pc.yellow(`  ↻ Updated: ${changes.join(', ')}`));
+        console.error(colors.warn(`  ${statusIndicators.update} Updated: ${changes.join(', ')}`));
       }
     }
   }
