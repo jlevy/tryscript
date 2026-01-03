@@ -87,27 +87,32 @@ lines with proper tooling.
 - Multi-command state: Persist shell state across commands in a block
 - Stdin support: Pipe input to commands
 
-## Backward Compatibility
+## Design Philosophy
 
-### API Changes
+This is a new library - we design from first principles, not backward compatibility.
 
-| Area | Compatibility | Notes |
-|------|---------------|-------|
-| CLI flags | Full | No changes to existing flags |
-| Frontmatter | Full | All new options are optional |
-| Test syntax | Full | Existing `$`, `?`, `...`, `[..]` unchanged |
-| Config files | Full | New options with sensible defaults |
+### Core Insight
+
+Most CLI tests follow this pattern:
+1. Run a command against source files
+2. Check output matches expected
+
+Users mentally run commands "from the project directory." The test file should mirror
+that experience. Temp directories are the exception (mutation tests), not the rule.
 
 ### Defaults
 
-- `cwd`: Defaults to temp directory (current behavior)
-- `binName`: Not set by default (current behavior)
-- `vars`: Empty by default
-- All new features are opt-in
+| Option | Default | Rationale |
+|--------|---------|-----------|
+| `cwd` | `.` (test file dir) | Matches mental model of "run from here" |
+| `bin` | (none) | Explicit is better |
+| `binName` | (none) | Optional convenience |
+| `vars` | `{}` | Empty by default |
 
-### Migration
+### The 80/20 Split
 
-No migration required. Existing test files continue to work unchanged.
+- **80% of tests**: Run commands, check output, don't modify files → `cwd: .` is perfect
+- **20% of tests**: Mutation tests that modify files → use `cwd: temp` or `$TEMP` variable
 
 ## Stage 1: Planning Stage
 
@@ -133,7 +138,7 @@ const proc = spawn(command, { cwd: ctx.tempDir, ... }); // hardcoded
 
 **Must Have (Phase 1):**
 1. Fix `bin` config to actually work
-2. Add `cwd` option (`"."` = test file dir, `"temp"` = temp dir [default])
+2. Change `cwd` default to `.` (test file dir), with `"temp"` as opt-in
 3. Add `binName` option to alias bin path to command name
 
 **Should Have (Phase 2):**
@@ -219,12 +224,12 @@ Update `executeCommand()` to:
 1. Use `ctx.cwd` instead of hardcoded `ctx.tempDir`
 2. If `binName` is set, prepend `binPath` to PATH or replace command prefix
 
-**2. Add `cwd` option (runner.ts)**
+**2. Change `cwd` default to `.` (runner.ts)**
 
 ```typescript
 function resolveCwd(config: TryscriptConfig, testDir: string, tempDir: string): string {
-  if (!config.cwd || config.cwd === 'temp') return tempDir;
-  if (config.cwd === '.') return testDir;
+  if (config.cwd === 'temp') return tempDir;  // Opt-in isolation
+  if (!config.cwd || config.cwd === '.') return testDir;  // Default
   return resolve(testDir, config.cwd);
 }
 ```
@@ -336,10 +341,11 @@ New assertion syntax:
 
 - [ ] Fix `bin` config to actually resolve binaries
 - [ ] Add `binName` option for command aliasing
-- [ ] Add `cwd` option for working directory control
+- [ ] Change `cwd` default to `.` (test file dir), add `cwd: temp` opt-in
 - [ ] Update types and config schemas
 - [ ] Add unit tests for new options
-- [ ] Add self-tests demonstrating fixes
+- [ ] Update existing self-tests to remove `$TRYSCRIPT_TEST_DIR` workarounds
+- [ ] Add self-tests demonstrating new defaults
 
 ### Phase 2: Variables and Fixtures
 
@@ -373,11 +379,12 @@ TBD - Will be filled after implementation.
 1. **Variable syntax:** Should we use `$VAR` or `${VAR}` or both?
    - Recommendation: `$VAR` for simplicity, matching shell conventions
 
-2. **cwd values:** Should `cwd: .` be the default for better ergonomics?
-   - Recommendation: Keep `temp` as default for backward compatibility
-
-3. **stderr syntax:** Is `!` prefix intuitive, or should we use explicit blocks?
+2. **stderr syntax:** Is `!` prefix intuitive, or should we use explicit blocks?
    - Recommendation: Support both for flexibility
+
+3. **Should `TRYSCRIPT_TEST_DIR` be removed?**
+   - With `cwd: .` as default, it's largely unnecessary
+   - Recommendation: Keep for edge cases, but don't document prominently
 
 ## Design Alternatives Considered
 
@@ -387,7 +394,7 @@ Expose more env vars but keep temp as CWD:
 
 | Variable | Value |
 |----------|-------|
-| `TRYSCRIPT_TEST_DIR` | Test file directory (exists) |
+| `TRYSCRIPT_TEST_DIR` | Test file directory |
 | `TRYSCRIPT_PROJECT_ROOT` | Git root or package.json dir |
 | `TRYSCRIPT_TEMP` | Temp directory |
 
@@ -399,25 +406,36 @@ If `tests/cli.tryscript.md` has companion `tests/cli.in/`, auto-use as CWD.
 
 **Rejected:** Too implicit, requires specific directory structure, not Markdown-first.
 
-### Alternative C: Change Default CWD
+### Alternative C: Temp Directory as Default
 
-Make `cwd: .` the default (run from test file directory).
+Keep current behavior where commands run in `/tmp/tryscript-xxx/`.
 
-**Rejected:** Breaking change for existing tests that rely on temp isolation.
+**Rejected:** Wrong mental model. Users think "run from project dir" not "run from temp."
+Forces awkward workarounds for the common case (90%+ of tests).
 
-### Chosen: Explicit `cwd` Config
+### Chosen: `cwd: .` as Default
 
 ```yaml
-cwd: .      # Test file directory
-cwd: temp   # Temp directory (default, backward compatible)
-cwd: ./sub  # Relative to test file
+# Default - no cwd needed, runs from test file directory
+---
+bin: ./dist/bin.mjs
+---
+
+$ ./dist/bin.mjs validate examples/test.md   # Just works
+
+# Opt-in temp isolation for mutation tests
+---
+cwd: temp
+---
+
+$ mycli apply $TEMP/test.md   # Isolated
 ```
 
 **Rationale:**
-1. Explicit over implicit (no magic directory detection)
-2. Backward compatible (existing tests unchanged)
-3. Progressive disclosure (simple default, advanced when needed)
-4. Consistent with trycmd's TOML config approach
+1. Matches mental model - "run commands from here"
+2. Relative paths work naturally
+3. Temp isolation available when needed via `cwd: temp`
+4. `$TEMP` variable always available for hybrid approaches
 
 ## Dependencies
 
