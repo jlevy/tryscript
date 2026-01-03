@@ -13,15 +13,33 @@ Comprehensive tests for all tryscript CLI features.
 
 ```console
 $ node $TRYSCRIPT_TEST_DIR/../dist/bin.mjs --help
-Usage: tryscript [options] [command] [files...]
+Usage: tryscript [options] [command]
 
 Golden testing for CLI applications
+
+Options:
+  --version                 Show version number
+  -h, --help                display help for command
+
+Commands:
+  run [options] [files...]  Run golden tests
+  readme [options]          Display README documentation
+  docs [options]            Display concise syntax reference
+? 0
+```
+
+# Test: run --help shows run options
+
+```console
+$ node $TRYSCRIPT_TEST_DIR/../dist/bin.mjs run --help
+Usage: tryscript run [options] [files...]
+
+Run golden tests
 
 Arguments:
   files               Test files to run (default: **/*.tryscript.md)
 
 Options:
-  --version           Show version number
   --update            Update golden files with actual output
   --diff              Show diff on failure (default: true)
   --no-diff           Hide diff on failure
@@ -30,10 +48,6 @@ Options:
   --verbose           Show detailed output including passing test output
   --quiet             Suppress non-essential output (only show failures)
   -h, --help          display help for command
-
-Commands:
-  readme [options]    Display README documentation
-  docs [options]      Display concise syntax reference
 ? 0
 ```
 
@@ -76,7 +90,7 @@ Concise syntax reference for writing tryscript test files.
 # Test: Run passing test and show summary
 
 ```console
-$ node -e "require('fs').writeFileSync('/tmp/pass-cli.tryscript.md', '# Test: Pass\n\n\`\`\`console\n\$ echo ok\nok\n? 0\n\`\`\`\n')" && node $TRYSCRIPT_TEST_DIR/../dist/bin.mjs /tmp/pass-cli.tryscript.md
+$ node -e "require('fs').writeFileSync('/tmp/pass-cli.tryscript.md', '# Test: Pass\n\n\`\`\`console\n\$ echo ok\nok\n? 0\n\`\`\`\n')" && node $TRYSCRIPT_TEST_DIR/../dist/bin.mjs run /tmp/pass-cli.tryscript.md
 PASS [..]pass-cli.tryscript.md
   ✓ Pass
 
@@ -87,7 +101,7 @@ PASS [..]pass-cli.tryscript.md
 # Test: Run failing test shows failure
 
 ```console
-$ node -e "require('fs').writeFileSync('/tmp/fail-cli.tryscript.md', '# Test: Fail\n\n\`\`\`console\n\$ echo actual\nexpected\n? 0\n\`\`\`\n')" && node $TRYSCRIPT_TEST_DIR/../dist/bin.mjs /tmp/fail-cli.tryscript.md --no-diff 2>&1; echo "exit: $?"
+$ node -e "require('fs').writeFileSync('/tmp/fail-cli.tryscript.md', '# Test: Fail\n\n\`\`\`console\n\$ echo actual\nexpected\n? 0\n\`\`\`\n')" && node $TRYSCRIPT_TEST_DIR/../dist/bin.mjs run /tmp/fail-cli.tryscript.md --no-diff 2>&1; echo "exit: $?"
 FAIL [..]fail-cli.tryscript.md
   ✗ Fail
 ...
@@ -100,7 +114,7 @@ exit: 1
 # Test: --verbose shows detailed output
 
 ```console
-$ node -e "require('fs').writeFileSync('/tmp/verbose.tryscript.md', '# Test: Verbose\n\n\`\`\`console\n\$ echo hello\nhello\n? 0\n\`\`\`\n')" && node $TRYSCRIPT_TEST_DIR/../dist/bin.mjs /tmp/verbose.tryscript.md --verbose
+$ node -e "require('fs').writeFileSync('/tmp/verbose.tryscript.md', '# Test: Verbose\n\n\`\`\`console\n\$ echo hello\nhello\n? 0\n\`\`\`\n')" && node $TRYSCRIPT_TEST_DIR/../dist/bin.mjs run /tmp/verbose.tryscript.md --verbose
 PASS [..]verbose.tryscript.md
   ✓ Verbose
 ...
@@ -111,7 +125,7 @@ PASS [..]verbose.tryscript.md
 # Test: --quiet suppresses output on success
 
 ```console
-$ node -e "require('fs').writeFileSync('/tmp/quiet.tryscript.md', '# Test: Quiet\n\n\`\`\`console\n\$ echo hi\nhi\n? 0\n\`\`\`\n')" && node $TRYSCRIPT_TEST_DIR/../dist/bin.mjs /tmp/quiet.tryscript.md --quiet
+$ node -e "require('fs').writeFileSync('/tmp/quiet.tryscript.md', '# Test: Quiet\n\n\`\`\`console\n\$ echo hi\nhi\n? 0\n\`\`\`\n')" && node $TRYSCRIPT_TEST_DIR/../dist/bin.mjs run /tmp/quiet.tryscript.md --quiet
 1 passed [..]
 ? 0
 ```
@@ -119,7 +133,7 @@ $ node -e "require('fs').writeFileSync('/tmp/quiet.tryscript.md', '# Test: Quiet
 # Test: --filter runs only matching tests
 
 ```console
-$ node -e "require('fs').writeFileSync('/tmp/filter.tryscript.md', '# Test: Alpha\n\n\`\`\`console\n\$ echo a\na\n? 0\n\`\`\`\n\n# Test: Beta\n\n\`\`\`console\n\$ echo b\nb\n? 0\n\`\`\`\n')" && node $TRYSCRIPT_TEST_DIR/../dist/bin.mjs /tmp/filter.tryscript.md --filter Alpha
+$ node -e "require('fs').writeFileSync('/tmp/filter.tryscript.md', '# Test: Alpha\n\n\`\`\`console\n\$ echo a\na\n? 0\n\`\`\`\n\n# Test: Beta\n\n\`\`\`console\n\$ echo b\nb\n? 0\n\`\`\`\n')" && node $TRYSCRIPT_TEST_DIR/../dist/bin.mjs run /tmp/filter.tryscript.md --filter Alpha
 PASS [..]filter.tryscript.md
   ✓ Alpha
 
@@ -130,7 +144,7 @@ PASS [..]filter.tryscript.md
 # Test: --fail-fast stops on first failure
 
 ```console
-$ node -e "require('fs').writeFileSync('/tmp/failfast.tryscript.md', '# Test: First Fail\n\n\`\`\`console\n\$ echo wrong\nright\n? 0\n\`\`\`\n\n# Test: Second\n\n\`\`\`console\n\$ echo two\ntwo\n? 0\n\`\`\`\n')" && node $TRYSCRIPT_TEST_DIR/../dist/bin.mjs /tmp/failfast.tryscript.md --fail-fast --no-diff 2>&1; echo "exit: $?"
+$ node -e "require('fs').writeFileSync('/tmp/failfast.tryscript.md', '# Test: First Fail\n\n\`\`\`console\n\$ echo wrong\nright\n? 0\n\`\`\`\n\n# Test: Second\n\n\`\`\`console\n\$ echo two\ntwo\n? 0\n\`\`\`\n')" && node $TRYSCRIPT_TEST_DIR/../dist/bin.mjs run /tmp/failfast.tryscript.md --fail-fast --no-diff 2>&1; echo "exit: $?"
 FAIL [..]failfast.tryscript.md
   ✗ First Fail
 ...
@@ -143,7 +157,7 @@ exit: 1
 # Test: No test files found exits with code 1
 
 ```console
-$ node $TRYSCRIPT_TEST_DIR/../dist/bin.mjs /nonexistent/*.tryscript.md 2>&1; echo "exit: $?"
+$ node $TRYSCRIPT_TEST_DIR/../dist/bin.mjs run /nonexistent/*.tryscript.md 2>&1; echo "exit: $?"
 No test files found
 exit: 1
 ? 0
@@ -152,7 +166,7 @@ exit: 1
 # Test: Exit code mismatch is detected
 
 ```console
-$ node -e "require('fs').writeFileSync('/tmp/exitcode.tryscript.md', '# Test: Exit Code\n\n\`\`\`console\n\$ exit 1\n? 0\n\`\`\`\n')" && node $TRYSCRIPT_TEST_DIR/../dist/bin.mjs /tmp/exitcode.tryscript.md --no-diff 2>&1; echo "exit: $?"
+$ node -e "require('fs').writeFileSync('/tmp/exitcode.tryscript.md', '# Test: Exit Code\n\n\`\`\`console\n\$ exit 1\n? 0\n\`\`\`\n')" && node $TRYSCRIPT_TEST_DIR/../dist/bin.mjs run /tmp/exitcode.tryscript.md --no-diff 2>&1; echo "exit: $?"
 FAIL [..]exitcode.tryscript.md
   ✗ Exit Code
 ...
@@ -165,7 +179,7 @@ exit: 1
 # Test: Custom environment variables work
 
 ```console
-$ node -e "require('fs').writeFileSync('/tmp/env.tryscript.md', '---\nenv:\n  MY_VAR: hello\n---\n\n# Test: Env\n\n\`\`\`console\n\$ echo \$MY_VAR\nhello\n? 0\n\`\`\`\n')" && node $TRYSCRIPT_TEST_DIR/../dist/bin.mjs /tmp/env.tryscript.md
+$ node -e "require('fs').writeFileSync('/tmp/env.tryscript.md', '---\nenv:\n  MY_VAR: hello\n---\n\n# Test: Env\n\n\`\`\`console\n\$ echo \$MY_VAR\nhello\n? 0\n\`\`\`\n')" && node $TRYSCRIPT_TEST_DIR/../dist/bin.mjs run /tmp/env.tryscript.md
 PASS [..]env.tryscript.md
   ✓ Env
 
@@ -176,7 +190,7 @@ PASS [..]env.tryscript.md
 # Test: Custom patterns work
 
 ```console
-$ node -e "require('fs').writeFileSync('/tmp/patterns.tryscript.md', '---\npatterns:\n  NUM: \"[0-9]+\"\n---\n\n# Test: Patterns\n\n\`\`\`console\n\$ echo 12345\n[NUM]\n? 0\n\`\`\`\n')" && node $TRYSCRIPT_TEST_DIR/../dist/bin.mjs /tmp/patterns.tryscript.md
+$ node -e "require('fs').writeFileSync('/tmp/patterns.tryscript.md', '---\npatterns:\n  NUM: \"[0-9]+\"\n---\n\n# Test: Patterns\n\n\`\`\`console\n\$ echo 12345\n[NUM]\n? 0\n\`\`\`\n')" && node $TRYSCRIPT_TEST_DIR/../dist/bin.mjs run /tmp/patterns.tryscript.md
 PASS [..]patterns.tryscript.md
   ✓ Patterns
 
@@ -189,7 +203,7 @@ PASS [..]patterns.tryscript.md
 # Test: Run multiple test files
 
 ```console
-$ node -e "require('fs').writeFileSync('/tmp/multi1.tryscript.md', '# Test: One\n\n\`\`\`console\n\$ echo 1\n1\n? 0\n\`\`\`\n')" && node -e "require('fs').writeFileSync('/tmp/multi2.tryscript.md', '# Test: Two\n\n\`\`\`console\n\$ echo 2\n2\n? 0\n\`\`\`\n')" && node $TRYSCRIPT_TEST_DIR/../dist/bin.mjs /tmp/multi1.tryscript.md /tmp/multi2.tryscript.md
+$ node -e "require('fs').writeFileSync('/tmp/multi1.tryscript.md', '# Test: One\n\n\`\`\`console\n\$ echo 1\n1\n? 0\n\`\`\`\n')" && node -e "require('fs').writeFileSync('/tmp/multi2.tryscript.md', '# Test: Two\n\n\`\`\`console\n\$ echo 2\n2\n? 0\n\`\`\`\n')" && node $TRYSCRIPT_TEST_DIR/../dist/bin.mjs run /tmp/multi1.tryscript.md /tmp/multi2.tryscript.md
 PASS /tmp/multi1.tryscript.md
   ✓ One
 
@@ -205,7 +219,7 @@ PASS /tmp/multi2.tryscript.md
 # Test: Summary shows correct counts
 
 ```console
-$ node -e "require('fs').writeFileSync('/tmp/counts.tryscript.md', '# Test: A\n\n\`\`\`console\n\$ echo a\na\n? 0\n\`\`\`\n\n# Test: B\n\n\`\`\`console\n\$ echo b\nb\n? 0\n\`\`\`\n\n# Test: C\n\n\`\`\`console\n\$ echo c\nc\n? 0\n\`\`\`\n')" && node $TRYSCRIPT_TEST_DIR/../dist/bin.mjs /tmp/counts.tryscript.md
+$ node -e "require('fs').writeFileSync('/tmp/counts.tryscript.md', '# Test: A\n\n\`\`\`console\n\$ echo a\na\n? 0\n\`\`\`\n\n# Test: B\n\n\`\`\`console\n\$ echo b\nb\n? 0\n\`\`\`\n\n# Test: C\n\n\`\`\`console\n\$ echo c\nc\n? 0\n\`\`\`\n')" && node $TRYSCRIPT_TEST_DIR/../dist/bin.mjs run /tmp/counts.tryscript.md
 PASS [..]counts.tryscript.md
   ✓ A
   ✓ B

@@ -154,26 +154,29 @@ two
 ## CLI Usage
 
 ```bash
-# Run all tests
+# Show documentation
 npx tryscript
 
+# Run all tests
+npx tryscript run
+
 # Run specific files
-npx tryscript tests/foo.tryscript.md
+npx tryscript run tests/foo.tryscript.md
 
 # Update golden files
-npx tryscript --update
+npx tryscript run --update
 
 # Filter tests by name
-npx tryscript --filter "pattern"
+npx tryscript run --filter "pattern"
 
 # Fail fast on first error
-npx tryscript --fail-fast
+npx tryscript run --fail-fast
 
 # Verbose output
-npx tryscript --verbose
+npx tryscript run --verbose
 ```
 
-## Options
+## Run Options
 
 | Option             | Description                              |
 | ------------------ | ---------------------------------------- |

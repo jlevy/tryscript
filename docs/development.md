@@ -141,8 +141,8 @@ Run the CLI from the repository root:
 ```bash
 # Development: runs TypeScript source directly via tsx (always current, no build needed)
 pnpm tryscript --help
-pnpm tryscript tests/basic.tryscript.md
-pnpm tryscript tests/ --verbose
+pnpm tryscript run tests/basic.tryscript.md
+pnpm tryscript run tests/ --verbose
 
 # Testing built output (requires pnpm build first)
 node packages/tryscript/dist/bin.mjs --help
@@ -160,11 +160,12 @@ node packages/tryscript/dist/bin.mjs --help
 
 | Command | Description |
 | --- | --- |
-| `[files...]` | Run golden tests (default command) |
+| (none) | Display README documentation |
+| `run [files...]` | Run golden tests |
 | `readme` | Display README documentation |
 | `docs` | Display concise syntax reference |
 
-### CLI Options
+### CLI Options (for `run` command)
 
 | Option | Description |
 | --- | --- |

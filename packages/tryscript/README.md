@@ -35,7 +35,7 @@ Options:
 Run the tests:
 
 ```bash
-npx tryscript tests/
+npx tryscript run tests/
 ```
 
 ## Test File Format
@@ -134,16 +134,24 @@ export default defineConfig({
 });
 ```
 
-## CLI Options
+## CLI Commands
 
 ```
-tryscript [options] [files...]
+tryscript                    Show documentation (README)
+tryscript run [files...]     Run golden tests
+tryscript readme             Display README documentation
+tryscript docs               Display concise syntax reference
+```
+
+### Run Options
+
+```
+tryscript run [options] [files...]
 
 Arguments:
   files               Test files to run (default: **/*.tryscript.md)
 
 Options:
-  --version           Show version number
   --update            Update golden files with actual output
   --diff              Show diff on failure (default: true)
   --no-diff           Hide diff on failure
@@ -159,7 +167,7 @@ Options:
 When your CLI output changes, update all test files at once:
 
 ```bash
-npx tryscript --update
+npx tryscript run --update
 ```
 
 This rewrites test files with the actual output from running the commands.
@@ -197,8 +205,8 @@ Add scripts to your `package.json`:
 ```json
 {
   "scripts": {
-    "test:golden": "tryscript 'tests/**/*.tryscript.md'",
-    "test:golden:coverage": "c8 --src src --all --include 'dist/**' tryscript 'tests/**/*.tryscript.md'"
+    "test:golden": "tryscript run 'tests/**/*.tryscript.md'",
+    "test:golden:coverage": "c8 --src src --all --include 'dist/**' tryscript run 'tests/**/*.tryscript.md'"
   }
 }
 ```

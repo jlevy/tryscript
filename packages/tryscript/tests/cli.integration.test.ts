@@ -43,6 +43,13 @@ describe('tryscript CLI', () => {
   it('shows help with --help', () => {
     const result = runCli('--help');
     expect(result.output).toContain('Golden testing for CLI applications');
+    expect(result.output).toContain('run [options] [files...]');
+    expect(result.exitCode).toBe(0);
+  });
+
+  it('shows run help with run --help', () => {
+    const result = runCli('run --help');
+    expect(result.output).toContain('Run golden tests');
     expect(result.output).toContain('--update');
     expect(result.exitCode).toBe(0);
   });
@@ -68,7 +75,7 @@ hello
 `,
     );
 
-    const result = runCli(testFile);
+    const result = runCli(`run ${testFile}`);
     expect(result.output).toContain('1 passed');
     expect(result.exitCode).toBe(0);
   });
@@ -87,13 +94,13 @@ expected
 `,
     );
 
-    const result = runCli(testFile);
+    const result = runCli(`run ${testFile}`);
     expect(result.output).toContain('1 failed');
     expect(result.exitCode).toBe(1);
   });
 
   it('exits with code 1 when no test files found', () => {
-    const result = runCli(join(tempDir, 'nonexistent/*.tryscript.md'));
+    const result = runCli(`run ${join(tempDir, 'nonexistent/*.tryscript.md')}`);
     expect(result.exitCode).toBe(1);
   });
 });
