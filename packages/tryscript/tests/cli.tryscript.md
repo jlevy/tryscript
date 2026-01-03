@@ -83,7 +83,7 @@ $ node $TRYSCRIPT_TEST_DIR/../dist/bin.mjs readme --raw | head -5
 
 Golden testing for CLI applications - a TypeScript port of [trycmd](https://github.com/assert-rs/trycmd).
 
-## Requirements
+## Overview
 ? 0
 ```
 
@@ -91,11 +91,11 @@ Golden testing for CLI applications - a TypeScript port of [trycmd](https://gith
 
 ```console
 $ node $TRYSCRIPT_TEST_DIR/../dist/bin.mjs docs --raw | head -5
-# tryscript Quick Reference
+# tryscript Reference
 
-Concise syntax reference for writing tryscript test files.
+Complete reference for writing tryscript golden tests. This document covers all syntax,
+configuration, and patterns needed to write accurate CLI tests on the first try.
 
-## Test File Format
 ? 0
 ```
 

@@ -2,229 +2,71 @@
 
 Golden testing for CLI applications - a TypeScript port of [trycmd](https://github.com/assert-rs/trycmd).
 
-## Requirements
+## Overview
 
-- **Node.js 20+** (tested with v20, v22, v24)
-
-## Installation
-
-```bash
-npm install tryscript
-# or
-pnpm add tryscript
-```
-
-## Quick Start
-
-Create a test file with the `.tryscript.md` extension:
+tryscript enables golden testing for any CLI application. Write test cases in Markdown with console code blocks, and tryscript runs the commands, compares output, and reports differences.
 
 ```markdown
-# Test: Help command
-
-\`\`\`console
-$ my-cli --help
-Usage: my-cli [options]
-
-Options:
-  --version  Show version
-  --help     Show help
-? 0
-\`\`\`
-```
-
-Run the tests:
-
-```bash
-npx tryscript run tests/
-```
-
-## Test File Format
-
-Test files are Markdown documents with console code blocks. Each code block represents a test case:
-
-```markdown
-\`\`\`console
-$ <command>
-<expected output>
-? <exit code>
-\`\`\`
-```
-
-### Example
-
-```markdown
-# Test: Echo command
+# Test: Hello World
 
 \`\`\`console
 $ echo "hello world"
 hello world
 ? 0
 \`\`\`
-
-# Test: Exit with error
-
-\`\`\`console
-$ exit 1
-? 1
-\`\`\`
 ```
 
-## Elision Patterns
+## Features
 
-Use elision patterns to match dynamic or platform-specific output:
+- **Markdown test format** - Tests are readable documentation
+- **Elision patterns** - Match dynamic output with `[..]`, `...`, `[EXE]`, `[ROOT]`, `[CWD]`
+- **Custom patterns** - Define regex patterns for timestamps, versions, UUIDs
+- **Update mode** - Regenerate golden files with `--update`
+- **Self-bootstrapping** - tryscript tests itself
 
-| Pattern  | Description                              | Example                    |
-| -------- | ---------------------------------------- | -------------------------- |
-| `[..]`   | Match any characters on the current line | `Built in [..]ms`          |
-| `...`    | Match zero or more complete lines        | `...\nDone`                |
-| `[EXE]`  | Match `.exe` on Windows, empty otherwise | `my-cli[EXE] --help`       |
-| `[ROOT]` | Match the test's root directory          | `[ROOT]/output.txt`        |
-| `[CWD]`  | Match the current working directory      | `[CWD]/file.txt`           |
-
-### Example with Elision
-
-```markdown
-\`\`\`console
-$ time-command
-Elapsed: [..]ms
-? 0
-\`\`\`
-```
-
-## Configuration
-
-### YAML Frontmatter
-
-Add configuration at the top of your test file:
-
-```markdown
----
-bin: ./my-cli
-env:
-  NO_COLOR: "1"
-timeout: 5000
----
-
-# Test: Custom binary
-
-\`\`\`console
-$ my-cli --version
-1.0.0
-? 0
-\`\`\`
-```
-
-### Config File
-
-Create `tryscript.config.ts` in your project root:
-
-```typescript
-import { defineConfig } from 'tryscript';
-
-export default defineConfig({
-  bin: './dist/cli.js',
-  env: {
-    NO_COLOR: '1',
-  },
-  timeout: 30000,
-  patterns: {
-    VERSION: '\\d+\\.\\d+\\.\\d+',
-    UUID: '[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}',
-  },
-});
-```
-
-## CLI Commands
-
-```
-tryscript                    Show documentation (README)
-tryscript run [files...]     Run golden tests
-tryscript readme             Display README documentation
-tryscript docs               Display concise syntax reference
-```
-
-### Run Options
-
-```
-tryscript run [options] [files...]
-
-Arguments:
-  files               Test files to run (default: **/*.tryscript.md)
-
-Options:
-  --update            Update golden files with actual output
-  --diff              Show diff on failure (default: true)
-  --no-diff           Hide diff on failure
-  --fail-fast         Stop on first failure
-  --filter <pattern>  Filter tests by name pattern
-  --verbose           Show detailed output
-  --quiet             Suppress non-essential output
-  --help              Show help
-```
-
-## Update Mode
-
-When your CLI output changes, update all test files at once:
+## Quick Start
 
 ```bash
-npx tryscript run --update
+# Install
+pnpm add tryscript
+
+# Run tests
+npx tryscript tests/
+
+# Update golden files
+npx tryscript --update
 ```
 
-This rewrites test files with the actual output from running the commands.
+## Documentation
 
-## Programmatic API
+See [packages/tryscript/README.md](packages/tryscript/README.md) for full documentation.
 
-```typescript
-import { parseTestFile, runBlock, createExecutionContext, matchOutput } from 'tryscript';
+## Project Structure
 
-const content = await fs.readFile('test.tryscript.md', 'utf-8');
-const testFile = parseTestFile(content, 'test.tryscript.md');
-
-const ctx = await createExecutionContext({}, 'test.tryscript.md');
-for (const block of testFile.blocks) {
-  const result = await runBlock(block, ctx);
-  const matches = matchOutput(
-    result.actualOutput,
-    block.expectedOutput,
-    { root: ctx.tempDir, cwd: ctx.tempDir },
-  );
-  console.log(`${block.name}: ${matches ? 'PASS' : 'FAIL'}`);
-}
+```
+tryscript/
+├── packages/
+│   └── tryscript/     # Main package
+│       ├── src/       # TypeScript source
+│       └── tests/     # Self-tests
+└── docs/              # Documentation
 ```
 
-## Measuring Coverage
-
-When testing CLI tools as subprocesses, standard coverage tools don't track execution. Use [c8](https://github.com/bcoe/c8) which leverages Node's V8 coverage collection:
+## Development
 
 ```bash
-npm install -D c8
+# Install dependencies
+pnpm install
+
+# Build
+pnpm build
+
+# Run tests
+pnpm test
+
+# Run self-tests
+pnpm -r tryscript tests/
 ```
-
-Add scripts to your `package.json`:
-
-```json
-{
-  "scripts": {
-    "test:golden": "tryscript run 'tests/**/*.tryscript.md'",
-    "test:golden:coverage": "c8 --src src --all --include 'dist/**' tryscript run 'tests/**/*.tryscript.md'"
-  }
-}
-```
-
-Key c8 flags:
-- `--src src` — Map coverage back to source files
-- `--all` — Include files with 0% coverage
-- `--include 'dist/**'` — Track your built CLI output
-
-This captures coverage from actual CLI usage—the most realistic testing possible.
-
-## Comparison with trycmd
-
-tryscript is a TypeScript port of the Rust [trycmd](https://github.com/assert-rs/trycmd) crate. Key differences:
-
-- **Language**: TypeScript/Node.js instead of Rust
-- **Format**: Uses console code blocks (trycmd uses `.toml` or `.trycmd` files)
-- **Integration**: Works with Node.js test frameworks (Vitest, Jest)
 
 ## License
 
