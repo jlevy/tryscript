@@ -160,7 +160,7 @@ node packages/tryscript/dist/bin.mjs --help
 
 | Command | Description |
 | --- | --- |
-| (none) | Display README documentation |
+| (none) | Display help (same as --help) |
 | `run [files...]` | Run golden tests |
 | `readme` | Display README documentation |
 | `docs` | Display concise syntax reference |

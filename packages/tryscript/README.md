@@ -6,15 +6,15 @@ Golden testing for CLI applications - a TypeScript port of [trycmd](https://gith
 
 tryscript enables golden testing for any CLI application. Write test cases in Markdown with console code blocks, and tryscript runs the commands, compares output, and reports differences.
 
-```markdown
+````markdown
 # Test: Hello World
 
-\`\`\`console
+```console
 $ echo "hello world"
 hello world
 ? 0
-\`\`\`
 ```
+````
 
 ## Features
 

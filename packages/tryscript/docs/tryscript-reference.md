@@ -15,7 +15,7 @@ with embedded console code blocks specifying commands and expected output.
 
 ## Quick Start Example
 
-```markdown
+````markdown
 ---
 sandbox: true
 env:
@@ -24,20 +24,20 @@ env:
 
 # Test: Basic echo
 
-\`\`\`console
+```console
 $ echo "hello world"
 hello world
 ? 0
-\`\`\`
+```
 
 # Test: Command with variable output
 
-\`\`\`console
+```console
 $ date +%Y
 [..]
 ? 0
-\`\`\`
 ```
+````
 
 ## Test File Structure
 
@@ -245,7 +245,7 @@ Control test execution with HTML comments:
 
 Here's a complete test file demonstrating all features:
 
-```markdown
+````markdown
 ---
 sandbox: true
 env:
@@ -268,15 +268,15 @@ These tests validate the my-cli command-line tool.
 
 # Test: Show version
 
-\`\`\`console
+```console
 $ $CLI --version
 my-cli version [VERSION]
 ? 0
-\`\`\`
+```
 
 # Test: Show help
 
-\`\`\`console
+```console
 $ $CLI --help
 Usage: my-cli [options] [command]
 
@@ -285,52 +285,52 @@ Options:
   --help     Show help
 ...
 ? 0
-\`\`\`
+```
 
 ## Error Handling
 
 # Test: Missing required argument
 
-\`\`\`console
+```console
 $ $CLI process
 Error: missing required argument 'file'
 ? 1
-\`\`\`
+```
 
 # Test: File not found
 
-\`\`\`console
+```console
 $ $CLI process nonexistent.txt 2>&1
 Error: file not found: nonexistent.txt
 ? 1
-\`\`\`
+```
 
 ## Feature Tests
 
 # Test: Process config file
 
-\`\`\`console
+```console
 $ $CLI process config.json
 Processing: config.json
 Done at [TIMESTAMP][..]
 ? 0
-\`\`\`
+```
 
 # Test: Verbose output <!-- skip -->
 
-\`\`\`console
+```console
 $ $CLI --verbose process config.json
 [DEBUG] Loading config.json
 ...
 Done
 ? 0
-\`\`\`
 ```
+````
 
 ## CLI Usage
 
 ```bash
-tryscript                    # Show README documentation
+tryscript                    # Show help (same as --help)
 tryscript run [files...]     # Run golden tests
 tryscript docs               # Show this reference
 tryscript readme             # Show README
