@@ -119,4 +119,15 @@ export default [
       '@typescript-eslint/no-unsafe-call': 'off',
     },
   },
+
+  // Node.js scripts (ESM)
+  {
+    files: ['scripts/**/*.mjs'],
+    languageOptions: {
+      globals: {
+        console: 'readonly',
+        process: 'readonly',
+      },
+    },
+  },
 ];
