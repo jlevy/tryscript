@@ -1,5 +1,5 @@
 ---
-cwd: temp
+sandbox: true
 ---
 
 # Skip and Only Annotation Tests

@@ -43,6 +43,7 @@
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "test": "vitest run",
     "test:watch": "vitest",
+    "test:self": "tsx src/bin.ts",
     "test:golden": "node dist/bin.mjs 'tests/**/*.tryscript.md'",
     "test:golden:coverage": "c8 --src src --all --include 'dist/**' --reporter text --reporter html --reports-dir coverage-golden node dist/bin.mjs 'tests/**/*.tryscript.md'",
     "test:coverage": "vitest run --coverage",
