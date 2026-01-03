@@ -3,8 +3,25 @@ import { existsSync } from 'node:fs';
 import { resolve } from 'node:path';
 import type { TestConfig } from './types.js';
 
+/** Fixture configuration for copying files to sandbox directory */
+export interface Fixture {
+  /** Source path (resolved relative to test file) */
+  source: string;
+  /** Destination path (resolved relative to sandbox dir) */
+  dest?: string;
+}
+
 export interface TryscriptConfig {
-  bin?: string;
+  /** Working directory for commands (default: test file directory) */
+  cwd?: string;
+  /** Run in isolated sandbox: true = empty temp, path = copy to temp */
+  sandbox?: boolean | string;
+  /** Fixtures to copy to sandbox directory before tests */
+  fixtures?: (string | Fixture)[];
+  /** Script to run before first test block */
+  before?: string;
+  /** Script to run after all test blocks */
+  after?: string;
   env?: Record<string, string>;
   timeout?: number;
   patterns?: Record<string, RegExp | string>;
@@ -39,6 +56,7 @@ export function mergeConfig(base: TryscriptConfig, frontmatter: TestConfig): Try
     ...frontmatter,
     env: { ...base.env, ...frontmatter.env },
     patterns: { ...base.patterns, ...frontmatter.patterns },
+    fixtures: [...(base.fixtures ?? []), ...(frontmatter.fixtures ?? [])],
   };
 }
 

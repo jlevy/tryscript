@@ -1,29 +1,68 @@
 import { spawn } from 'node:child_process';
-import { mkdtemp, realpath, rm } from 'node:fs/promises';
+import { mkdtemp, realpath, rm, cp } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
-import { join, dirname, resolve } from 'node:path';
+import { join, dirname, resolve, basename } from 'node:path';
 import treeKill from 'tree-kill';
 import type { TestBlock, TestBlockResult } from './types.js';
-import type { TryscriptConfig } from './config.js';
+import type { TryscriptConfig, Fixture } from './config.js';
 
 /** Default timeout in milliseconds */
 const DEFAULT_TIMEOUT = 30_000;
 
 /**
  * Execution context for a test file.
- * Created once per file, contains the temp directory.
+ * Created once per file, contains directory paths and config.
  */
 export interface ExecutionContext {
   /** Temporary directory for this test file (resolved, no symlinks) */
   tempDir: string;
-  /** Directory containing the test file (for portable test commands) */
+  /** Directory containing the test file */
   testDir: string;
-  /** Resolved binary path */
-  binPath: string;
+  /** Working directory for command execution */
+  cwd: string;
+  /** Whether running in sandbox mode */
+  sandbox: boolean;
   /** Environment variables */
   env: Record<string, string>;
   /** Timeout per command */
   timeout: number;
+  /** Before hook script */
+  before?: string;
+  /** After hook script */
+  after?: string;
+  /** Whether before hook has been run */
+  beforeRan?: boolean;
+}
+
+/**
+ * Normalize fixture config to Fixture object.
+ */
+function normalizeFixture(fixture: string | Fixture): Fixture {
+  if (typeof fixture === 'string') {
+    return { source: fixture };
+  }
+  return fixture;
+}
+
+/**
+ * Setup fixtures by copying files to sandbox directory.
+ */
+async function setupFixtures(
+  fixtures: (string | Fixture)[] | undefined,
+  testDir: string,
+  sandboxDir: string,
+): Promise<void> {
+  if (!fixtures || fixtures.length === 0) {
+    return;
+  }
+
+  for (const f of fixtures) {
+    const fixture = normalizeFixture(f);
+    const src = resolve(testDir, fixture.source);
+    const destName = fixture.dest ?? basename(fixture.source);
+    const dst = resolve(sandboxDir, destName);
+    await cp(src, dst, { recursive: true });
+  }
 }
 
 /**
@@ -41,16 +80,38 @@ export async function createExecutionContext(
   // Resolve test file directory for portable test commands
   const testDir = resolve(dirname(testFilePath));
 
-  // Resolve binary path relative to test file directory
-  let binPath = config.bin ?? '';
-  if (binPath && !binPath.startsWith('/')) {
-    binPath = join(testDir, binPath);
+  // Determine working directory based on sandbox config
+  let cwd: string;
+  let sandbox = false;
+
+  if (config.sandbox === true) {
+    // Empty sandbox: run in temp directory
+    cwd = tempDir;
+    sandbox = true;
+  } else if (typeof config.sandbox === 'string') {
+    // Copy directory to sandbox: copy source to temp, run in temp
+    const srcPath = resolve(testDir, config.sandbox);
+    await cp(srcPath, tempDir, { recursive: true });
+    cwd = tempDir;
+    sandbox = true;
+  } else if (config.cwd) {
+    // Run in specified directory (relative to test file)
+    cwd = resolve(testDir, config.cwd);
+  } else {
+    // Default: run in test file directory
+    cwd = testDir;
   }
 
-  return {
+  // Copy additional fixtures to sandbox (only if sandbox enabled)
+  if (sandbox && config.fixtures) {
+    await setupFixtures(config.fixtures, testDir, tempDir);
+  }
+
+  const ctx: ExecutionContext = {
     tempDir,
     testDir,
-    binPath,
+    cwd,
+    sandbox,
     env: {
       ...process.env,
       ...config.env,
@@ -61,7 +122,11 @@ export async function createExecutionContext(
       TRYSCRIPT_TEST_DIR: testDir,
     } as Record<string, string>,
     timeout: config.timeout ?? DEFAULT_TIMEOUT,
+    before: config.before,
+    after: config.after,
   };
+
+  return ctx;
 }
 
 /**
@@ -72,13 +137,48 @@ export async function cleanupExecutionContext(ctx: ExecutionContext): Promise<vo
 }
 
 /**
+ * Run the before hook if it hasn't run yet.
+ */
+export async function runBeforeHook(ctx: ExecutionContext): Promise<void> {
+  if (ctx.before && !ctx.beforeRan) {
+    ctx.beforeRan = true;
+    await executeCommand(ctx.before, ctx);
+  }
+}
+
+/**
+ * Run the after hook.
+ */
+export async function runAfterHook(ctx: ExecutionContext): Promise<void> {
+  if (ctx.after) {
+    await executeCommand(ctx.after, ctx);
+  }
+}
+
+/**
  * Run a single test block and return the result.
  */
 export async function runBlock(block: TestBlock, ctx: ExecutionContext): Promise<TestBlockResult> {
   const startTime = Date.now();
 
+  // Handle skip annotation
+  if (block.skip) {
+    return {
+      block,
+      passed: true,
+      actualOutput: '',
+      actualExitCode: 0,
+      duration: 0,
+      skipped: true,
+    };
+  }
+
   try {
-    const { output, exitCode } = await executeCommand(block.command, ctx);
+    // Run before hook if this is the first test
+    await runBeforeHook(ctx);
+
+    // Execute command directly (shell handles $VAR expansion)
+    const { output, stdout, stderr, exitCode } = await executeCommand(block.command, ctx);
 
     const duration = Date.now() - startTime;
 
@@ -86,6 +186,8 @@ export async function runBlock(block: TestBlock, ctx: ExecutionContext): Promise
       block,
       passed: true, // Matching handled separately
       actualOutput: output,
+      actualStdout: stdout,
+      actualStderr: stderr,
       actualExitCode: exitCode,
       duration,
     };
@@ -104,27 +206,40 @@ export async function runBlock(block: TestBlock, ctx: ExecutionContext): Promise
   }
 }
 
+/** Command execution result with separate stdout/stderr */
+interface CommandResult {
+  output: string;
+  stdout: string;
+  stderr: string;
+  exitCode: number;
+}
+
 /**
  * Execute a command and capture output.
  */
-async function executeCommand(
-  command: string,
-  ctx: ExecutionContext,
-): Promise<{ output: string; exitCode: number }> {
+async function executeCommand(command: string, ctx: ExecutionContext): Promise<CommandResult> {
   return new Promise((resolve, reject) => {
     const proc = spawn(command, {
       shell: true,
-      cwd: ctx.tempDir,
+      cwd: ctx.cwd,
       env: ctx.env as NodeJS.ProcessEnv,
       // Pipe both to capture
       stdio: ['ignore', 'pipe', 'pipe'],
     });
 
-    const chunks: Buffer[] = [];
+    const combinedChunks: { data: Buffer; type: 'stdout' | 'stderr' }[] = [];
+    const stdoutChunks: Buffer[] = [];
+    const stderrChunks: Buffer[] = [];
 
     // Capture data as it comes in to preserve order
-    proc.stdout.on('data', (data: Buffer) => chunks.push(data));
-    proc.stderr.on('data', (data: Buffer) => chunks.push(data));
+    proc.stdout.on('data', (data: Buffer) => {
+      combinedChunks.push({ data, type: 'stdout' });
+      stdoutChunks.push(data);
+    });
+    proc.stderr.on('data', (data: Buffer) => {
+      combinedChunks.push({ data, type: 'stderr' });
+      stderrChunks.push(data);
+    });
 
     const timeoutId = setTimeout(() => {
       if (proc.pid) {
@@ -135,9 +250,13 @@ async function executeCommand(
 
     proc.on('close', (code) => {
       clearTimeout(timeoutId);
-      const output = Buffer.concat(chunks).toString('utf-8');
+      const output = Buffer.concat(combinedChunks.map((c) => c.data)).toString('utf-8');
+      const stdout = Buffer.concat(stdoutChunks).toString('utf-8');
+      const stderr = Buffer.concat(stderrChunks).toString('utf-8');
       resolve({
         output,
+        stdout,
+        stderr,
         exitCode: code ?? 0,
       });
     });

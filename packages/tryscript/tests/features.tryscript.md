@@ -15,24 +15,25 @@ multi-line command
 ? 0
 ```
 
-# Test: Commands share temp directory
+# Test: File creation with TEMP variable
 
-Files created in one block persist for subsequent blocks.
+Files can be created in temp directory using $TEMP when implemented.
+For now, use /tmp directly.
 
 ```console
-$ echo "test content" > myfile.txt && echo "File created"
+$ echo "test content" > /tmp/tryscript-test-file.txt && echo "File created"
 File created
 ? 0
 ```
 
 ```console
-$ ls myfile.txt
-myfile.txt
+$ ls /tmp/tryscript-test-file.txt
+/tmp/tryscript-test-file.txt
 ? 0
 ```
 
 ```console
-$ rm myfile.txt && echo "Cleaned up"
+$ rm /tmp/tryscript-test-file.txt && echo "Cleaned up"
 Cleaned up
 ? 0
 ```
@@ -54,11 +55,11 @@ stdout message
 ? 0
 ```
 
-# Test: Working directory is temp
+# Test: Working directory defaults to test file directory
 
 ```console
-$ node -e "console.log(process.cwd().includes('tryscript-') ? 'In temp' : 'Not in temp')"
-In temp
+$ node -e "console.log(process.cwd().includes('tests') ? 'In tests dir' : 'Not in tests')"
+In tests dir
 ? 0
 ```
 

@@ -53,10 +53,11 @@ Configure test behavior at the top of the file:
 
 ```yaml
 ---
-bin: ./my-cli
 env:
+  MY_VAR: "value"
   NO_COLOR: "1"
 timeout: 5000
+sandbox: true
 patterns:
   VERSION: "\\d+\\.\\d+\\.\\d+"
 ---
@@ -64,12 +65,51 @@ patterns:
 
 ### Config Options
 
-| Option     | Type     | Description                           |
-| ---------- | -------- | ------------------------------------- |
-| `bin`      | string   | Path to CLI binary                    |
-| `env`      | object   | Environment variables                 |
-| `timeout`  | number   | Command timeout in milliseconds       |
-| `patterns` | object   | Custom regex patterns for `[NAME]`    |
+| Option     | Type            | Description                                |
+| ---------- | --------------- | ------------------------------------------ |
+| `cwd`      | string          | Working directory (default: test file dir) |
+| `sandbox`  | boolean\|string | Run in isolated temp directory             |
+| `env`      | object          | Environment variables                      |
+| `timeout`  | number          | Command timeout in milliseconds            |
+| `patterns` | object          | Custom regex patterns for `[NAME]`         |
+| `fixtures` | array           | Files to copy to sandbox (requires sandbox)|
+| `before`   | string          | Shell command to run before first test     |
+| `after`    | string          | Shell command to run after all tests       |
+
+## Sandbox Mode
+
+Run tests in an isolated temporary directory:
+
+```yaml
+# Empty sandbox
+sandbox: true
+```
+
+```yaml
+# Copy fixtures to sandbox
+sandbox: ./test-fixtures
+```
+
+When sandbox is enabled:
+- Commands run in a fresh temp directory
+- `[CWD]` matches the sandbox directory
+- Files created by tests don't pollute the source directory
+- Fixtures are copied to the sandbox before tests run
+
+## Environment Variables
+
+Use `env` to pass variables to commands (shell handles `$VAR` expansion):
+
+```yaml
+env:
+  MY_CLI: ./dist/cli.mjs
+  DEBUG: "true"
+```
+
+```console
+$ $MY_CLI --version
+1.0.0
+```
 
 ## Custom Patterns
 
@@ -153,7 +193,6 @@ Create `tryscript.config.ts` in your project root:
 import { defineConfig } from 'tryscript';
 
 export default defineConfig({
-  bin: './dist/cli.js',
   env: { NO_COLOR: '1' },
   timeout: 30000,
   patterns: {

@@ -23,7 +23,7 @@ hello
 
   it('should parse frontmatter', () => {
     const content = `---
-bin: ./my-cli
+sandbox: true
 env:
   NO_COLOR: "1"
 ---
@@ -31,15 +31,15 @@ env:
 # Test: Help
 
 \`\`\`console
-$ my-cli --help
-Usage: my-cli
+$ echo --help
+Usage: echo
 ? 0
 \`\`\`
 `;
 
     const result = parseTestFile(content, '/test/file.tryscript.md');
 
-    expect(result.config.bin).toBe('./my-cli');
+    expect(result.config.sandbox).toBe(true);
     expect(result.config.env).toEqual({ NO_COLOR: '1' });
     expect(result.blocks).toHaveLength(1);
   });
