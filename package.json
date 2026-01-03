@@ -24,6 +24,7 @@
     "tryscript": "pnpm --filter tryscript tryscript",
     "prepare": "lefthook install",
     "changeset": "changeset",
+    "changeset:add": "node scripts/changeset-add.mjs",
     "version-packages": "changeset version",
     "release": "pnpm build && pnpm publint && changeset publish",
     "upgrade:check": "ncu --format group",

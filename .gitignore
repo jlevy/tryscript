@@ -1,5 +1,6 @@
 # Project-specific
 attic/
+node-compile-cache/
 
 # Logs
 logs
