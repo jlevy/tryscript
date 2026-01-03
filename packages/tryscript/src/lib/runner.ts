@@ -11,19 +11,38 @@ const DEFAULT_TIMEOUT = 30_000;
 
 /**
  * Execution context for a test file.
- * Created once per file, contains the temp directory.
+ * Created once per file, contains directory paths and config.
  */
 export interface ExecutionContext {
   /** Temporary directory for this test file (resolved, no symlinks) */
   tempDir: string;
-  /** Directory containing the test file (for portable test commands) */
+  /** Directory containing the test file */
   testDir: string;
-  /** Resolved binary path */
+  /** Working directory for command execution (defaults to testDir) */
+  cwd: string;
+  /** Resolved binary path (if bin config is set) */
   binPath: string;
+  /** Command name alias for binPath (if binName config is set) */
+  binName?: string;
   /** Environment variables */
   env: Record<string, string>;
   /** Timeout per command */
   timeout: number;
+}
+
+/**
+ * Resolve working directory based on config.
+ * Default is test file directory; 'temp' uses temp directory.
+ */
+function resolveCwd(cwdConfig: string | undefined, testDir: string, tempDir: string): string {
+  if (cwdConfig === 'temp') {
+    return tempDir;
+  }
+  if (!cwdConfig || cwdConfig === '.') {
+    return testDir;
+  }
+  // Relative paths resolved from test file directory
+  return resolve(testDir, cwdConfig);
 }
 
 /**
@@ -41,6 +60,9 @@ export async function createExecutionContext(
   // Resolve test file directory for portable test commands
   const testDir = resolve(dirname(testFilePath));
 
+  // Resolve working directory (defaults to test file directory)
+  const cwd = resolveCwd(config.cwd, testDir, tempDir);
+
   // Resolve binary path relative to test file directory
   let binPath = config.bin ?? '';
   if (binPath && !binPath.startsWith('/')) {
@@ -50,7 +72,9 @@ export async function createExecutionContext(
   return {
     tempDir,
     testDir,
+    cwd,
     binPath,
+    binName: config.binName,
     env: {
       ...process.env,
       ...config.env,
@@ -105,16 +129,36 @@ export async function runBlock(block: TestBlock, ctx: ExecutionContext): Promise
 }
 
 /**
+ * Resolve binName alias in command if configured.
+ * If command starts with binName, replace it with the resolved binPath.
+ */
+function resolveCommand(command: string, ctx: ExecutionContext): string {
+  if (!ctx.binName || !ctx.binPath) {
+    return command;
+  }
+
+  // Check if command starts with binName (as a complete word)
+  const binNamePattern = new RegExp(`^${ctx.binName}(?:\\s|$)`);
+  if (binNamePattern.test(command)) {
+    return command.replace(ctx.binName, ctx.binPath);
+  }
+  return command;
+}
+
+/**
  * Execute a command and capture output.
  */
 async function executeCommand(
   command: string,
   ctx: ExecutionContext,
 ): Promise<{ output: string; exitCode: number }> {
+  // Resolve binName alias to binPath
+  const resolvedCommand = resolveCommand(command, ctx);
+
   return new Promise((resolve, reject) => {
-    const proc = spawn(command, {
+    const proc = spawn(resolvedCommand, {
       shell: true,
-      cwd: ctx.tempDir,
+      cwd: ctx.cwd,
       env: ctx.env as NodeJS.ProcessEnv,
       // Pipe both to capture
       stdio: ['ignore', 'pipe', 'pipe'],

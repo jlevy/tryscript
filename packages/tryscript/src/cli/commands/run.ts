@@ -79,10 +79,11 @@ export async function runCommand(files: string[], options: RunOptions): Promise<
         const result = await runBlock(block, ctx);
 
         // Check if output matches expected
+        // [ROOT] = test file directory, [CWD] = command working directory
         const matches = matchOutput(
           result.actualOutput,
           block.expectedOutput,
-          { root: ctx.tempDir, cwd: ctx.tempDir },
+          { root: ctx.testDir, cwd: ctx.cwd },
           config.patterns ?? {},
         );
 

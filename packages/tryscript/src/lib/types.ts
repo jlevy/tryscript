@@ -2,6 +2,11 @@ import { z } from 'zod';
 
 export const TestConfigSchema = z.object({
   bin: z.string().optional().describe('Path to the binary to test'),
+  binName: z.string().optional().describe('Command name alias for bin'),
+  cwd: z
+    .string()
+    .optional()
+    .describe('Working directory: "." = test file dir (default), "temp" = temp dir'),
   env: z.record(z.string()).optional().describe('Environment variables'),
   timeout: z.number().optional().describe('Timeout per command in ms'),
   patterns: z

@@ -4,7 +4,12 @@ import { resolve } from 'node:path';
 import type { TestConfig } from './types.js';
 
 export interface TryscriptConfig {
+  /** Path to the binary to test (resolved relative to test file) */
   bin?: string;
+  /** Command name alias for bin (e.g., 'mycli' lets you write '$ mycli --help') */
+  binName?: string;
+  /** Working directory for commands: '.' = test file dir (default), 'temp' = temp dir */
+  cwd?: string;
   env?: Record<string, string>;
   timeout?: number;
   patterns?: Record<string, RegExp | string>;
