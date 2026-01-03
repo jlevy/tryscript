@@ -114,6 +114,26 @@ function isInteractive(): boolean {
 }
 
 /**
+ * Display the README content.
+ * Exported for use as the default command.
+ */
+export function showReadme(options?: { raw?: boolean }): void {
+  try {
+    const readme = loadReadme();
+
+    // Determine if we should colorize
+    const shouldColorize = !options?.raw && isInteractive();
+
+    const formatted = formatMarkdown(readme, shouldColorize);
+    console.log(formatted);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    console.error(pc.red(`Error: ${message}`));
+    process.exit(1);
+  }
+}
+
+/**
  * Register the readme command.
  */
 export function registerReadmeCommand(program: Command): void {
@@ -121,19 +141,5 @@ export function registerReadmeCommand(program: Command): void {
     .command('readme')
     .description('Display README documentation')
     .option('--raw', 'Output raw markdown without formatting')
-    .action((options: { raw?: boolean }) => {
-      try {
-        const readme = loadReadme();
-
-        // Determine if we should colorize
-        const shouldColorize = !options.raw && isInteractive();
-
-        const formatted = formatMarkdown(readme, shouldColorize);
-        console.log(formatted);
-      } catch (error) {
-        const message = error instanceof Error ? error.message : String(error);
-        console.error(pc.red(`Error: ${message}`));
-        process.exit(1);
-      }
-    });
+    .action(showReadme);
 }

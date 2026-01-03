@@ -12,7 +12,7 @@ Uses sandbox: true to isolate test file creation.
 # Test: Create and run a passing test file
 
 ```console
-$ node -e "require('fs').writeFileSync('pass.tryscript.md', '# Pass Test\n\n\`\`\`console\n\$ echo hello\nhello\n? 0\n\`\`\`\n')" && node $TRYSCRIPT_TEST_DIR/../dist/bin.mjs pass.tryscript.md
+$ node -e "require('fs').writeFileSync('pass.tryscript.md', '# Pass Test\n\n\`\`\`console\n\$ echo hello\nhello\n? 0\n\`\`\`\n')" && node $TRYSCRIPT_TEST_DIR/../dist/bin.mjs run pass.tryscript.md
 PASS [..]pass.tryscript.md
   ✓ Pass Test
 
@@ -23,7 +23,7 @@ PASS [..]pass.tryscript.md
 # Test: Create and detect a failing test file
 
 ```console
-$ node -e "require('fs').writeFileSync('fail.tryscript.md', '# Fail Test\n\n\`\`\`console\n\$ echo actual\nexpected\n? 0\n\`\`\`\n')" && node $TRYSCRIPT_TEST_DIR/../dist/bin.mjs fail.tryscript.md --no-diff 2>&1; echo "exit: $?"
+$ node -e "require('fs').writeFileSync('fail.tryscript.md', '# Fail Test\n\n\`\`\`console\n\$ echo actual\nexpected\n? 0\n\`\`\`\n')" && node $TRYSCRIPT_TEST_DIR/../dist/bin.mjs run fail.tryscript.md --no-diff 2>&1; echo "exit: $?"
 FAIL [..]
   ✗ Fail Test
 ...
@@ -34,7 +34,7 @@ exit: 1
 # Test: Elision patterns work in meta-tests
 
 ```console
-$ node -e "require('fs').writeFileSync('elision.tryscript.md', '# Elision Test\n\n\`\`\`console\n\$ date +%s\n[..]\n? 0\n\`\`\`\n')" && node $TRYSCRIPT_TEST_DIR/../dist/bin.mjs elision.tryscript.md
+$ node -e "require('fs').writeFileSync('elision.tryscript.md', '# Elision Test\n\n\`\`\`console\n\$ date +%s\n[..]\n? 0\n\`\`\`\n')" && node $TRYSCRIPT_TEST_DIR/../dist/bin.mjs run elision.tryscript.md
 PASS [..]elision.tryscript.md
   ✓ Elision Test
 
@@ -45,7 +45,7 @@ PASS [..]elision.tryscript.md
 # Test: Multiple test blocks work
 
 ```console
-$ node -e "require('fs').writeFileSync('multi.tryscript.md', '# Test One\n\n\`\`\`console\n\$ echo one\none\n? 0\n\`\`\`\n\n# Test Two\n\n\`\`\`console\n\$ echo two\ntwo\n? 0\n\`\`\`\n')" && node $TRYSCRIPT_TEST_DIR/../dist/bin.mjs multi.tryscript.md
+$ node -e "require('fs').writeFileSync('multi.tryscript.md', '# Test One\n\n\`\`\`console\n\$ echo one\none\n? 0\n\`\`\`\n\n# Test Two\n\n\`\`\`console\n\$ echo two\ntwo\n? 0\n\`\`\`\n')" && node $TRYSCRIPT_TEST_DIR/../dist/bin.mjs run multi.tryscript.md
 PASS [..]multi.tryscript.md
   ✓ Test One
   ✓ Test Two

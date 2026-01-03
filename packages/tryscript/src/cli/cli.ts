@@ -1,8 +1,8 @@
 import { Command } from 'commander';
 import pc from 'picocolors';
 import { VERSION } from '../index.js';
-import { runCommand } from './commands/run.js';
-import { registerReadmeCommand } from './commands/readme.js';
+import { registerRunCommand } from './commands/run.js';
+import { registerReadmeCommand, showReadme } from './commands/readme.js';
 import { registerDocsCommand } from './commands/docs.js';
 
 export function run(argv: string[]): void {
@@ -10,20 +10,17 @@ export function run(argv: string[]): void {
     .name('tryscript')
     .version(VERSION, '--version', 'Show version number')
     .description('Golden testing for CLI applications')
-    .showHelpAfterError('(use --help for usage)')
-    .argument('[files...]', 'Test files to run (default: **/*.tryscript.md)')
-    .option('--update', 'Update golden files with actual output')
-    .option('--diff', 'Show diff on failure (default: true)')
-    .option('--no-diff', 'Hide diff on failure')
-    .option('--fail-fast', 'Stop on first failure')
-    .option('--filter <pattern>', 'Filter tests by name pattern')
-    .option('--verbose', 'Show detailed output including passing test output')
-    .option('--quiet', 'Suppress non-essential output (only show failures)')
-    .action(runCommand);
+    .showHelpAfterError('(use --help for usage)');
 
   // Register subcommands
+  registerRunCommand(program);
   registerReadmeCommand(program);
   registerDocsCommand(program);
+
+  // Default action: show README when no command given
+  program.action(() => {
+    showReadme();
+  });
 
   program.parseAsync(argv).catch((err: Error) => {
     console.error(pc.red(`Error: ${err.message}`));

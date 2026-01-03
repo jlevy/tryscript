@@ -1,3 +1,5 @@
+import type { Command } from 'commander';
+
 import { readFile } from 'node:fs/promises';
 import fg from 'fast-glob';
 import pc from 'picocolors';
@@ -23,7 +25,25 @@ interface RunOptions {
   quiet?: boolean;
 }
 
-export async function runCommand(files: string[], options: RunOptions): Promise<void> {
+/**
+ * Register the run command.
+ */
+export function registerRunCommand(program: Command): void {
+  program
+    .command('run')
+    .description('Run golden tests')
+    .argument('[files...]', 'Test files to run (default: **/*.tryscript.md)')
+    .option('--update', 'Update golden files with actual output')
+    .option('--diff', 'Show diff on failure (default: true)')
+    .option('--no-diff', 'Hide diff on failure')
+    .option('--fail-fast', 'Stop on first failure')
+    .option('--filter <pattern>', 'Filter tests by name pattern')
+    .option('--verbose', 'Show detailed output including passing test output')
+    .option('--quiet', 'Suppress non-essential output (only show failures)')
+    .action(runCommand);
+}
+
+async function runCommand(files: string[], options: RunOptions): Promise<void> {
   const startTime = Date.now();
 
   // Default options
