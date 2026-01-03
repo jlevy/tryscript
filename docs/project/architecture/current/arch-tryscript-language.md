@@ -92,21 +92,55 @@ $ ls -la | \
 
 | Option | Type | Default | Description |
 |--------|------|---------|-------------|
-| `cwd` | `"."` \| `"temp"` \| path | `"."` | Working directory for commands |
+| `cwd` | path | `"."` | Working directory for commands (relative to test file) |
+| `sandbox` | `boolean` \| path | `false` | Run in isolated temp directory |
 | `env` | `Record<string, string>` | `{}` | Environment variables passed to shell |
 | `timeout` | `number` | `30000` | Command timeout in milliseconds |
-| `fixtures` | `string[]` \| `Fixture[]` | `[]` | Files to copy to temp dir before tests |
+| `fixtures` | `string[]` \| `Fixture[]` | `[]` | Files to copy to sandbox before tests |
 | `before` | `string` | - | Shell command to run before first test |
 | `after` | `string` | - | Shell command to run after all tests |
 | `patterns` | `Record<string, string>` | `{}` | Custom elision patterns |
 
-### Removed Options (Simplified Design)
+### Sandbox Mode
 
-| Option | Reason for Removal | Alternative |
-|--------|-------------------|-------------|
-| `bin` | Redundant with `cwd: .` | Use relative paths directly |
-| `binName` | Redundant with `env` | Use `env: { CLI: ./path }` then `$CLI` |
-| `vars` | Conflicts with shell variables | Use `env` (shell handles `$VAR`) |
+The `sandbox` option provides test isolation by running commands in a temporary directory:
+
+| Configuration | Behavior |
+|--------------|----------|
+| `sandbox: false` (default) | Commands run directly in `cwd` (test file directory) |
+| `sandbox: true` | Creates empty temp dir, commands run there |
+| `sandbox: ./fixtures` | Copies `./fixtures/` to temp dir, commands run there |
+
+**When sandbox is enabled:**
+- A fresh temp directory is created for each test file
+- Fixtures are copied to the sandbox before tests run
+- Files created by tests don't pollute the source directory
+- `[CWD]` pattern matches the sandbox directory
+
+**Examples:**
+
+```yaml
+# Run directly in test file directory (no isolation)
+cwd: .
+```
+
+```yaml
+# Run in isolated temp directory (empty)
+sandbox: true
+```
+
+```yaml
+# Copy fixtures to temp and run there
+sandbox: ./test-fixtures
+fixtures:
+  - extra-file.txt  # Also copied to sandbox
+```
+
+```yaml
+# Run in subdirectory, isolated
+cwd: ./fixtures
+sandbox: true
+```
 
 ## Execution Model
 
@@ -124,9 +158,10 @@ $ ls -la | \
                               ▼
 ┌─────────────────────────────────────────────────────────────┐
 │                   Execution Context                         │
-│  • tempDir: /tmp/tryscript-xxx/                             │
 │  • testDir: directory containing test file                  │
-│  • cwd: testDir (default) or tempDir (if cwd: temp)         │
+│  • sandbox: false → cwd = testDir/config.cwd                │
+│             true  → cwd = /tmp/tryscript-xxx/               │
+│             path  → copy path to temp, cwd = temp           │
 │  • env: process.env + config.env                            │
 └─────────────────────────────────────────────────────────────┘
                               │
@@ -175,7 +210,7 @@ Patterns in expected output that match variable content:
 |---------|---------|---------|
 | `[..]` | Any text on single line | `file: [..]` |
 | `...` | Any lines (multiline wildcard) | See below |
-| `[CWD]` | Current working directory | `[CWD]/output.txt` |
+| `[CWD]` | Current working directory (sandbox when enabled) | `[CWD]/output.txt` |
 | `[ROOT]` | Test file directory | `[ROOT]/fixtures/` |
 | `[PATTERN]` | Custom pattern from config | User-defined |
 
@@ -208,12 +243,13 @@ Annotations in markdown headings control test execution:
 
 ### Fixtures
 
-Copy files to temp directory before tests run:
+Copy files to sandbox directory before tests run (requires `sandbox: true` or `sandbox: path`):
 
 ```yaml
+sandbox: true
 fixtures:
-  - data/input.txt                    # Copies to $TEMP/input.txt
-  - source: config/settings.json      # Copies to $TEMP/custom.json
+  - data/input.txt                    # Copies to sandbox/input.txt
+  - source: config/settings.json      # Copies to sandbox/custom.json
     dest: custom.json
 ```
 
@@ -223,7 +259,7 @@ Run shell commands before/after test execution:
 
 ```yaml
 before: npm run build
-after: rm -rf $TEMP/cache
+after: rm -rf ./cache
 ```
 
 - `before`: Runs once before first test block
@@ -269,12 +305,20 @@ $ $BIN --version
 1.0.0
 ```
 
-### DON'T: Expect tryscript variable expansion
+### DO: Use sandbox for isolation
 
 ```yaml
-# ❌ WRONG: vars is removed
-vars:
-  FILE: test.txt
+sandbox: ./test-fixtures
+```
+```console
+$ ls
+file1.txt
+file2.txt
+$ echo "new" > created.txt
+$ ls
+created.txt
+file1.txt
+file2.txt
 ```
 
 ### DON'T: Use patterns in commands
