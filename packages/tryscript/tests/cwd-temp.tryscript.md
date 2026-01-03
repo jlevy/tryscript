@@ -1,22 +1,22 @@
 ---
-cwd: temp
+sandbox: true
 env:
   NO_COLOR: "1"
 ---
 
-# Tests for cwd: temp option
+# Tests for sandbox: true option
 
-These tests run in the temp directory (opt-in isolation).
+These tests run in an isolated temp directory (sandbox mode).
 
-# Test: Working directory is temp
+# Test: Working directory is sandbox
 
 ```console
-$ node -e "console.log(process.cwd().includes('tryscript-') ? 'In temp' : 'Not in temp')"
-In temp
+$ node -e "console.log(process.cwd().includes('tryscript-') ? 'In sandbox' : 'Not in sandbox')"
+In sandbox
 ? 0
 ```
 
-# Test: Files persist across blocks in temp
+# Test: Files persist across blocks in sandbox
 
 ```console
 $ echo "test content" > myfile.txt && echo "File created"

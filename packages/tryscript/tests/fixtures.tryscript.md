@@ -1,5 +1,5 @@
 ---
-cwd: temp
+sandbox: true
 fixtures:
   - basic.tryscript.md
   - source: config.tryscript.md
@@ -8,9 +8,9 @@ fixtures:
 
 # Fixtures Tests
 
-Tests for fixtures: copying files to temp directory before tests.
+Tests for fixtures: copying files to sandbox directory before tests.
 
-## Simple fixture copied to temp
+## Simple fixture copied to sandbox
 
 ```console
 $ head -1 basic.tryscript.md

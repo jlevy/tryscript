@@ -10,14 +10,12 @@ export const FixtureSchema = z.union([
 ]);
 
 export const TestConfigSchema = z.object({
-  bin: z.string().optional().describe('Path to the binary to test'),
-  binName: z.string().optional().describe('Command name alias for bin'),
-  cwd: z
-    .string()
+  cwd: z.string().optional().describe('Working directory (default: test file directory)'),
+  sandbox: z
+    .union([z.boolean(), z.string()])
     .optional()
-    .describe('Working directory: "." = test file dir (default), "temp" = temp dir'),
-  vars: z.record(z.string()).optional().describe('User-defined variables for $VAR expansion'),
-  fixtures: z.array(FixtureSchema).optional().describe('Files to copy to temp before tests'),
+    .describe('Run in isolated sandbox: true = empty temp, path = copy to temp'),
+  fixtures: z.array(FixtureSchema).optional().describe('Files to copy to sandbox before tests'),
   before: z.string().optional().describe('Script to run before first test'),
   after: z.string().optional().describe('Script to run after all tests'),
   env: z.record(z.string()).optional().describe('Environment variables'),

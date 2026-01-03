@@ -1,26 +1,25 @@
 ---
-bin: /bin/echo
-binName: myecho
 env:
+  MYECHO: /bin/echo
   NO_COLOR: "1"
 ---
 
-# Tests for bin and binName configuration
+# Tests for CLI binary configuration via env
 
-These tests verify that `bin` and `binName` work correctly.
+These tests verify that environment variables can be used to configure CLI binaries.
 
-# Test: binName resolves to bin path
+# Test: env variable for binary path
 
 ```console
-$ myecho "hello from binName"
-hello from binName
+$ $MYECHO "hello from env"
+hello from env
 ? 0
 ```
 
-# Test: binName with multiple arguments
+# Test: env variable with multiple arguments
 
 ```console
-$ myecho "hello" "world"
+$ $MYECHO "hello" "world"
 hello world
 ? 0
 ```

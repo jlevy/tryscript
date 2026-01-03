@@ -18,14 +18,10 @@ export interface ExecutionContext {
   tempDir: string;
   /** Directory containing the test file */
   testDir: string;
-  /** Working directory for command execution (defaults to testDir) */
+  /** Working directory for command execution */
   cwd: string;
-  /** Resolved binary path (if bin config is set) */
-  binPath: string;
-  /** Command name alias for binPath (if binName config is set) */
-  binName?: string;
-  /** User-defined variables plus built-ins ($TEMP, $ROOT, $CWD) */
-  vars: Record<string, string>;
+  /** Whether running in sandbox mode */
+  sandbox: boolean;
   /** Environment variables */
   env: Record<string, string>;
   /** Timeout per command */
@@ -39,32 +35,6 @@ export interface ExecutionContext {
 }
 
 /**
- * Resolve working directory based on config.
- * Default is test file directory; 'temp' uses temp directory.
- */
-function resolveCwd(cwdConfig: string | undefined, testDir: string, tempDir: string): string {
-  if (cwdConfig === 'temp') {
-    return tempDir;
-  }
-  if (!cwdConfig || cwdConfig === '.') {
-    return testDir;
-  }
-  // Relative paths resolved from test file directory
-  return resolve(testDir, cwdConfig);
-}
-
-/**
- * Expand $VAR references in text using provided variables.
- * Built-in variables: $TEMP, $ROOT, $CWD
- * Unknown variables are left unexpanded.
- */
-export function expandVars(text: string, vars: Record<string, string>): string {
-  return text.replace(/\$(\w+)/g, (match, name: string) => {
-    return vars[name] ?? match;
-  });
-}
-
-/**
  * Normalize fixture config to Fixture object.
  */
 function normalizeFixture(fixture: string | Fixture): Fixture {
@@ -75,11 +45,12 @@ function normalizeFixture(fixture: string | Fixture): Fixture {
 }
 
 /**
- * Setup fixtures by copying files to temp directory.
+ * Setup fixtures by copying files to sandbox directory.
  */
 async function setupFixtures(
   fixtures: (string | Fixture)[] | undefined,
-  ctx: ExecutionContext,
+  testDir: string,
+  sandboxDir: string,
 ): Promise<void> {
   if (!fixtures || fixtures.length === 0) {
     return;
@@ -87,10 +58,9 @@ async function setupFixtures(
 
   for (const f of fixtures) {
     const fixture = normalizeFixture(f);
-    const expandedSource = expandVars(fixture.source, ctx.vars);
-    const src = resolve(ctx.testDir, expandedSource);
-    const destName = fixture.dest ? expandVars(fixture.dest, ctx.vars) : basename(expandedSource);
-    const dst = resolve(ctx.tempDir, destName);
+    const src = resolve(testDir, fixture.source);
+    const destName = fixture.dest ?? basename(fixture.source);
+    const dst = resolve(sandboxDir, destName);
     await cp(src, dst, { recursive: true });
   }
 }
@@ -110,30 +80,38 @@ export async function createExecutionContext(
   // Resolve test file directory for portable test commands
   const testDir = resolve(dirname(testFilePath));
 
-  // Resolve working directory (defaults to test file directory)
-  const cwd = resolveCwd(config.cwd, testDir, tempDir);
+  // Determine working directory based on sandbox config
+  let cwd: string;
+  let sandbox = false;
 
-  // Resolve binary path relative to test file directory
-  let binPath = config.bin ?? '';
-  if (binPath && !binPath.startsWith('/')) {
-    binPath = join(testDir, binPath);
+  if (config.sandbox === true) {
+    // Empty sandbox: run in temp directory
+    cwd = tempDir;
+    sandbox = true;
+  } else if (typeof config.sandbox === 'string') {
+    // Copy directory to sandbox: copy source to temp, run in temp
+    const srcPath = resolve(testDir, config.sandbox);
+    await cp(srcPath, tempDir, { recursive: true });
+    cwd = tempDir;
+    sandbox = true;
+  } else if (config.cwd) {
+    // Run in specified directory (relative to test file)
+    cwd = resolve(testDir, config.cwd);
+  } else {
+    // Default: run in test file directory
+    cwd = testDir;
   }
 
-  // Build variables with built-ins and user-defined
-  const vars: Record<string, string> = {
-    TEMP: tempDir,
-    ROOT: testDir,
-    CWD: cwd,
-    ...config.vars,
-  };
+  // Copy additional fixtures to sandbox (only if sandbox enabled)
+  if (sandbox && config.fixtures) {
+    await setupFixtures(config.fixtures, testDir, tempDir);
+  }
 
   const ctx: ExecutionContext = {
     tempDir,
     testDir,
     cwd,
-    binPath,
-    binName: config.binName,
-    vars,
+    sandbox,
     env: {
       ...process.env,
       ...config.env,
@@ -147,9 +125,6 @@ export async function createExecutionContext(
     before: config.before,
     after: config.after,
   };
-
-  // Setup fixtures
-  await setupFixtures(config.fixtures, ctx);
 
   return ctx;
 }
@@ -167,8 +142,7 @@ export async function cleanupExecutionContext(ctx: ExecutionContext): Promise<vo
 export async function runBeforeHook(ctx: ExecutionContext): Promise<void> {
   if (ctx.before && !ctx.beforeRan) {
     ctx.beforeRan = true;
-    const expandedHook = expandVars(ctx.before, ctx.vars);
-    await executeCommand(expandedHook, ctx);
+    await executeCommand(ctx.before, ctx);
   }
 }
 
@@ -177,8 +151,7 @@ export async function runBeforeHook(ctx: ExecutionContext): Promise<void> {
  */
 export async function runAfterHook(ctx: ExecutionContext): Promise<void> {
   if (ctx.after) {
-    const expandedHook = expandVars(ctx.after, ctx.vars);
-    await executeCommand(expandedHook, ctx);
+    await executeCommand(ctx.after, ctx);
   }
 }
 
@@ -204,9 +177,8 @@ export async function runBlock(block: TestBlock, ctx: ExecutionContext): Promise
     // Run before hook if this is the first test
     await runBeforeHook(ctx);
 
-    // Expand variables in command
-    const expandedCommand = expandVars(block.command, ctx.vars);
-    const { output, stdout, stderr, exitCode } = await executeCommand(expandedCommand, ctx);
+    // Execute command directly (shell handles $VAR expansion)
+    const { output, stdout, stderr, exitCode } = await executeCommand(block.command, ctx);
 
     const duration = Date.now() - startTime;
 
@@ -234,23 +206,6 @@ export async function runBlock(block: TestBlock, ctx: ExecutionContext): Promise
   }
 }
 
-/**
- * Resolve binName alias in command if configured.
- * If command starts with binName, replace it with the resolved binPath.
- */
-function resolveCommand(command: string, ctx: ExecutionContext): string {
-  if (!ctx.binName || !ctx.binPath) {
-    return command;
-  }
-
-  // Check if command starts with binName (as a complete word)
-  const binNamePattern = new RegExp(`^${ctx.binName}(?:\\s|$)`);
-  if (binNamePattern.test(command)) {
-    return command.replace(ctx.binName, ctx.binPath);
-  }
-  return command;
-}
-
 /** Command execution result with separate stdout/stderr */
 interface CommandResult {
   output: string;
@@ -263,11 +218,8 @@ interface CommandResult {
  * Execute a command and capture output.
  */
 async function executeCommand(command: string, ctx: ExecutionContext): Promise<CommandResult> {
-  // Resolve binName alias to binPath
-  const resolvedCommand = resolveCommand(command, ctx);
-
   return new Promise((resolve, reject) => {
-    const proc = spawn(resolvedCommand, {
+    const proc = spawn(command, {
       shell: true,
       cwd: ctx.cwd,
       env: ctx.env as NodeJS.ProcessEnv,

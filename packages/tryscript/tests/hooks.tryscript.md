@@ -1,6 +1,6 @@
 ---
-cwd: temp
-before: touch $TEMP/before-ran.marker
+sandbox: true
+before: touch before-ran.marker
 ---
 
 # Hooks Tests

@@ -1,5 +1,5 @@
 import { describe, it, expect, afterEach } from 'vitest';
-import { existsSync } from 'node:fs';
+import { existsSync, mkdirSync, writeFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createExecutionContext, cleanupExecutionContext, runBlock } from '../src/lib/runner.js';
@@ -43,21 +43,34 @@ describe('createExecutionContext', () => {
   it('defaults cwd to test file directory', async () => {
     ctx = await createExecutionContext({}, TEST_FILE);
     expect(ctx.cwd).toBe(TEST_DIR);
+    expect(ctx.sandbox).toBe(false);
   });
 
-  it('uses temp dir when cwd is "temp"', async () => {
-    ctx = await createExecutionContext({ cwd: 'temp' }, TEST_FILE);
+  it('uses temp dir when sandbox is true', async () => {
+    ctx = await createExecutionContext({ sandbox: true }, TEST_FILE);
     expect(ctx.cwd).toBe(ctx.tempDir);
+    expect(ctx.sandbox).toBe(true);
   });
 
-  it('resolves binPath relative to test file directory', async () => {
-    ctx = await createExecutionContext({ bin: './dist/bin.mjs' }, TEST_FILE);
-    expect(ctx.binPath).toBe(resolve(TEST_DIR, './dist/bin.mjs'));
+  it('copies directory to sandbox when sandbox is a path', async () => {
+    // Create a test fixture directory
+    const fixtureDir = resolve(TEST_DIR, 'sandbox-fixture');
+    if (!existsSync(fixtureDir)) {
+      mkdirSync(fixtureDir, { recursive: true });
+      writeFileSync(resolve(fixtureDir, 'test.txt'), 'fixture content');
+    }
+
+    ctx = await createExecutionContext({ sandbox: './sandbox-fixture' }, TEST_FILE);
+    expect(ctx.cwd).toBe(ctx.tempDir);
+    expect(ctx.sandbox).toBe(true);
+    // The fixture file should be copied to the sandbox
+    expect(existsSync(resolve(ctx.tempDir, 'test.txt'))).toBe(true);
   });
 
-  it('stores binName from config', async () => {
-    ctx = await createExecutionContext({ bin: './dist/bin.mjs', binName: 'mycli' }, TEST_FILE);
-    expect(ctx.binName).toBe('mycli');
+  it('resolves cwd relative to test file directory', async () => {
+    ctx = await createExecutionContext({ cwd: './golden' }, TEST_FILE);
+    expect(ctx.cwd).toBe(resolve(TEST_DIR, 'golden'));
+    expect(ctx.sandbox).toBe(false);
   });
 });
 
@@ -136,12 +149,18 @@ describe('runBlock', () => {
     expect(result.duration).toBeLessThan(5000);
   });
 
-  it('resolves binName alias in command', async () => {
-    // Create a context with bin and binName
-    ctx = await createExecutionContext({ bin: '/bin/echo', binName: 'myecho' }, TEST_FILE);
-    const result = await runBlock(makeBlock('myecho "hello from alias"'), ctx);
+  it('uses env variables from config', async () => {
+    ctx = await createExecutionContext({ env: { MY_VAR: 'test_value' } }, TEST_FILE);
+    const result = await runBlock(makeBlock('echo $MY_VAR'), ctx);
 
-    expect(result.actualOutput.trim()).toBe('hello from alias');
+    expect(result.actualOutput.trim()).toBe('test_value');
     expect(result.actualExitCode).toBe(0);
+  });
+
+  it('runs in sandbox directory when sandbox is true', async () => {
+    ctx = await createExecutionContext({ sandbox: true }, TEST_FILE);
+    const result = await runBlock(makeBlock('pwd'), ctx);
+
+    expect(result.actualOutput.trim()).toBe(ctx.tempDir);
   });
 });
