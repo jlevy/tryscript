@@ -1,5 +1,11 @@
 # tryscript
 
+## 0.1.1
+
+### Patch Changes
+
+- 634984e: Add built-in coverage support for CLI testing and fix c8 path issues
+
 ## 0.1.0
 
 ### Minor Changes
