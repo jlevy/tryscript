@@ -27,36 +27,7 @@ jobs:
       - run: pnpm lint:check
       - run: pnpm build
       - run: pnpm publint
-
-      # Run all tests with combined V8 coverage collection
-      - name: Run tests with coverage
-        working-directory: packages/tryscript
-        run: |
-          # Create temp directory for V8 coverage data
-          export NODE_V8_COVERAGE=$(mktemp -d)
-          echo "Collecting coverage to $NODE_V8_COVERAGE"
-
-          # Run unit tests (vitest)
-          pnpm vitest run
-
-          # Run golden tests
-          node dist/bin.mjs run 'tests/**/*.tryscript.md'
-
-          # Generate combined coverage report
-          ./node_modules/.bin/c8 report \
-            --temp-directory "$NODE_V8_COVERAGE" \
-            --reports-dir coverage \
-            --src src \
-            --all \
-            --include 'dist/**' \
-            --reporter text \
-            --reporter json \
-            --reporter json-summary \
-            --reporter lcov \
-            --reporter html
-
-          echo "Coverage report generated:"
-          cat coverage/coverage-summary.json | head -20
+      - run: pnpm --filter tryscript test:coverage
 
       # Post coverage report as PR comment (always runs so devs see coverage even on failure)
       - name: Coverage Report
