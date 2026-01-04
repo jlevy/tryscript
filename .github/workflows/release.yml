@@ -32,10 +32,11 @@ jobs:
         run: pnpm build && pnpm publint
 
       # Publish with OIDC trusted publishing (no NPM_TOKEN needed)
+      # Note: actions/setup-node with registry-url automatically configures
+      # authentication via OIDC. The provenance flag enables build attestation.
       - name: Publish to npm
-        run: pnpm -r publish --access public --no-git-checks
-        env:
-          NPM_CONFIG_PROVENANCE: true
+        working-directory: packages/tryscript
+        run: npm publish --access public --provenance
 
       # Extract version from tag and get changelog section
       - name: Extract release notes
