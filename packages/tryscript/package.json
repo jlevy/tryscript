@@ -47,7 +47,7 @@
     "test:watch": "vitest",
     "test:self": "tsx src/bin.ts",
     "test:golden": "node dist/bin.mjs run 'tests/**/*.tryscript.md'",
-    "test:golden:coverage": "c8 --src src --all --include 'dist/**' --reporter text --reporter html --reports-dir coverage-golden node dist/bin.mjs run 'tests/**/*.tryscript.md'",
+    "test:golden:coverage": "node dist/bin.mjs run --coverage 'tests/**/*.tryscript.md'",
     "test:coverage": "vitest run --coverage",
     "test:all:coverage": "pnpm test:golden:coverage && pnpm test:coverage",
     "publint": "publint",
@@ -64,6 +64,14 @@
     "tree-kill": "^1.2.0",
     "yaml": "^2.6.0",
     "zod": "^3.24.0"
+  },
+  "peerDependencies": {
+    "c8": ">=8.0.0"
+  },
+  "peerDependenciesMeta": {
+    "c8": {
+      "optional": true
+    }
   },
   "devDependencies": {
     "@types/diff": "^7.0.0",

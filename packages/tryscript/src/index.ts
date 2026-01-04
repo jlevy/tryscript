@@ -16,6 +16,8 @@ export type {
   TestBlockResult,
   TestFileResult,
   TestRunSummary,
+  CoverageConfig,
+  CoverageContext,
 } from './lib/types.js';
 
 // Core functions (for programmatic use)

@@ -67,10 +67,14 @@ async function setupFixtures(
 
 /**
  * Create an execution context for a test file.
+ * @param config - Test configuration
+ * @param testFilePath - Path to the test file
+ * @param coverageEnv - Optional coverage environment variables (e.g., NODE_V8_COVERAGE)
  */
 export async function createExecutionContext(
   config: TryscriptConfig,
   testFilePath: string,
+  coverageEnv?: Record<string, string>,
 ): Promise<ExecutionContext> {
   // Create temp directory and resolve symlinks (e.g., /var -> /private/var on macOS)
   // This ensures [CWD] and [ROOT] patterns match pwd output
@@ -115,6 +119,7 @@ export async function createExecutionContext(
     env: {
       ...process.env,
       ...config.env,
+      ...coverageEnv,
       // Disable colors by default for deterministic output
       NO_COLOR: config.env?.NO_COLOR ?? '1',
       FORCE_COLOR: '0',

@@ -9,7 +9,7 @@ import type { Command } from 'commander';
 import { readFile } from 'node:fs/promises';
 import fg from 'fast-glob';
 import { loadConfig, mergeConfig } from '../../lib/config.js';
-import { logWarn, colors, status as statusIndicators } from '../lib/shared.js';
+import { logWarn, logError, colors, status as statusIndicators } from '../lib/shared.js';
 import { parseTestFile } from '../../lib/parser.js';
 import {
   runBlock,
@@ -20,7 +20,19 @@ import {
 import { matchOutput } from '../../lib/matcher.js';
 import { createDiff, reportFile, reportSummary } from '../../lib/reporter.js';
 import { updateTestFile } from '../../lib/updater.js';
-import type { TestBlockResult, TestFileResult, TestRunSummary } from '../../lib/types.js';
+import {
+  isC8Available,
+  createCoverageContext,
+  getCoverageEnv,
+  generateCoverageReport,
+  cleanupCoverageContext,
+} from '../../lib/coverage.js';
+import type {
+  TestBlockResult,
+  TestFileResult,
+  TestRunSummary,
+  CoverageContext,
+} from '../../lib/types.js';
 
 interface RunOptions {
   update?: boolean;
@@ -29,6 +41,9 @@ interface RunOptions {
   filter?: string;
   verbose?: boolean;
   quiet?: boolean;
+  coverage?: boolean;
+  coverageDir?: string;
+  coverageReporter?: string[];
 }
 
 /**
@@ -46,6 +61,12 @@ export function registerRunCommand(program: Command): void {
     .option('--filter <pattern>', 'Filter tests by name pattern')
     .option('--verbose', 'Show detailed output including passing test output')
     .option('--quiet', 'Suppress non-essential output (only show failures)')
+    .option('--coverage', 'Enable code coverage collection (requires c8)')
+    .option('--coverage-dir <dir>', 'Coverage output directory (default: coverage-tryscript)')
+    .option(
+      '--coverage-reporter <reporter...>',
+      'Coverage reporters (default: text, html). Can be specified multiple times.',
+    )
     .action(runCommand);
 }
 
@@ -78,6 +99,27 @@ async function runCommand(files: string[], options: RunOptions): Promise<void> {
   // Load global config
   const globalConfig = await loadConfig(process.cwd());
 
+  // Setup coverage if enabled
+  let coverageCtx: CoverageContext | undefined;
+  let coverageEnv: Record<string, string> = {};
+
+  if (options.coverage) {
+    // Check if c8 is available
+    const c8Available = await isC8Available();
+    if (!c8Available) {
+      logError('Coverage requires c8. Install with: npm install -D c8');
+      process.exit(1);
+    }
+
+    // Create coverage context with CLI options overriding config
+    coverageCtx = await createCoverageContext({
+      ...globalConfig.coverage,
+      reportsDir: options.coverageDir ?? globalConfig.coverage?.reportsDir,
+      reporters: options.coverageReporter ?? globalConfig.coverage?.reporters,
+    });
+    coverageEnv = getCoverageEnv(coverageCtx);
+  }
+
   // Run tests
   const fileResults: TestFileResult[] = [];
   let shouldStop = false;
@@ -108,7 +150,7 @@ async function runCommand(files: string[], options: RunOptions): Promise<void> {
       continue;
     }
 
-    const ctx = await createExecutionContext(config, filePath);
+    const ctx = await createExecutionContext(config, filePath, coverageEnv);
     const results: TestBlockResult[] = [];
 
     try {
@@ -199,6 +241,22 @@ async function runCommand(files: string[], options: RunOptions): Promise<void> {
   };
 
   reportSummary(summary, opts);
+
+  // Generate coverage report if enabled
+  if (coverageCtx) {
+    console.error('\nGenerating coverage report...');
+    try {
+      await generateCoverageReport(coverageCtx);
+      console.error(
+        colors.success(`Coverage report written to ${coverageCtx.options.reportsDir}/`),
+      );
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      logError(`Failed to generate coverage report: ${message}`);
+    } finally {
+      await cleanupCoverageContext(coverageCtx);
+    }
+  }
 
   // Exit code
   process.exit(summary.totalFailed > 0 ? 1 : 0);
