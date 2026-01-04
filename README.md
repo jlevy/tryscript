@@ -10,7 +10,7 @@ Golden testing for CLI applications - a TypeScript port of [trycmd](https://gith
 > [!NOTE]
 > 100% of the code and specs in this repository were written by Claude Code.
 > The design and management and prompting was by me ([jlevy](https://github.com/jlevy)) supported by  the workflows, agent rules,
-> and other research docs in [Speculate](https://github.com/jlevy).
+> and other research docs in [Speculate](https://github.com/jlevy/speculate).
 > 
 > You can see what you think, but I find the code quality higher than most agent-written code I've
 > seen because of the spec-driven process.
