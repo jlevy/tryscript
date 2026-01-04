@@ -1,7 +1,7 @@
 import { pathToFileURL } from 'node:url';
 import { existsSync } from 'node:fs';
 import { resolve } from 'node:path';
-import type { TestConfig } from './types.js';
+import type { TestConfig, CoverageConfig } from './types.js';
 
 /** Fixture configuration for copying files to sandbox directory */
 export interface Fixture {
@@ -26,6 +26,28 @@ export interface TryscriptConfig {
   timeout?: number;
   patterns?: Record<string, RegExp | string>;
   tests?: string[];
+  /** Coverage configuration (used with --coverage flag) */
+  coverage?: CoverageConfig;
+}
+
+/** Default coverage configuration values. */
+export const DEFAULT_COVERAGE_CONFIG: Required<CoverageConfig> = {
+  reportsDir: 'coverage-tryscript',
+  reporters: ['text', 'html'],
+  include: ['dist/**'],
+  src: 'src',
+};
+
+/**
+ * Resolve coverage options by merging user config with defaults.
+ */
+export function resolveCoverageConfig(config?: CoverageConfig): Required<CoverageConfig> {
+  return {
+    reportsDir: config?.reportsDir ?? DEFAULT_COVERAGE_CONFIG.reportsDir,
+    reporters: config?.reporters ?? DEFAULT_COVERAGE_CONFIG.reporters,
+    include: config?.include ?? DEFAULT_COVERAGE_CONFIG.include,
+    src: config?.src ?? DEFAULT_COVERAGE_CONFIG.src,
+  };
 }
 
 const CONFIG_FILES = ['tryscript.config.ts', 'tryscript.config.js', 'tryscript.config.mjs'];

@@ -65,6 +65,14 @@
     "yaml": "^2.6.0",
     "zod": "^3.24.0"
   },
+  "peerDependencies": {
+    "c8": ">=8.0.0"
+  },
+  "peerDependenciesMeta": {
+    "c8": {
+      "optional": true
+    }
+  },
   "devDependencies": {
     "@types/diff": "^7.0.0",
     "@types/node": "^22.0.0",

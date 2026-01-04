@@ -113,3 +113,32 @@ export interface TestRunSummary {
   totalBlocks: number;
   duration: number;
 }
+
+/**
+ * Schema for coverage configuration.
+ */
+export const CoverageConfigSchema = z.object({
+  /** Output directory for coverage reports (default: 'coverage-tryscript') */
+  reportsDir: z.string().optional(),
+  /** Coverage reporters to use (default: ['text', 'html']) */
+  reporters: z.array(z.string()).optional(),
+  /** File patterns to include in coverage (default: ['dist/**']) */
+  include: z.array(z.string()).optional(),
+  /** Source directory for sourcemap mapping (default: 'src') */
+  src: z.string().optional(),
+});
+
+/**
+ * Coverage configuration options.
+ */
+export type CoverageConfig = z.infer<typeof CoverageConfigSchema>;
+
+/**
+ * Runtime context for coverage collection during test execution.
+ */
+export interface CoverageContext {
+  /** Temporary directory for V8 coverage data files */
+  tempDir: string;
+  /** Resolved coverage options with defaults applied */
+  options: Required<CoverageConfig>;
+}

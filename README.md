@@ -22,6 +22,7 @@ hello world
 - **Elision patterns** - Match dynamic output with `[..]`, `...`, `[EXE]`, `[ROOT]`, `[CWD]`
 - **Custom patterns** - Define regex patterns for timestamps, versions, UUIDs
 - **Update mode** - Regenerate golden files with `--update`
+- **Code coverage** - Built-in subprocess coverage collection with `--coverage`
 - **Self-bootstrapping** - tryscript tests itself
 
 ## Quick Start
@@ -35,6 +36,41 @@ npx tryscript tests/
 
 # Update golden files
 npx tryscript --update
+```
+
+## Code Coverage
+
+tryscript can collect code coverage from subprocess execution. This enables coverage tracking for CLI code that runs as child processes.
+
+```bash
+# Install c8 (required for coverage)
+pnpm add -D c8
+
+# Run tests with coverage
+npx tryscript run --coverage tests/
+
+# Custom output directory
+npx tryscript run --coverage --coverage-dir my-coverage tests/
+
+# Custom reporters
+npx tryscript run --coverage --coverage-reporter text --coverage-reporter lcov tests/
+```
+
+Coverage is collected using [c8](https://github.com/bcoe/c8) which leverages Node.js's built-in V8 coverage. By default, coverage reports are written to `coverage-tryscript/` with `text` and `html` reporters.
+
+You can also configure coverage in `tryscript.config.ts`:
+
+```typescript
+import { defineConfig } from 'tryscript';
+
+export default defineConfig({
+  coverage: {
+    reportsDir: 'coverage-tryscript',
+    reporters: ['text', 'html'],
+    include: ['dist/**'],
+    src: 'src',
+  },
+});
 ```
 
 ## Documentation
