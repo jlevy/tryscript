@@ -16,10 +16,7 @@ import pc from 'picocolors';
 export const colors = {
   success: (s: string) => pc.green(s),
   error: (s: string) => pc.red(s),
-  info: (s: string) => pc.cyan(s),
   warn: (s: string) => pc.yellow(s),
-  muted: (s: string) => pc.gray(s),
-  bold: (s: string) => pc.bold(s),
 };
 
 /**
@@ -57,20 +54,6 @@ export function formatDuration(ms: number): string {
 }
 
 /**
- * Log an informational message to stderr.
- */
-export function logInfo(message: string): void {
-  console.error(colors.info(message));
-}
-
-/**
- * Log a success message to stderr.
- */
-export function logSuccess(message: string): void {
-  console.error(colors.success(message));
-}
-
-/**
  * Log a warning message to stderr.
  */
 export function logWarn(message: string): void {
@@ -82,11 +65,4 @@ export function logWarn(message: string): void {
  */
 export function logError(message: string): void {
   console.error(colors.error(message));
-}
-
-/**
- * Log timing information with emoji.
- */
-export function logTiming(label: string, durationMs: number): void {
-  console.error(colors.info(`⏰ ${label}: ${formatDuration(durationMs)}`));
 }
