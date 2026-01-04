@@ -7,17 +7,46 @@
 import { spawn } from 'node:child_process';
 import { mkdtemp, rm, access } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { join, resolve } from 'node:path';
+import { existsSync } from 'node:fs';
 import type { CoverageContext, CoverageConfig } from './types.js';
 import { resolveCoverageConfig } from './config.js';
+
+/**
+ * Find the c8 executable path.
+ * Checks local node_modules/.bin first, then falls back to npx.
+ */
+function findC8Path(): string {
+  // Check common locations for local c8
+  const localPaths = [
+    resolve(process.cwd(), 'node_modules', '.bin', 'c8'),
+    resolve(process.cwd(), '..', '..', 'node_modules', '.bin', 'c8'), // monorepo root
+  ];
+
+  for (const localPath of localPaths) {
+    if (existsSync(localPath)) {
+      return localPath;
+    }
+  }
+
+  // Fall back to npx which will find c8 in node_modules
+  return 'npx c8';
+}
 
 /**
  * Check if c8 is available in the current environment.
  */
 export async function isC8Available(): Promise<boolean> {
+  const c8Path = findC8Path();
+
   return new Promise((resolve) => {
-    const proc = spawn('c8', ['--version'], {
-      shell: true,
+    // Use npx to run c8 if we fell back to npx
+    const isNpx = c8Path === 'npx c8';
+    const command = isNpx ? 'npx' : c8Path;
+    const args = isNpx ? ['c8', '--version'] : ['--version'];
+
+    const proc = spawn(command, args, {
+      shell: false,
       stdio: 'ignore',
     });
     proc.on('close', (code) => {
@@ -53,11 +82,14 @@ export function getCoverageEnv(ctx: CoverageContext): Record<string, string> {
 
 /**
  * Generate coverage report from collected V8 coverage data using c8.
+ * Throws an error if coverage report generation fails.
  */
 export async function generateCoverageReport(ctx: CoverageContext): Promise<void> {
   const { options, tempDir } = ctx;
+  const c8Path = findC8Path();
 
-  const args = [
+  // Base args for c8 report
+  const reportArgs = [
     'report',
     '--temp-directory',
     tempDir,
@@ -70,15 +102,21 @@ export async function generateCoverageReport(ctx: CoverageContext): Promise<void
     ...options.reporters.flatMap((reporter) => ['--reporter', reporter]),
   ];
 
-  await new Promise<void>((resolve, reject) => {
-    const proc = spawn('c8', args, {
-      shell: true,
+  // Handle 'npx c8' vs direct c8 path
+  // Use shell: false to prevent glob expansion of patterns like dist/**
+  const isNpx = c8Path === 'npx c8';
+  const command = isNpx ? 'npx' : c8Path;
+  const args = isNpx ? ['c8', ...reportArgs] : reportArgs;
+
+  await new Promise<void>((resolvePromise, reject) => {
+    const proc = spawn(command, args, {
+      shell: false,
       stdio: 'inherit',
     });
 
     proc.on('close', (code) => {
       if (code === 0) {
-        resolve();
+        resolvePromise();
       } else {
         reject(new Error(`c8 report exited with code ${code}`));
       }
