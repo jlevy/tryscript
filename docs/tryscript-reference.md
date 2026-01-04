@@ -372,6 +372,57 @@ by spawned CLI processes. Install c8 as a dev dependency:
 npm install -D c8
 ```
 
+### Sourcemap Requirement
+
+**Important**: Coverage reports map back to source files only if your build generates sourcemaps.
+Without sourcemaps, reports show bundled filenames instead of source paths:
+
+| Build Configuration | Coverage Report Shows |
+|---------------------|----------------------|
+| Sourcemaps disabled | `cli-BXvEEW6O.mjs` (34% coverage) |
+| Sourcemaps enabled | `src/cli/commands/status.ts` (83% coverage) |
+
+Enable sourcemaps in your build tool:
+
+**tsdown / tsup:**
+```typescript
+// tsdown.config.ts or tsup.config.ts
+export default defineConfig({
+  sourcemap: true,
+  // ... other options
+});
+```
+
+**esbuild:**
+```typescript
+await esbuild.build({
+  sourcemap: true,
+  // ... other options
+});
+```
+
+**rollup:**
+```javascript
+// rollup.config.js
+export default {
+  output: {
+    sourcemap: true,
+  },
+};
+```
+
+**Vite:**
+```typescript
+// vite.config.ts
+export default defineConfig({
+  build: {
+    sourcemap: true,
+  },
+});
+```
+
+After enabling sourcemaps, rebuild your project before running coverage.
+
 Configure coverage in `tryscript.config.ts`:
 
 ```typescript
