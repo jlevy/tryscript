@@ -346,6 +346,46 @@ tryscript readme             # Show README
 | `--filter <pattern>` | Filter tests by name |
 | `--verbose` | Show detailed output |
 | `--quiet` | Suppress non-essential output |
+| `--coverage` | Enable code coverage collection (requires c8) |
+| `--coverage-dir <dir>` | Coverage output directory (default: coverage-tryscript) |
+| `--coverage-reporter <reporter...>` | Coverage reporters (default: text, html) |
+
+## Code Coverage
+
+Collect code coverage from subprocess execution using the `--coverage` flag:
+
+```bash
+# Basic coverage
+tryscript run --coverage tests/
+
+# Custom output directory
+tryscript run --coverage --coverage-dir my-coverage tests/
+
+# Custom reporters
+tryscript run --coverage --coverage-reporter text --coverage-reporter lcov tests/
+```
+
+Coverage uses [c8](https://github.com/bcoe/c8) and `NODE_V8_COVERAGE` to track code executed
+by spawned CLI processes. Install c8 as a dev dependency:
+
+```bash
+npm install -D c8
+```
+
+Configure coverage in `tryscript.config.ts`:
+
+```typescript
+import { defineConfig } from 'tryscript';
+
+export default defineConfig({
+  coverage: {
+    reportsDir: 'coverage-tryscript',
+    reporters: ['text', 'html'],
+    include: ['dist/**'],
+    src: 'src',
+  },
+});
+```
 
 ## Best Practices
 
