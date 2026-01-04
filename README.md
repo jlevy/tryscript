@@ -1,107 +1,130 @@
 # tryscript
 
+[![CI](https://github.com/jlevy/tryscript/actions/workflows/ci.yml/badge.svg)](https://github.com/jlevy/tryscript/actions/workflows/ci.yml)
+[![Coverage](https://raw.githubusercontent.com/jlevy/tryscript/main/badges/packages/tryscript/coverage-total.svg)](https://raw.githubusercontent.com/jlevy/tryscript/main/badges/packages/tryscript/coverage-total.svg)
+[![npm version](https://img.shields.io/npm/v/tryscript)](https://www.npmjs.com/package/tryscript)
+[![X Follow](https://img.shields.io/twitter/follow/ojoshe)](https://x.com/ojoshe)
+
 Golden testing for CLI applications - a TypeScript port of [trycmd](https://github.com/assert-rs/trycmd).
 
-## Overview
+## What It Does
 
-tryscript enables golden testing for any CLI application. Write test cases in Markdown with console code blocks, and tryscript runs the commands, compares output, and reports differences.
+Write CLI tests as Markdown. tryscript runs commands, captures output, and compares against expected results. Tests become documentation; documentation becomes tests.
 
 ````markdown
-# Test: Hello World
+# Test: Basic echo
 
 ```console
 $ echo "hello world"
 hello world
 ? 0
 ```
+
+# Test: Grep with pattern matching
+
+```console
+$ ls -la | grep ".md"
+[..]README.md
+...
+? 0
+```
 ````
 
-## Features
-
-- **Markdown test format** - Tests are readable documentation
-- **Elision patterns** - Match dynamic output with `[..]`, `...`, `[EXE]`, `[ROOT]`, `[CWD]`
-- **Custom patterns** - Define regex patterns for timestamps, versions, UUIDs
-- **Update mode** - Regenerate golden files with `--update`
-- **Code coverage** - Built-in subprocess coverage collection with `--coverage`
-- **Self-bootstrapping** - tryscript tests itself
+The `[..]` matches any text on that line. The `...` matches zero or more lines. These "elision patterns" let tests handle dynamic output gracefully.
 
 ## Quick Start
 
 ```bash
 # Install
-pnpm add tryscript
+pnpm add -D tryscript
 
 # Run tests
-npx tryscript tests/
+npx tryscript run tests/
 
-# Update golden files
-npx tryscript --update
+# Update expected output when behavior changes
+npx tryscript run --update tests/
 ```
 
-## Code Coverage
+## Features
 
-tryscript can collect code coverage from subprocess execution. This enables coverage tracking for CLI code that runs as child processes.
+- **Markdown format** - Tests are readable documentation
+- **Elision patterns** - Handle variable output: `[..]`, `...`, `[CWD]`, `[ROOT]`, `[EXE]`
+- **Custom patterns** - Define regex patterns for timestamps, versions, UUIDs
+- **Update mode** - Regenerate expected output with `--update`
+- **Sandbox mode** - Isolate tests in temp directories
+- **Code coverage** - Track coverage from subprocess execution with `--coverage`
+
+## Example Test File
+
+````markdown
+---
+env:
+  NO_COLOR: "1"
+sandbox: true
+---
+
+# Test: CLI help
+
+```console
+$ my-cli --help
+Usage: my-cli [options] <command>
+
+Options:
+  --version  Show version
+  --help     Show this help
+...
+? 0
+```
+
+# Test: Version output
+
+```console
+$ my-cli --version
+my-cli v[..]
+? 0
+```
+
+# Test: Error handling
+
+```console
+$ my-cli unknown-command 2>&1
+Error: unknown command 'unknown-command'
+? 1
+```
+````
+
+## CLI Reference
 
 ```bash
-# Install c8 (required for coverage)
-pnpm add -D c8
-
-# Run tests with coverage
-npx tryscript run --coverage tests/
-
-# Custom output directory
-npx tryscript run --coverage --coverage-dir my-coverage tests/
-
-# Custom reporters
-npx tryscript run --coverage --coverage-reporter text --coverage-reporter lcov tests/
+tryscript run [files...]  # Run golden tests
+tryscript docs            # Show syntax quick reference
+tryscript readme          # Show this documentation
+tryscript --help          # Show all options
 ```
 
-Coverage is collected using [c8](https://github.com/bcoe/c8) which leverages Node.js's built-in V8 coverage. By default, coverage reports are written to `coverage-tryscript/` with `text` and `html` reporters.
+For complete syntax reference, run `tryscript docs` or see the [reference documentation](https://github.com/jlevy/tryscript/blob/main/docs/tryscript-reference.md).
 
-You can also configure coverage in `tryscript.config.ts`:
+### Common Options
 
-```typescript
-import { defineConfig } from 'tryscript';
-
-export default defineConfig({
-  coverage: {
-    reportsDir: 'coverage-tryscript',
-    reporters: ['text', 'html'],
-    include: ['dist/**'],
-    src: 'src',
-  },
-});
-```
-
-## Documentation
-
-See [packages/tryscript/README.md](packages/tryscript/README.md) for full documentation.
-
-## Project Structure
-
-```
-tryscript/
-├── packages/
-│   └── tryscript/     # Main package
-│       ├── src/       # TypeScript source
-│       └── tests/     # Self-tests
-└── docs/              # Documentation
-```
+| Option | Description |
+| --- | --- |
+| `--update` | Update test files with actual output |
+| `--fail-fast` | Stop on first failure |
+| `--filter <regex>` | Filter tests by name |
+| `--verbose` | Show detailed output |
+| `--coverage` | Collect code coverage (requires c8) |
 
 ## Development
 
 ```bash
-# Install dependencies
+# Clone and install
+git clone https://github.com/jlevy/tryscript.git
+cd tryscript
 pnpm install
 
-# Build
+# Build and test
 pnpm build
-
-# Run tests
 pnpm test
-
-# Run self-tests
-pnpm -r tryscript tests/
 ```
 
 ## License
