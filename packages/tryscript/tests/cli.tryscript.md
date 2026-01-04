@@ -95,7 +95,7 @@ $ node $TRYSCRIPT_TEST_DIR/../dist/bin.mjs readme --raw | head -5
 
 Golden testing for CLI applications - a TypeScript port of [trycmd](https://github.com/assert-rs/trycmd).
 
-## Overview
+## What It Does
 ? 0
 ```
 
