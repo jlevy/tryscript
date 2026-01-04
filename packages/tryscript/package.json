@@ -47,9 +47,7 @@
     "test:watch": "vitest",
     "test:self": "tsx src/bin.ts",
     "test:golden": "node dist/bin.mjs run 'tests/**/*.tryscript.md'",
-    "test:golden:coverage": "node dist/bin.mjs run --coverage 'tests/**/*.tryscript.md'",
-    "test:coverage": "vitest run --coverage",
-    "test:all:coverage": "pnpm test:golden:coverage && pnpm test:coverage",
+    "test:coverage": "./scripts/coverage.sh",
     "publint": "publint",
     "prepack": "pnpm build",
     "tryscript": "tsx src/bin.ts"
