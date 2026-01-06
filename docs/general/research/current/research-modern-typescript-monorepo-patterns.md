@@ -1,6 +1,6 @@
 # Research Brief: Modern TypeScript Monorepo Architecture Patterns
 
-**Last Updated**: 2025-12-23 (Added dependency upgrade management with ncu)
+**Last Updated**: 2026-01-05 (Updated all tool versions, fixed section numbering)
 
 **Status**: Complete
 
@@ -23,18 +23,19 @@
 | Tool / Package | Version | Check For Updates |
 | --- | --- | --- |
 | **Node.js** | 24 (LTS "Krypton") | [nodejs.org/releases](https://nodejs.org/en/about/previous-releases) — Active LTS until Oct 2026 |
-| **pnpm** | 10.26.1 | [github.com/pnpm/pnpm/releases](https://github.com/pnpm/pnpm/releases) |
-| **TypeScript** | ^5.0.0 | [github.com/microsoft/TypeScript/releases](https://github.com/microsoft/TypeScript/releases) |
-| **tsdown** | ^0.16.0 | [github.com/rolldown/tsdown/releases](https://github.com/rolldown/tsdown/releases) |
+| **pnpm** | 10.27.0 | [github.com/pnpm/pnpm/releases](https://github.com/pnpm/pnpm/releases) |
+| **TypeScript** | ^5.9.0 | [github.com/microsoft/TypeScript/releases](https://github.com/microsoft/TypeScript/releases) — 5.9 adds `import defer`, `--module node20` |
+| **tsdown** | ^0.18.0 | [github.com/rolldown/tsdown/releases](https://github.com/rolldown/tsdown/releases) — 0.19.x in beta |
 | **publint** | ^0.3.0 | [npmjs.com/package/publint](https://www.npmjs.com/package/publint) |
-| **@changesets/cli** | ^2.28.0 | [github.com/changesets/changesets/releases](https://github.com/changesets/changesets/releases) |
-| **@types/node** | ^24.0.0 | Should match Node.js major version |
-| **actions/checkout** | v5 | [github.com/actions/checkout/releases](https://github.com/actions/checkout/releases) |
+| **@changesets/cli** | ^2.29.0 | [github.com/changesets/changesets/releases](https://github.com/changesets/changesets/releases) |
+| **@types/node** | ^24.0.0 | Should match Node.js major version (^25.0.0 also available) |
+| **actions/checkout** | v5 | [github.com/actions/checkout/releases](https://github.com/actions/checkout/releases) — v6 available, uses Node 24 |
 | **actions/setup-node** | v6 | [github.com/actions/setup-node/releases](https://github.com/actions/setup-node/releases) |
 | **pnpm/action-setup** | v4 | [github.com/pnpm/action-setup/releases](https://github.com/pnpm/action-setup/releases) |
 | **changesets/action** | v1 | [github.com/changesets/action](https://github.com/changesets/action) |
 | **lefthook** | ^2.0.0 | [github.com/evilmartians/lefthook/releases](https://github.com/evilmartians/lefthook/releases) |
 | **npm-check-updates** | ^19.0.0 | [npmjs.com/package/npm-check-updates](https://www.npmjs.com/package/npm-check-updates) |
+| **tsx** | ^4.21.0 | [github.com/privatenumber/tsx/releases](https://github.com/privatenumber/tsx/releases) |
 | **prettier** | ^3.0.0 | [github.com/prettier/prettier/releases](https://github.com/prettier/prettier/releases) |
 | **eslint-config-prettier** | ^10.0.0 | [github.com/prettier/eslint-config-prettier/releases](https://github.com/prettier/eslint-config-prettier/releases) |
 
@@ -1173,7 +1174,7 @@ Never skip CI because hooks passed—hooks can be bypassed with `--no-verify`.
     "prepare": "lefthook install"
   },
   "devDependencies": {
-    "lefthook": "^1.11.0"
+    "lefthook": "^2.0.0"
   }
 }
 ```
@@ -1336,7 +1337,104 @@ upgrades. Options:
 
 * * *
 
-### 12. Private Package Distribution
+### 12. CLI Development Workflow
+
+#### Running CLI from Source
+
+**Status**: Strongly Recommended
+
+**Details**:
+
+During development, CLI commands should run directly from TypeScript source rather than
+requiring a build step.
+This ensures developers always work with the current code and eliminates the common
+frustration of debugging stale builds.
+
+**The dual-script pattern**:
+
+```json
+{
+  "scripts": {
+    "cli-name": "tsx packages/package-name/src/cli/bin.ts",
+    "cli-name:bin": "node packages/package-name/dist/bin.mjs"
+  }
+}
+```
+
+| Script | Purpose | When to use |
+| --- | --- | --- |
+| `cli-name` | Runs source via tsx | Development—always current, no build needed |
+| `cli-name:bin` | Runs built binary | Pre-release verification of published output |
+
+**Why this matters**:
+
+1. **No stale builds**: Developers never accidentally run old code while debugging
+
+2. **Faster iteration**: No build step between code changes and testing
+
+3. **Reduced confusion**: “Did I forget to build?”
+   is never the answer
+
+4. **Still verifiable**: The `:bin` variant ensures the production build works correctly
+
+* * *
+
+#### tsx vs vite-node vs ts-node
+
+**Status**: tsx Recommended
+
+**Details**:
+
+For running TypeScript CLI commands directly, **tsx** is the recommended choice:
+
+| Aspect | tsx | vite-node | ts-node |
+| --- | --- | --- | --- |
+| **Speed** | 5-10x faster than ts-node | Fast (esbuild) | Slow |
+| **Startup time** | Single-digit milliseconds | Fast | Noticeable delay |
+| **Configuration** | Zero-config | Requires Vite familiarity | Often needs config |
+| **Use case** | CLI and scripts | Vite ecosystem projects | Legacy projects |
+| **Maintenance** | Active | Active | Active but slower |
+
+**When to choose each**:
+
+- **tsx**: Default choice for CLI development, scripts, and simple TypeScript execution
+
+- **vite-node**: When you need Vite’s plugin ecosystem (e.g., CSS imports, asset
+  handling)
+
+- **ts-node**: Only for legacy projects already using it
+
+**Example implementation**:
+
+```json
+{
+  "scripts": {
+    "markform": "tsx packages/markform/src/cli/bin.ts",
+    "markform:bin": "node packages/markform/dist/bin.mjs"
+  },
+  "devDependencies": {
+    "tsx": "^4.21.0"
+  }
+}
+```
+
+**Assessment**: tsx provides the best developer experience for CLI development.
+It uses esbuild for near-instant compilation while maintaining compatibility with all
+modern TypeScript features.
+Reserve vite-node for projects that specifically need Vite’s transformation pipeline.
+
+**References**:
+
+- [tsx documentation](https://tsx.is/)
+
+- [TSX vs ts-node
+  comparison](https://betterstack.com/community/guides/scaling-nodejs/tsx-vs-ts-node/)
+
+- [ts-runtime-comparison benchmarks](https://github.com/privatenumber/ts-runtime-comparison)
+
+* * *
+
+### 13. Private Package Distribution
 
 #### Option A: GitHub Packages (Recommended)
 
@@ -1457,7 +1555,7 @@ experience.
 
 * * *
 
-### 13. Library/CLI Hybrid Packages
+### 14. Library/CLI Hybrid Packages
 
 #### Node-Free Core Pattern
 
@@ -1736,6 +1834,12 @@ than discovering them when users try to use the library in browser/edge contexts
     This provides traceability during development without manual version bumps.
     See “Dynamic Git-Based Versioning” section for implementation.
 
+19. **Run CLI from source during development**: Use the dual-script pattern with tsx to
+    run CLI commands directly from TypeScript source.
+    Provide a separate `:bin` script for verifying the built output.
+    This eliminates “did I forget to build?”
+    confusion.
+
 * * *
 
 ## Open Research Questions
@@ -1744,13 +1848,19 @@ than discovering them when users try to use the library in browser/edge contexts
    Rolldown Vite’s Library Mode.
    Monitor for announcements that may affect best practices.
 
-2. **ESLint v10 multi-config**: ESLint v10 promises stable support for multiple config
+2. **TypeScript 6.0/7.0 Transition**: TypeScript 7.0 will be a complete rewrite in Go,
+   promising up to 10x faster builds.
+   TypeScript 6.0 will serve as a transition point.
+   Monitor for migration guidance and breaking changes.
+
+3. **Native TypeScript Execution**: TypeScript 5.8+ supports `--erasableSyntaxOnly`
+   flag, enabling direct execution in Node.js 23.6+ without transpilation.
+   This may reduce the need for tsx in some workflows.
+   Monitor for broader adoption and tooling support.
+
+4. **ESLint v10 multi-config**: ESLint v10 promises stable support for multiple config
    files in monorepos. Currently, a single root config is recommended but has
    limitations.
-
-3. **TypeScript isolatedDeclarations**: TypeScript 5.5+ supports
-   `--isolatedDeclarations` for faster, tool-assisted type generation.
-   Consider enabling when tsdown fully supports it.
 
 * * *
 
@@ -1933,8 +2043,8 @@ ready for public release.
   "devDependencies": {
     "@types/node": "^24.0.0",
     "publint": "^0.3.0",
-    "tsdown": "^0.16.0",
-    "typescript": "^5.0.0"
+    "tsdown": "^0.18.0",
+    "typescript": "^5.9.0"
   }
 }
 ```
@@ -1945,7 +2055,7 @@ ready for public release.
 {
   "name": "project-workspace",
   "private": true,
-  "packageManager": "pnpm@10.26.1",
+  "packageManager": "pnpm@10.27.0",
   "engines": {
     "node": ">=24"
   },
@@ -1967,7 +2077,7 @@ ready for public release.
     "upgrade:major": "ncu --target latest --interactive --format group"
   },
   "devDependencies": {
-    "@changesets/cli": "^2.28.0",
+    "@changesets/cli": "^2.29.0",
     "@changesets/changelog-github": "^0.5.0",
     "@eslint/js": "^9.0.0",
     "eslint": "^9.0.0",
@@ -1975,7 +2085,7 @@ ready for public release.
     "lefthook": "^2.0.0",
     "npm-check-updates": "^19.0.0",
     "prettier": "^3.0.0",
-    "typescript": "^5.0.0",
+    "typescript": "^5.9.0",
     "typescript-eslint": "^8.0.0"
   }
 }
