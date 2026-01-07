@@ -418,37 +418,35 @@ If a command shows "0 files (0 new)", that command is not producing coverage dat
 |----------|------------------------------|------------------------------|
 | `tryscript coverage "vitest run" "tryscript run tests/"` | ❌ No | ✅ Yes (both sources) |
 | `vitest run --coverage` alone | ✅ Yes | ❌ No |
-| LCOV merging (both separately) | ✅ Yes | ✅ Yes |
+| **LCOV merging (recommended)** | ✅ Yes | ✅ Yes |
 
-**Use `tryscript coverage` when:**
-- Your tests are primarily CLI integration tests that spawn subprocesses
-- You don't have significant unit test coverage via programmatic imports
-- Example: tryscript itself, where `cli.integration.test.ts` spawns CLI and golden tests cover the rest
+**Recommended: LCOV merging**
+- Works for all projects with both unit tests and CLI tests
+- Captures complete coverage from both sources
+- Used by tryscript itself in its `test:coverage` script
 
-**Use LCOV merging when:**
-- You have unit tests that import and test code directly (not via CLI spawns)
-- You want both unit test coverage AND CLI subprocess coverage
-- Example: markform, which has engine unit tests + CLI golden tests
+**Alternative: `tryscript coverage` command**
+- Only for projects that exclusively test via CLI subprocesses
+- Does NOT capture vitest unit test coverage
+- Simpler but limited
 
-### Alternative: LCOV Merging
+### Recommended: LCOV Merging
 
-If your tests don't spawn CLI subprocesses, merge LCOV files manually:
+Merge coverage from both vitest and tryscript to get complete coverage:
 
 ```bash
-# Step 1: Run vitest with coverage
+# Step 1: Run vitest with coverage (captures unit test coverage)
 vitest run --coverage
 
-# Step 2: Run tryscript with coverage
-tryscript run --coverage tests/
+# Step 2: Run tryscript with coverage (captures CLI subprocess coverage)
+# Note: put files BEFORE options to avoid argument parsing issues
+tryscript run 'tests/**/*.tryscript.md' --coverage --coverage-reporter text --coverage-reporter lcov
 
-# Step 3: Merge LCOV files
-lcov -a coverage/lcov.info -a coverage-tryscript/lcov.info -o coverage-merged/lcov.info
+# Step 3: Merge LCOV files (using npx for portability)
+npx lcov-result-merger 'coverage*/lcov.info' coverage-merged/lcov.info
 ```
 
-Tools for merging:
-- `lcov` (Linux)
-- `nyc merge`
-- `istanbul-merge`
+This is the approach tryscript itself uses in its `test:coverage` script.
 
 ## CI/CD Integration
 

@@ -412,7 +412,41 @@ By default, tryscript coverage:
 
 ### Merging Coverage from Multiple Sources
 
-The `coverage` command merges V8 coverage from multiple CLI commands into a single report:
+Most projects have both **unit tests** (testing code via imports) and **CLI tests** (testing via subprocess).
+To get complete coverage, merge results from both sources.
+
+#### Recommended: LCOV Merging
+
+Run each coverage source separately, then merge the LCOV files:
+
+```bash
+# Step 1: Run vitest with coverage (captures unit test coverage)
+vitest run --coverage
+
+# Step 2: Run tryscript with coverage (captures CLI subprocess coverage)
+# Note: put files BEFORE options to avoid argument parsing issues
+tryscript run 'tests/**/*.tryscript.md' --coverage --coverage-reporter text --coverage-reporter lcov
+
+# Step 3: Merge the LCOV files (using npx for portability)
+npx lcov-result-merger 'coverage*/lcov.info' coverage-merged/lcov.info
+```
+
+**Why this approach?**
+
+| Coverage Source | What It Captures |
+|-----------------|------------------|
+| `vitest run --coverage` | Code imported directly by unit tests |
+| `tryscript run --coverage` | Code executed by CLI subprocess spawns |
+| **Merged result** | Complete coverage from both sources |
+
+> **Technical Note**: Vitest uses `node:inspector` for coverage, not `NODE_V8_COVERAGE`.
+> This means vitest's coverage and tryscript's coverage use different collection mechanisms
+> and must be merged via LCOV files rather than combined at the V8 level.
+
+#### Alternative: tryscript coverage command
+
+For projects that **only** test via CLI subprocesses (no unit tests with direct imports),
+the `tryscript coverage` command provides a simpler workflow:
 
 ```bash
 # Merge coverage from multiple CLI test commands
@@ -422,49 +456,8 @@ tryscript coverage "tryscript run tests/cli/" "node dist/bin.mjs --help"
 tryscript coverage --monocart "tryscript run tests/"
 ```
 
-> **Important: Vitest and NODE_V8_COVERAGE**
->
-> Vitest uses `node:inspector` directly for its own coverage collection, not `NODE_V8_COVERAGE`
-> ([see vitest PR #2786](https://github.com/vitest-dev/vitest/pull/2786)). This means:
->
-> - Vitest's **unit test coverage** (for code imported directly by tests) is NOT captured by NODE_V8_COVERAGE
-> - **Subprocess coverage IS captured** - if your vitest tests spawn CLI processes (e.g., via `spawnSync`),
->   that subprocess execution IS tracked by NODE_V8_COVERAGE
->
-> **Understanding what each approach captures:**
->
-> | Approach | Unit test coverage (imports) | Subprocess coverage (spawns) |
-> |----------|------------------------------|------------------------------|
-> | `tryscript coverage "vitest run" "tryscript run tests/"` | ❌ No | ✅ Yes (both sources) |
-> | `vitest run --coverage` alone | ✅ Yes | ❌ No |
-> | LCOV merging (both separately) | ✅ Yes | ✅ Yes |
->
-> **When to use `tryscript coverage`:**
-> - Your tests are primarily CLI integration tests that spawn subprocesses
-> - You don't have significant unit test coverage via programmatic imports
-> - Example: tryscript itself, where `cli.integration.test.ts` spawns CLI and golden tests cover the rest
->
-> **When to use LCOV merging instead:**
-> - You have unit tests that import and test code directly (not via CLI spawns)
-> - You want both unit test coverage AND CLI subprocess coverage
-> - Example: markform, which has engine unit tests + CLI golden tests
-
-#### Alternative: LCOV File Merging
-
-If your tests don't spawn CLI subprocesses, merge coverage from separate runs:
-
-```bash
-# Step 1: Run vitest with its own coverage
-vitest run --coverage
-
-# Step 2: Run tryscript with coverage
-tryscript run --coverage tests/
-
-# Step 3: Merge the LCOV files using lcov or a merge tool
-lcov -a coverage/lcov.info -a coverage-tryscript/lcov.info -o coverage-merged/lcov.info
-```
-
-Or use tools like `nyc merge`, `istanbul-merge`, or custom scripts to combine LCOV/JSON coverage.
+> **Note**: This approach does NOT capture vitest unit test coverage. Use LCOV merging
+> if you have unit tests that import code directly.
 
 #### Coverage Command Options
 
