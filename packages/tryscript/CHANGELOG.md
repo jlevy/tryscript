@@ -1,5 +1,11 @@
 # tryscript
 
+## 0.1.2
+
+### Patch Changes
+
+- f399b82: Add --color flag and coverage improvements
+
 ## 0.1.1
 
 ### Patch Changes
