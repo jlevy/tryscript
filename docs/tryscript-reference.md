@@ -445,32 +445,24 @@ The `coverage` command:
 3. Runs each command in sequence (all inherit the coverage env)
 4. Generates a merged coverage report using c8
 
-#### Example: CI Coverage Script
+#### Recommended Setup: package.json Script
 
-```typescript
-// scripts/coverage.ts
-import { spawn } from 'node:child_process';
+The simplest way to set up merged coverage is with a package.json script. This is exactly how tryscript itself does it (dogfooding):
 
-// Use tryscript coverage to merge vitest + golden tests
-const proc = spawn('node', [
-  'dist/bin.mjs',
-  'coverage',
-  '--monocart',
-  '--reporters', 'text,json,json-summary,lcov,html',
-  'pnpm vitest run',
-  'node dist/bin.mjs run tests/**/*.tryscript.md',
-], { stdio: 'inherit' });
+```json
+{
+  "scripts": {
+    "test:coverage": "tryscript coverage --monocart \"pnpm vitest run\" \"tryscript run 'tests/**/*.tryscript.md'\""
+  }
+}
 ```
 
-Or in bash:
+Then run:
 ```bash
-#!/bin/bash
-node dist/bin.mjs coverage \
-  --monocart \
-  --reporters text,json,json-summary,lcov,html \
-  "pnpm vitest run" \
-  "node dist/bin.mjs run tests/**/*.tryscript.md"
+pnpm test:coverage
 ```
+
+This merges coverage from vitest unit tests and tryscript CLI tests into a single report.
 
 #### Why Monocart?
 
