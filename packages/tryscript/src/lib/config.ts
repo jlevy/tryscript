@@ -41,6 +41,7 @@ export const DEFAULT_COVERAGE_CONFIG: Required<CoverageConfig> = {
   skipFull: false,
   allowExternal: false,
   src: 'src',
+  monocart: false,
 };
 
 /**
@@ -57,6 +58,7 @@ export function resolveCoverageConfig(config?: CoverageConfig): Required<Coverag
     skipFull: config?.skipFull ?? DEFAULT_COVERAGE_CONFIG.skipFull,
     allowExternal: config?.allowExternal ?? DEFAULT_COVERAGE_CONFIG.allowExternal,
     src: config?.src ?? DEFAULT_COVERAGE_CONFIG.src,
+    monocart: config?.monocart ?? DEFAULT_COVERAGE_CONFIG.monocart,
   };
 }
 

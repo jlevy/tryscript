@@ -138,6 +138,8 @@ export const CoverageConfigSchema = z.object({
   allowExternal: z.boolean().optional(),
   /** Source directory for sourcemap mapping (default: 'src') */
   src: z.string().optional(),
+  /** Use monocart for more accurate line counts (c8 --experimental-monocart) */
+  monocart: z.boolean().optional(),
 });
 
 /**

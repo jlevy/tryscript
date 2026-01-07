@@ -49,6 +49,7 @@ interface RunOptions {
   coverageExcludeAfterRemap?: boolean;
   coverageSkipFull?: boolean;
   coverageAllowExternal?: boolean;
+  coverageMonocart?: boolean;
 }
 
 /**
@@ -90,6 +91,10 @@ export function registerRunCommand(program: Command): void {
     )
     .option('--coverage-skip-full', 'Hide files with 100% coverage (c8 --skip-full)')
     .option('--coverage-allow-external', 'Allow files from outside cwd (c8 --allowExternal)')
+    .option(
+      '--coverage-monocart',
+      'Use monocart for accurate line counts, better for merging with vitest (c8 --experimental-monocart)',
+    )
     .action(runCommand);
 }
 
@@ -146,6 +151,7 @@ async function runCommand(files: string[], options: RunOptions): Promise<void> {
         options.coverageExcludeAfterRemap ?? globalConfig.coverage?.excludeAfterRemap,
       skipFull: options.coverageSkipFull ?? globalConfig.coverage?.skipFull,
       allowExternal: options.coverageAllowExternal ?? globalConfig.coverage?.allowExternal,
+      monocart: options.coverageMonocart ?? globalConfig.coverage?.monocart,
     });
     coverageEnv = getCoverageEnv(coverageCtx);
   }

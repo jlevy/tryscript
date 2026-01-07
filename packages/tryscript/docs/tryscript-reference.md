@@ -362,6 +362,7 @@ All coverage options mirror [c8](https://github.com/bcoe/c8) CLI flags for famil
 | `--coverage-exclude-after-remap` | Exclude after sourcemap remap | `false` |
 | `--coverage-skip-full` | Hide 100% covered files | `false` |
 | `--coverage-allow-external` | Allow files outside cwd | `false` |
+| `--coverage-monocart` | Use monocart for accurate line counts | `false` |
 
 ## Code Coverage
 
@@ -397,6 +398,18 @@ By default, tryscript coverage:
 - **Excludes node_modules** - Your reports show only your code, not dependencies
 - **Includes all source files** - Files with 0% coverage are shown (use `--coverage-skip-full` to hide 100% covered files)
 - **Uses dist/** include pattern - Tracks your built CLI output
+
+### Merging with Vitest Coverage
+
+If you need to merge tryscript coverage with vitest unit test coverage, use `--coverage-monocart`:
+
+```bash
+tryscript run --coverage --coverage-monocart tests/
+```
+
+This uses [monocart-coverage-reports](https://github.com/cenfun/monocart-coverage-reports) for AST-aware
+line counting, producing line counts ~90% aligned with vitest. Without this flag, standard c8 may inflate
+line counts by 3-4x, making merged coverage percentages inaccurate.
 
 ### Sourcemap Requirement
 
@@ -467,6 +480,7 @@ export default defineConfig({
     skipFull: false,              // Hide 100% covered files
     allowExternal: false,         // Allow files outside cwd
     src: 'src',
+    monocart: false,              // Use monocart for vitest-compatible line counts
   },
 });
 ```
@@ -482,6 +496,7 @@ export default defineConfig({
 | `skipFull` | `--coverage-skip-full` | Hide 100% files |
 | `allowExternal` | `--coverage-allow-external` | Allow external files |
 | `src` | - | Source dir for mapping (config only) |
+| `monocart` | `--coverage-monocart` | AST-aware line counts |
 
 ## Best Practices
 

@@ -84,6 +84,9 @@ Options:
                                       --skip-full)
   --coverage-allow-external           Allow files from outside cwd (c8
                                       --allowExternal)
+  --coverage-monocart                 Use monocart for accurate line counts,
+                                      better for merging with vitest (c8
+                                      --experimental-monocart)
   -h, --help                          display help for command
 
 Global Options:

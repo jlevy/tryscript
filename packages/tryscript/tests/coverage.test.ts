@@ -39,6 +39,7 @@ describe('coverage', () => {
         skipFull: true,
         allowExternal: true,
         src: 'source',
+        monocart: true,
       };
       const result = resolveCoverageConfig(customConfig);
       expect(result).toEqual(customConfig);

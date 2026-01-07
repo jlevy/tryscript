@@ -107,6 +107,7 @@ export async function generateCoverageReport(ctx: CoverageContext): Promise<void
     ...(options.excludeAfterRemap ? ['--exclude-after-remap'] : []),
     ...(options.skipFull ? ['--skip-full'] : []),
     ...(options.allowExternal ? ['--allowExternal'] : []),
+    ...(options.monocart ? ['--experimental-monocart'] : []),
     // Reporters
     ...options.reporters.flatMap((reporter) => ['--reporter', reporter]),
   ];

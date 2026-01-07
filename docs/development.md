@@ -287,6 +287,7 @@ When using `--coverage`, tryscript supports the following c8 flags:
 | `--coverage-exclude-after-remap` | Apply exclude logic after sourcemap remapping | `false` |
 | `--coverage-skip-full` | Hide files with 100% coverage | `false` |
 | `--coverage-allow-external` | Allow files from outside cwd | `false` |
+| `--coverage-monocart` | Use monocart for accurate line counts (vitest-compatible) | `false` |
 
 These options can also be configured in `tryscript.config.ts`:
 
@@ -302,6 +303,7 @@ export default {
     skipFull: false,
     allowExternal: false,
     src: 'src',
+    monocart: false,
   },
 };
 ```
