@@ -116,6 +116,8 @@ export interface TestRunSummary {
 
 /**
  * Schema for coverage configuration.
+ * Options mirror c8's CLI flags for maximum flexibility.
+ * @see https://github.com/bcoe/c8 for c8 documentation
  */
 export const CoverageConfigSchema = z.object({
   /** Output directory for coverage reports (default: 'coverage-tryscript') */
@@ -124,8 +126,20 @@ export const CoverageConfigSchema = z.object({
   reporters: z.array(z.string()).optional(),
   /** File patterns to include in coverage (default: ['dist/**']) */
   include: z.array(z.string()).optional(),
+  /** File patterns to exclude from coverage (c8 --exclude) */
+  exclude: z.array(z.string()).optional(),
+  /** Exclude all node_modules folders (c8 --exclude-node-modules, default: true) */
+  excludeNodeModules: z.boolean().optional(),
+  /** Apply exclude logic after sourcemap remapping (c8 --exclude-after-remap) */
+  excludeAfterRemap: z.boolean().optional(),
+  /** Hide files with 100% coverage (c8 --skip-full) */
+  skipFull: z.boolean().optional(),
+  /** Allow files from outside cwd (c8 --allowExternal) */
+  allowExternal: z.boolean().optional(),
   /** Source directory for sourcemap mapping (default: 'src') */
   src: z.string().optional(),
+  /** Use monocart for more accurate line counts (c8 --experimental-monocart) */
+  monocart: z.boolean().optional(),
 });
 
 /**

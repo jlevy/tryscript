@@ -7,6 +7,7 @@
 import { Command } from 'commander';
 import { VERSION } from '../index.js';
 import { registerRunCommand } from './commands/run.js';
+import { registerCoverageCommand } from './commands/coverage.js';
 import { registerReadmeCommand } from './commands/readme.js';
 import { registerDocsCommand } from './commands/docs.js';
 import { withColoredHelp, logError } from './lib/shared.js';
@@ -22,6 +23,7 @@ export function run(argv: string[]): void {
 
   // Register subcommands
   registerRunCommand(program);
+  registerCoverageCommand(program);
   registerReadmeCommand(program);
   registerDocsCommand(program);
 

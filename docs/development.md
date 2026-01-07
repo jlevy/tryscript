@@ -179,6 +179,8 @@ node packages/tryscript/dist/bin.mjs --help
 | `--filter <regex>` | Filter tests by name pattern |
 | `--verbose` | Show detailed output |
 | `--quiet` | Suppress non-essential output |
+| `--coverage` | Enable code coverage collection (requires c8) |
+| `--coverage-*` | Coverage options (see [Coverage CLI Options](#coverage-cli-options)) |
 
 ## Testing
 
@@ -271,6 +273,41 @@ c8 --src src --all --include 'dist/**' --reporter text --reporter html \
 | `--reporter html` | HTML report for detailed analysis |
 | `--reports-dir coverage-golden` | Separate from vitest coverage |
 
+#### Coverage CLI Options
+
+When using `--coverage`, tryscript supports the following c8 flags:
+
+| CLI Option | Description | Default |
+| --- | --- | --- |
+| `--coverage-dir <dir>` | Output directory for coverage reports | `coverage-tryscript` |
+| `--coverage-reporter <reporter...>` | Coverage reporters to use | `text`, `html` |
+| `--coverage-exclude <pattern...>` | Patterns to exclude from coverage | none |
+| `--coverage-exclude-node-modules` | Exclude node_modules from coverage | `true` |
+| `--no-coverage-exclude-node-modules` | Include node_modules in coverage | - |
+| `--coverage-exclude-after-remap` | Apply exclude logic after sourcemap remapping | `false` |
+| `--coverage-skip-full` | Hide files with 100% coverage | `false` |
+| `--coverage-allow-external` | Allow files from outside cwd | `false` |
+| `--coverage-monocart` | Use monocart for accurate line counts (vitest-compatible) | `false` |
+
+These options can also be configured in `tryscript.config.ts`:
+
+```typescript
+export default {
+  coverage: {
+    reportsDir: 'coverage-tryscript',
+    reporters: ['text', 'html'],
+    include: ['dist/**'],
+    exclude: ['**/vendor/**'],
+    excludeNodeModules: true,
+    excludeAfterRemap: false,
+    skipFull: false,
+    allowExternal: false,
+    src: 'src',
+    monocart: false,
+  },
+};
+```
+
 #### For Users Testing Their Own CLIs
 
 The same technique works for any CLI tested with tryscript.
@@ -280,13 +317,13 @@ Add to your `package.json`:
 {
   "scripts": {
     "test:golden": "tryscript 'tests/**/*.tryscript.md'",
-    "test:golden:coverage": "c8 --src src --all --include 'dist/**' tryscript 'tests/**/*.tryscript.md'"
+    "test:golden:coverage": "tryscript run --coverage 'tests/**/*.tryscript.md'"
   }
 }
 ```
 
 This provides realistic coverage metrics from actual CLI usage rather than just unit
-tests.
+tests. By default, `node_modules` is excluded from coverage reports.
 
 ### Watch Mode
 

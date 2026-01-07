@@ -330,10 +330,11 @@ Done
 ## CLI Usage
 
 ```bash
-tryscript                    # Show help (same as --help)
-tryscript run [files...]     # Run golden tests
-tryscript docs               # Show this reference
-tryscript readme             # Show README
+tryscript                              # Show help (same as --help)
+tryscript run [files...]               # Run golden tests
+tryscript coverage <commands...>       # Run commands with merged coverage
+tryscript docs                         # Show this reference
+tryscript readme                       # Show README
 ```
 
 ### Run Options
@@ -347,15 +348,29 @@ tryscript readme             # Show README
 | `--verbose` | Show detailed output |
 | `--quiet` | Suppress non-essential output |
 | `--coverage` | Enable code coverage collection (requires c8) |
-| `--coverage-dir <dir>` | Coverage output directory (default: coverage-tryscript) |
-| `--coverage-reporter <reporter...>` | Coverage reporters (default: text, html) |
+
+#### Coverage Options
+
+All coverage options mirror [c8](https://github.com/bcoe/c8) CLI flags for familiarity:
+
+| Option | Description | Default |
+|--------|-------------|---------|
+| `--coverage-dir <dir>` | Output directory for reports | `coverage-tryscript` |
+| `--coverage-reporter <r...>` | Coverage reporters | `text`, `html` |
+| `--coverage-exclude <p...>` | Patterns to exclude | none |
+| `--coverage-exclude-node-modules` | Exclude node_modules | `true` |
+| `--no-coverage-exclude-node-modules` | Include node_modules | - |
+| `--coverage-exclude-after-remap` | Exclude after sourcemap remap | `false` |
+| `--coverage-skip-full` | Hide 100% covered files | `false` |
+| `--coverage-allow-external` | Allow files outside cwd | `false` |
+| `--coverage-monocart` | Use monocart for accurate line counts | `false` |
 
 ## Code Coverage
 
 Collect code coverage from subprocess execution using the `--coverage` flag:
 
 ```bash
-# Basic coverage
+# Basic coverage (node_modules excluded by default)
 tryscript run --coverage tests/
 
 # Custom output directory
@@ -363,14 +378,155 @@ tryscript run --coverage --coverage-dir my-coverage tests/
 
 # Custom reporters
 tryscript run --coverage --coverage-reporter text --coverage-reporter lcov tests/
+
+# Exclude additional patterns
+tryscript run --coverage --coverage-exclude '**/vendor/**' tests/
+
+# Include node_modules in coverage (not recommended)
+tryscript run --coverage --no-coverage-exclude-node-modules tests/
 ```
 
 Coverage uses [c8](https://github.com/bcoe/c8) and `NODE_V8_COVERAGE` to track code executed
-by spawned CLI processes. Install c8 as a dev dependency:
+by spawned CLI processes.
+
+**Required dependencies:**
 
 ```bash
+# Basic coverage
 npm install -D c8
+
+# For --monocart flag (recommended for merging with vitest)
+npm install -D c8 monocart-coverage-reports
 ```
+
+### Default Behavior
+
+By default, tryscript coverage:
+- **Excludes node_modules** - Your reports show only your code, not dependencies
+- **Includes all source files** - Files with 0% coverage are shown (use `--coverage-skip-full` to hide 100% covered files)
+- **Uses dist/** include pattern - Tracks your built CLI output
+
+### Merging with Vitest Coverage
+
+The `coverage` command provides a simple way to merge coverage from multiple sources (e.g., vitest unit tests + CLI golden tests):
+
+```bash
+# Merge vitest and tryscript coverage into a single report
+tryscript coverage "pnpm vitest run" "tryscript run tests/"
+
+# With monocart for accurate line counts
+tryscript coverage --monocart "pnpm vitest run" "tryscript run tests/"
+
+# Custom reporters
+tryscript coverage --reporters text,html,lcov "pnpm vitest run" "tryscript run tests/"
+```
+
+#### Coverage Command Options
+
+| Option | Description | Default |
+|--------|-------------|---------|
+| `--reports-dir <dir>` | Output directory | `coverage` |
+| `--reporters <list>` | Comma-separated reporters | `text,json,json-summary,lcov,html` |
+| `--include <patterns>` | Patterns to include | `dist/**` |
+| `--exclude <patterns>` | Patterns to exclude | none |
+| `--exclude-node-modules` | Exclude node_modules | `true` |
+| `--no-exclude-node-modules` | Include node_modules | - |
+| `--exclude-after-remap` | Post-sourcemap exclude | `false` |
+| `--skip-full` | Hide 100% files | `false` |
+| `--allow-external` | Allow external files | `false` |
+| `--monocart` | AST-aware line counts | `false` |
+| `--src <dir>` | Source dir for mapping | `src` |
+
+#### How It Works
+
+The `coverage` command:
+1. Creates a shared temporary directory for V8 coverage data
+2. Sets `NODE_V8_COVERAGE` environment variable
+3. Runs each command in sequence (all inherit the coverage env)
+4. Generates a merged coverage report using c8
+
+#### Recommended Setup: package.json Script
+
+The simplest way to set up merged coverage is with a package.json script. This is exactly how tryscript itself does it (dogfooding):
+
+```json
+{
+  "scripts": {
+    "test:coverage": "tryscript coverage --monocart \"pnpm vitest run\" \"tryscript run 'tests/**/*.tryscript.md'\""
+  }
+}
+```
+
+Then run:
+```bash
+pnpm test:coverage
+```
+
+This merges coverage from vitest unit tests and tryscript CLI tests into a single report.
+
+#### Why Monocart?
+
+The `--monocart` flag uses [monocart-coverage-reports](https://github.com/cenfun/monocart-coverage-reports) for AST-aware
+line counting, producing line counts ~90% aligned with vitest. Without this flag, standard c8 may inflate
+line counts by 3-4x, making merged coverage percentages inaccurate.
+
+| Metric | Standard c8 | With --monocart | Vitest |
+|--------|-------------|-----------------|--------|
+| Total lines | ~1700 (inflated) | ~460 | ~510 |
+| Accuracy | ❌ | ✅ ~90% match | ✅ baseline |
+
+### Sourcemap Requirement
+
+**Important**: Coverage reports map back to source files only if your build generates sourcemaps.
+Without sourcemaps, reports show bundled filenames instead of source paths:
+
+| Build Configuration | Coverage Report Shows |
+|---------------------|----------------------|
+| Sourcemaps disabled | `cli-BXvEEW6O.mjs` (34% coverage) |
+| Sourcemaps enabled | `src/cli/commands/status.ts` (83% coverage) |
+
+Enable sourcemaps in your build tool:
+
+**tsdown / tsup:**
+```typescript
+// tsdown.config.ts or tsup.config.ts
+export default defineConfig({
+  sourcemap: true,
+  // ... other options
+});
+```
+
+**esbuild:**
+```typescript
+await esbuild.build({
+  sourcemap: true,
+  // ... other options
+});
+```
+
+**rollup:**
+```javascript
+// rollup.config.js
+export default {
+  output: {
+    sourcemap: true,
+  },
+};
+```
+
+**Vite:**
+```typescript
+// vite.config.ts
+export default defineConfig({
+  build: {
+    sourcemap: true,
+  },
+});
+```
+
+After enabling sourcemaps, rebuild your project before running coverage.
+
+### Configuration
 
 Configure coverage in `tryscript.config.ts`:
 
@@ -382,10 +538,29 @@ export default defineConfig({
     reportsDir: 'coverage-tryscript',
     reporters: ['text', 'html'],
     include: ['dist/**'],
+    exclude: [],                  // Additional exclude patterns
+    excludeNodeModules: true,     // Exclude node_modules (recommended)
+    excludeAfterRemap: false,     // Apply exclude after sourcemap remap
+    skipFull: false,              // Hide 100% covered files
+    allowExternal: false,         // Allow files outside cwd
     src: 'src',
+    monocart: false,              // Use monocart for vitest-compatible line counts
   },
 });
 ```
+
+| Config Option | CLI Flag | Description |
+|---------------|----------|-------------|
+| `reportsDir` | `--coverage-dir` | Output directory |
+| `reporters` | `--coverage-reporter` | Reporter list |
+| `include` | - | Include patterns (config only) |
+| `exclude` | `--coverage-exclude` | Exclude patterns |
+| `excludeNodeModules` | `--coverage-exclude-node-modules` | Exclude node_modules |
+| `excludeAfterRemap` | `--coverage-exclude-after-remap` | Post-sourcemap exclude |
+| `skipFull` | `--coverage-skip-full` | Hide 100% files |
+| `allowExternal` | `--coverage-allow-external` | Allow external files |
+| `src` | - | Source dir for mapping (config only) |
+| `monocart` | `--coverage-monocart` | AST-aware line counts |
 
 ## Best Practices
 

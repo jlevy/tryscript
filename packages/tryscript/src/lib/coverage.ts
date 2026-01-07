@@ -98,7 +98,17 @@ export async function generateCoverageReport(ctx: CoverageContext): Promise<void
     '--src',
     options.src,
     '--all',
+    // Include patterns
     ...options.include.flatMap((pattern) => ['--include', pattern]),
+    // Exclude patterns
+    ...options.exclude.flatMap((pattern) => ['--exclude', pattern]),
+    // Boolean flags (only add if explicitly set)
+    ...(options.excludeNodeModules ? ['--exclude-node-modules'] : ['--no-exclude-node-modules']),
+    ...(options.excludeAfterRemap ? ['--exclude-after-remap'] : []),
+    ...(options.skipFull ? ['--skip-full'] : []),
+    ...(options.allowExternal ? ['--allowExternal'] : []),
+    ...(options.monocart ? ['--experimental-monocart'] : []),
+    // Reporters
     ...options.reporters.flatMap((reporter) => ['--reporter', reporter]),
   ];
 
