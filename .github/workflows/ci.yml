@@ -46,3 +46,19 @@ jobs:
           coverage-summary-path: packages/tryscript/coverage/coverage-summary.json
           output-folder: ./badges
           branches: main
+          no-commit: true
+
+      # Update badge links to point to this run, then commit all changes
+      - name: Update Badge Links
+        if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+        run: |
+          ./scripts/update-badge-links.sh
+          git config --global user.name "${{ github.actor }}"
+          git config --global user.email "${{ github.actor }}@users.noreply.github.com"
+          git add -A
+          if git diff --staged --quiet; then
+            echo "No changes to commit"
+          else
+            git commit -m "Update coverage badges and links"
+            git push
+          fi
