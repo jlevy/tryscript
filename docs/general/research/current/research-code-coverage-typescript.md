@@ -412,15 +412,23 @@ If a command shows "0 files (0 new)", that command is not producing coverage dat
 
 ### When to Use Which Approach
 
+**Understanding what each approach captures:**
+
+| Approach | Unit test coverage (imports) | Subprocess coverage (spawns) |
+|----------|------------------------------|------------------------------|
+| `tryscript coverage "vitest run" "tryscript run tests/"` | ❌ No | ✅ Yes (both sources) |
+| `vitest run --coverage` alone | ✅ Yes | ❌ No |
+| LCOV merging (both separately) | ✅ Yes | ✅ Yes |
+
 **Use `tryscript coverage` when:**
-- Your vitest tests include integration tests that spawn CLI subprocesses (like `cli.integration.test.ts`)
-- You want merged coverage from both subprocess spawns and golden tests
-- Your CLI is a significant part of the codebase being tested
+- Your tests are primarily CLI integration tests that spawn subprocesses
+- You don't have significant unit test coverage via programmatic imports
+- Example: tryscript itself, where `cli.integration.test.ts` spawns CLI and golden tests cover the rest
 
 **Use LCOV merging when:**
-- Your code is primarily tested via programmatic imports (not CLI subprocess spawns)
-- You need vitest's unit test coverage for code that isn't exercised via CLI
-- Your vitest tests don't spawn subprocesses
+- You have unit tests that import and test code directly (not via CLI spawns)
+- You want both unit test coverage AND CLI subprocess coverage
+- Example: markform, which has engine unit tests + CLI golden tests
 
 ### Alternative: LCOV Merging
 

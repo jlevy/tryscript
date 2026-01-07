@@ -431,21 +431,23 @@ tryscript coverage --monocart "tryscript run tests/"
 > - **Subprocess coverage IS captured** - if your vitest tests spawn CLI processes (e.g., via `spawnSync`),
 >   that subprocess execution IS tracked by NODE_V8_COVERAGE
 >
-> This is why tryscript's own `test:coverage` script uses:
-> ```bash
-> tryscript coverage --monocart "pnpm vitest run" "node dist/bin.mjs run tests/"
-> ```
+> **Understanding what each approach captures:**
 >
-> The vitest command contributes subprocess coverage from CLI integration tests, while the tryscript
-> command contributes coverage from golden tests. Both are merged into a single report.
+> | Approach | Unit test coverage (imports) | Subprocess coverage (spawns) |
+> |----------|------------------------------|------------------------------|
+> | `tryscript coverage "vitest run" "tryscript run tests/"` | ❌ No | ✅ Yes (both sources) |
+> | `vitest run --coverage` alone | ✅ Yes | ❌ No |
+> | LCOV merging (both separately) | ✅ Yes | ✅ Yes |
 >
-> **When to use this pattern:**
-> - Your vitest tests include integration tests that spawn CLI subprocesses
-> - You want merged coverage from both unit tests (subprocess spawns) and golden tests
+> **When to use `tryscript coverage`:**
+> - Your tests are primarily CLI integration tests that spawn subprocesses
+> - You don't have significant unit test coverage via programmatic imports
+> - Example: tryscript itself, where `cli.integration.test.ts` spawns CLI and golden tests cover the rest
 >
 > **When to use LCOV merging instead:**
-> - Your code is primarily tested via programmatic imports (not CLI subprocess spawns)
-> - You need vitest's unit test coverage for code that isn't exercised via CLI
+> - You have unit tests that import and test code directly (not via CLI spawns)
+> - You want both unit test coverage AND CLI subprocess coverage
+> - Example: markform, which has engine unit tests + CLI golden tests
 
 #### Alternative: LCOV File Merging
 
