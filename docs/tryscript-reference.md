@@ -387,10 +387,16 @@ tryscript run --coverage --no-coverage-exclude-node-modules tests/
 ```
 
 Coverage uses [c8](https://github.com/bcoe/c8) and `NODE_V8_COVERAGE` to track code executed
-by spawned CLI processes. Install c8 as a dev dependency:
+by spawned CLI processes.
+
+**Required dependencies:**
 
 ```bash
+# Basic coverage
 npm install -D c8
+
+# For --monocart flag (recommended for merging with vitest)
+npm install -D c8 monocart-coverage-reports
 ```
 
 ### Default Behavior
