@@ -22,57 +22,6 @@ Golden testing for CLI applications - a TypeScript port of [trycmd](https://gith
 Write CLI tests as Markdown. tryscript runs commands, captures output, and compares against expected results. Tests become documentation; documentation becomes tests.
 
 ````markdown
-# Test: Basic echo
-
-```console
-$ echo "hello world"
-hello world
-? 0
-```
-
-# Test: Grep with pattern matching
-
-```console
-$ ls -la | grep ".md"
-[..]README.md
-...
-? 0
-```
-````
-
-The `[..]` matches any text on that line. The `...` matches zero or more lines. These "elision patterns" let tests handle dynamic output gracefully.
-
-## Quick Start
-
-```bash
-# Install
-pnpm add -D tryscript
-
-# For coverage support (optional)
-pnpm add -D c8
-
-# For accurate line counts when merging with vitest (optional)
-pnpm add -D c8 monocart-coverage-reports
-
-# Run tests
-npx tryscript run tests/
-
-# Update expected output when behavior changes
-npx tryscript run --update tests/
-```
-
-## Features
-
-- **Markdown format** - Tests are readable documentation
-- **Elision patterns** - Handle variable output: `[..]`, `...`, `[CWD]`, `[ROOT]`, `[EXE]`
-- **Custom patterns** - Define regex patterns for timestamps, versions, UUIDs
-- **Update mode** - Regenerate expected output with `--update`
-- **Sandbox mode** - Isolate tests in temp directories
-- **Code coverage** - Track coverage from subprocess execution with `--coverage` (experimental; use `--coverage-monocart` for best accuracy)
-
-## Example Test File
-
-````markdown
 ---
 env:
   NO_COLOR: "1"
@@ -107,7 +56,45 @@ $ my-cli unknown-command 2>&1
 Error: unknown command 'unknown-command'
 ? 1
 ```
+
+# Test: Check output file contents
+
+```console
+$ my-cli process data.json > output.txt && grep "success" output.txt
+[..]success[..]
+? 0
+```
 ````
+
+The `[..]` matches any text on that line. The `...` matches zero or more lines. These "elision patterns" let tests handle dynamic output gracefully. Any shell command works - pipes, redirects, environment variables, etc.
+
+## Quick Start
+
+```bash
+# Install
+pnpm add -D tryscript
+
+# For coverage support (optional)
+pnpm add -D c8
+
+# For accurate line counts when merging with vitest (optional)
+pnpm add -D c8 monocart-coverage-reports
+
+# Run tests
+npx tryscript run tests/
+
+# Update expected output when behavior changes
+npx tryscript run --update tests/
+```
+
+## Features
+
+- **Markdown format** - Tests are readable documentation
+- **Elision patterns** - Handle variable output: `[..]`, `...`, `[CWD]`, `[ROOT]`, `[EXE]`
+- **Custom patterns** - Define regex patterns for timestamps, versions, UUIDs
+- **Update mode** - Regenerate expected output with `--update`
+- **Sandbox mode** - Isolate tests in temp directories
+- **Code coverage** - Track coverage from subprocess execution with `--coverage` (experimental; use `--coverage-monocart` for best accuracy)
 
 ## CLI Reference
 
