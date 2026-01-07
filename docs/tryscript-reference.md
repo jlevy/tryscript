@@ -367,6 +367,10 @@ All coverage options mirror [c8](https://github.com/bcoe/c8) CLI flags for famil
 
 ## Code Coverage
 
+> **Experimental**: Coverage features are experimental. Line counts may not perfectly match other tools
+> like vitest, especially without the `--monocart` flag. Use `--monocart` for best accuracy when merging
+> coverage reports from multiple sources.
+
 Collect code coverage from subprocess execution using the `--coverage` flag:
 
 ```bash
@@ -406,20 +410,43 @@ By default, tryscript coverage:
 - **Includes all source files** - Files with 0% coverage are shown (use `--coverage-skip-full` to hide 100% covered files)
 - **Uses dist/** include pattern - Tracks your built CLI output
 
-### Merging with Vitest Coverage
+### Merging Coverage from Multiple Sources
 
-The `coverage` command provides a simple way to merge coverage from multiple sources (e.g., vitest unit tests + CLI golden tests):
+The `coverage` command merges V8 coverage from multiple CLI commands into a single report:
 
 ```bash
-# Merge vitest and tryscript coverage into a single report
-tryscript coverage "pnpm vitest run" "tryscript run tests/"
+# Merge coverage from multiple CLI test commands
+tryscript coverage "tryscript run tests/cli/" "node dist/bin.mjs --help"
 
 # With monocart for accurate line counts
-tryscript coverage --monocart "pnpm vitest run" "tryscript run tests/"
-
-# Custom reporters
-tryscript coverage --reporters text,html,lcov "pnpm vitest run" "tryscript run tests/"
+tryscript coverage --monocart "tryscript run tests/"
 ```
+
+> **Important: Vitest Incompatibility**
+>
+> The `tryscript coverage` command uses `NODE_V8_COVERAGE` to collect coverage data from subprocesses.
+> However, **vitest does not use `NODE_V8_COVERAGE`** - it controls the V8 profiler directly via
+> `node:inspector` ([see vitest PR #2786](https://github.com/vitest-dev/vitest/pull/2786)).
+>
+> This means `tryscript coverage "vitest run" ...` will NOT collect coverage from vitest tests.
+> The coverage command will warn you if a command produces no new coverage files.
+
+#### Merging Vitest + Tryscript Coverage
+
+To merge coverage from vitest and tryscript, use **LCOV file merging** instead:
+
+```bash
+# Step 1: Run vitest with its own coverage
+vitest run --coverage
+
+# Step 2: Run tryscript with coverage
+tryscript run --coverage tests/
+
+# Step 3: Merge the LCOV files using lcov or a merge tool
+lcov -a coverage/lcov.info -a coverage-tryscript/lcov.info -o coverage-merged/lcov.info
+```
+
+Or use tools like `nyc merge`, `istanbul-merge`, or custom scripts to combine LCOV/JSON coverage.
 
 #### Coverage Command Options
 
@@ -436,6 +463,7 @@ tryscript coverage --reporters text,html,lcov "pnpm vitest run" "tryscript run t
 | `--allow-external` | Allow external files | `false` |
 | `--monocart` | AST-aware line counts | `false` |
 | `--src <dir>` | Source dir for mapping | `src` |
+| `--verbose` | Show coverage after each command | `false` |
 
 #### How It Works
 
@@ -443,26 +471,18 @@ The `coverage` command:
 1. Creates a shared temporary directory for V8 coverage data
 2. Sets `NODE_V8_COVERAGE` environment variable
 3. Runs each command in sequence (all inherit the coverage env)
-4. Generates a merged coverage report using c8
+4. Shows coverage file statistics after each command (warns if none produced)
+5. Generates a merged coverage report using c8
 
-#### Recommended Setup: package.json Script
+#### Debugging Coverage Issues
 
-The simplest way to set up merged coverage is with a package.json script. This is exactly how tryscript itself does it (dogfooding):
+Use `--verbose` to see intermediate coverage tables after each command:
 
-```json
-{
-  "scripts": {
-    "test:coverage": "tryscript coverage --monocart \"pnpm vitest run\" \"tryscript run 'tests/**/*.tryscript.md'\""
-  }
-}
-```
-
-Then run:
 ```bash
-pnpm test:coverage
+tryscript coverage --verbose "cmd1" "cmd2"
 ```
 
-This merges coverage from vitest unit tests and tryscript CLI tests into a single report.
+This helps identify which commands are contributing coverage and which are not.
 
 #### Why Monocart?
 

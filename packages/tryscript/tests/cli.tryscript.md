@@ -344,6 +344,8 @@ Options:
                              for merging)
   --src <dir>                Source directory for sourcemap remapping (default:
                              src)
+  --verbose                  Show coverage summary after each command for
+                             debugging
   -h, --help                 display help for command
 
 Global Options:
@@ -402,6 +404,9 @@ Collecting V8 coverage to [..]
 
 === Running command 1/1: echo hello ===
 hello
+
+V8 coverage: 0 files (0 new), 0.0 KB total
+No new coverage files from this command. This may indicate the command doesn't write to NODE_V8_COVERAGE.
 
 === Generating merged coverage report ===
 mock-c8 called with: report --temp-directory [..] --reports-dir coverage --src src --all --include dist/** --exclude-node-modules --reporter text --reporter json --reporter json-summary --reporter lcov --reporter html

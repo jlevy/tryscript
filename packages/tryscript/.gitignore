@@ -1,0 +1,6 @@
+# Build output
+dist/
+
+# Generated files (copied during build)
+README.md
+docs/
