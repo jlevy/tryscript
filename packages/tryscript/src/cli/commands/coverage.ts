@@ -11,7 +11,7 @@
 
 import type { Command } from 'commander';
 import { spawn } from 'node:child_process';
-import { mkdtemp, rm } from 'node:fs/promises';
+import { mkdtemp, rm, readdir, stat } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { existsSync } from 'node:fs';
@@ -28,6 +28,7 @@ interface CoverageOptions {
   allowExternal?: boolean;
   monocart?: boolean;
   src?: string;
+  verbose?: boolean;
 }
 
 /**
@@ -52,6 +53,7 @@ export function registerCoverageCommand(program: Command): void {
     .option('--allow-external', 'Allow files from outside cwd')
     .option('--monocart', 'Use monocart for accurate line counts (recommended for merging)')
     .option('--src <dir>', 'Source directory for sourcemap remapping (default: src)')
+    .option('--verbose', 'Show coverage summary after each command for debugging')
     .action(coverageCommand);
 }
 
@@ -103,6 +105,86 @@ function findC8Path(): string | null {
   }
 
   return null;
+}
+
+/**
+ * Get coverage file statistics from temp directory.
+ */
+async function getCoverageStats(
+  tempDir: string,
+): Promise<{ fileCount: number; totalBytes: number; files: string[] }> {
+  try {
+    const files = await readdir(tempDir);
+    const coverageFiles = files.filter((f) => f.startsWith('coverage-') && f.endsWith('.json'));
+    let totalBytes = 0;
+
+    for (const file of coverageFiles) {
+      const fileStat = await stat(join(tempDir, file));
+      totalBytes += fileStat.size;
+    }
+
+    return { fileCount: coverageFiles.length, totalBytes, files: coverageFiles };
+  } catch {
+    return { fileCount: 0, totalBytes: 0, files: [] };
+  }
+}
+
+/**
+ * Generate a text-only coverage report for debugging (doesn't write files).
+ */
+async function generateTextReport(
+  tempDir: string,
+  options: CoverageOptions,
+  label: string,
+): Promise<void> {
+  const c8Path = findC8Path();
+  if (!c8Path) {
+    return;
+  }
+
+  const include = options.include ?? ['dist/**'];
+  const exclude = options.exclude ?? [];
+
+  // Create a temporary reports dir that we'll discard
+  const tempReportsDir = await mkdtemp(join(tmpdir(), 'tryscript-coverage-report-'));
+
+  const reportArgs = [
+    'report',
+    '--temp-directory',
+    tempDir,
+    '--reports-dir',
+    tempReportsDir,
+    '--src',
+    options.src ?? 'src',
+    '--all',
+    ...include.flatMap((pattern) => ['--include', pattern]),
+    ...exclude.flatMap((pattern) => ['--exclude', pattern]),
+    ...(options.excludeNodeModules !== false
+      ? ['--exclude-node-modules']
+      : ['--no-exclude-node-modules']),
+    ...(options.excludeAfterRemap ? ['--exclude-after-remap'] : []),
+    ...(options.monocart ? ['--experimental-monocart'] : []),
+    '--reporter',
+    'text',
+  ];
+
+  console.error(colors.info(`\n--- Coverage after: ${label} ---`));
+
+  await new Promise<void>((resolve) => {
+    const proc = spawn(c8Path, reportArgs, {
+      stdio: 'inherit',
+      shell: false,
+    });
+    proc.on('close', () => {
+      resolve();
+    });
+    proc.on('error', () => {
+      resolve();
+    });
+  });
+
+  // Cleanup temp reports dir
+  await rm(tempReportsDir, { recursive: true, force: true });
 }
 
 /**
@@ -171,6 +253,26 @@ async function coverageCommand(commands: string[], options: CoverageOptions): Pr
     process.exit(1);
   }
 
+  // Parse comma-separated options early so we can use them for intermediate reports
+  const parsedOptions: CoverageOptions = {
+    ...options,
+    reporters: options.reporters
+      ? typeof options.reporters === 'string'
+        ? (options.reporters as string).split(',')
+        : options.reporters
+      : undefined,
+    include: options.include
+      ? typeof options.include === 'string'
+        ? (options.include as string).split(',')
+        : options.include
+      : undefined,
+    exclude: options.exclude
+      ? typeof options.exclude === 'string'
+        ? (options.exclude as string).split(',')
+        : options.exclude
+      : undefined,
+  };
+
   // Create temp directory for V8 coverage data
   const coverageTemp = await mkdtemp(join(tmpdir(), 'tryscript-coverage-'));
   const coverageEnv = { NODE_V8_COVERAGE: coverageTemp };
@@ -178,6 +280,7 @@ async function coverageCommand(commands: string[], options: CoverageOptions): Pr
   console.error(colors.info(`Collecting V8 coverage to ${coverageTemp}`));
 
   let hasFailures = false;
+  let previousFileCount = 0;
 
   try {
     // Run each command with shared coverage environment
@@ -192,30 +295,35 @@ async function coverageCommand(commands: string[], options: CoverageOptions): Pr
         logWarn(`Command exited with code ${result.code}: ${command}`);
         hasFailures = true;
       }
+
+      // Show coverage stats after each command
+      const stats = await getCoverageStats(coverageTemp);
+      const newFiles = stats.fileCount - previousFileCount;
+      const bytesKB = (stats.totalBytes / 1024).toFixed(1);
+
+      console.error(
+        colors.info(
+          `\nV8 coverage: ${stats.fileCount} files (${newFiles} new), ${bytesKB} KB total`,
+        ),
+      );
+
+      if (newFiles === 0) {
+        logWarn(
+          `No new coverage files from this command. ` +
+            `This may indicate the command doesn't write to NODE_V8_COVERAGE.`,
+        );
+      }
+
+      // Show intermediate coverage report if verbose
+      if (parsedOptions.verbose && stats.fileCount > 0) {
+        await generateTextReport(coverageTemp, parsedOptions, command);
+      }
+
+      previousFileCount = stats.fileCount;
     }
 
     // Generate merged coverage report
     console.error(colors.info('\n=== Generating merged coverage report ==='));
-
-    // Parse comma-separated options
-    const parsedOptions: CoverageOptions = {
-      ...options,
-      reporters: options.reporters
-        ? typeof options.reporters === 'string'
-          ? (options.reporters as string).split(',')
-          : options.reporters
-        : undefined,
-      include: options.include
-        ? typeof options.include === 'string'
-          ? (options.include as string).split(',')
-          : options.include
-        : undefined,
-      exclude: options.exclude
-        ? typeof options.exclude === 'string'
-          ? (options.exclude as string).split(',')
-          : options.exclude
-        : undefined,
-    };
 
     const reportSuccess = await generateReport(coverageTemp, parsedOptions);
     if (!reportSuccess) {
