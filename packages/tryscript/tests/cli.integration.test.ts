@@ -103,4 +103,15 @@ expected
     const result = runCli(`run ${join(tempDir, 'nonexistent/*.tryscript.md')}`);
     expect(result.exitCode).toBe(1);
   });
+
+  it('runs the README example from examples/', () => {
+    const exampleFile = join(pkgDir, '..', '..', 'examples', 'my-cli.tryscript.md');
+    const result = runCli(`run ${exampleFile}`);
+    expect(result.output).toContain('4 passed');
+    expect(result.output).toContain('CLI help');
+    expect(result.output).toContain('Version output');
+    expect(result.output).toContain('Error handling');
+    expect(result.output).toContain('Check output file contents');
+    expect(result.exitCode).toBe(0);
+  });
 });
