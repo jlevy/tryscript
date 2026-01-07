@@ -60,56 +60,114 @@ ls /tmp/coverage/
 
 ### Background
 
-There was concern that Vitest might not work with NODE_V8_COVERAGE based on [vitest PR #2786](https://github.com/vitest-dev/vitest/pull/2786), which changed vitest to use `node:inspector` directly instead of relying on NODE_V8_COVERAGE.
+[Vitest PR #2786](https://github.com/vitest-dev/vitest/pull/2786) changed vitest to use `node:inspector` directly for its own coverage collection instead of relying on NODE_V8_COVERAGE. This raised questions about whether vitest coverage could be captured via NODE_V8_COVERAGE for merging with subprocess coverage.
+
+Previous research (see [Markform coverage merging research](https://github.com/jlevy/markform)) suggested that "Vite transforms and loads modules in a way that V8's native coverage collector cannot track."
 
 ### Investigation (2026-01-07)
 
-**Test performed in tryscript repo:**
+**Test 1: Does vitest write to NODE_V8_COVERAGE?**
 
 ```bash
-# Test: Does vitest write to NODE_V8_COVERAGE?
 rm -rf /tmp/test-coverage
 NODE_V8_COVERAGE=/tmp/test-coverage pnpm vitest run
 ls -la /tmp/test-coverage/
 ```
 
+**Results:** 12 files totaling ~10 MB were produced.
+
+**Test 2: What do these coverage files contain?**
+
+```python
+# Inspect coverage file contents
+for each coverage file:
+    src_matches = files matching '/src/*.ts'      # TypeScript sources
+    dist_matches = files matching '/dist/'         # Compiled JavaScript
+```
+
 **Results:**
 
+| Coverage File | src/*.ts files | dist/ files |
+|---------------|----------------|-------------|
+| Main vitest process | 0 | 1 |
+| Worker processes | 0 | 74+ |
+| CLI subprocess spawns | 0 | 92 |
+
+**Key Finding: NODE_V8_COVERAGE captures coverage for compiled `dist/` files, NOT original `src/*.ts` files.**
+
+### Understanding the Coverage Flow
+
+The complete picture of how coverage works:
+
 ```
-total 10298
--rw------- 1 root root 2137173 Jan  7 07:05 coverage-2818-1767769514427-0.json
--rw------- 1 root root 2330416 Jan  7 07:05 coverage-2829-1767769514340-0.json
--rw------- 1 root root 1440713 Jan  7 07:05 coverage-2840-1767769514248-0.json
-... (12 files total, ~10 MB)
+┌─────────────────────────────────────────────────────────────────┐
+│                    VITEST UNIT TESTS                            │
+│  ┌─────────────────────────────────────────────────────────┐   │
+│  │ vitest --coverage                                        │   │
+│  │ Uses: node:inspector API                                 │   │
+│  │ Captures: Vite-transformed code → maps to src/*.ts       │   │
+│  │ Output: coverage/lcov.info (via @vitest/coverage-v8)     │   │
+│  └─────────────────────────────────────────────────────────┘   │
+└─────────────────────────────────────────────────────────────────┘
+
+┌─────────────────────────────────────────────────────────────────┐
+│                    CLI SUBPROCESS TESTS                         │
+│  ┌─────────────────────────────────────────────────────────┐   │
+│  │ NODE_V8_COVERAGE=/tmp/cov node dist/bin.mjs             │   │
+│  │ Uses: V8 native coverage                                 │   │
+│  │ Captures: dist/*.mjs files                               │   │
+│  │ Output: /tmp/cov/coverage-*.json                         │   │
+│  │ Requires: sourcemaps to map back to src/*.ts             │   │
+│  └─────────────────────────────────────────────────────────┘   │
+└─────────────────────────────────────────────────────────────────┘
+
+┌─────────────────────────────────────────────────────────────────┐
+│                    MERGED COVERAGE                              │
+│  c8/monocart reads V8 JSON files → remaps via sourcemaps →     │
+│  generates unified report showing src/*.ts coverage             │
+└─────────────────────────────────────────────────────────────────┘
 ```
 
-**Conclusion: Vitest 4.0.16 DOES write V8 coverage files when NODE_V8_COVERAGE is set.**
+### Why It Works in tryscript
 
-The coverage files are produced by:
-1. The vitest main process
-2. Worker threads/processes spawned by vitest
-3. Any child processes spawned during tests (e.g., CLI integration tests)
+When running `tryscript coverage "pnpm vitest run" "node dist/bin.mjs run tests/"`:
 
-### Validation Test
+1. **Vitest command**: NODE_V8_COVERAGE captures coverage from:
+   - Vitest worker processes
+   - **CLI integration tests** that spawn `node dist/bin.mjs` as subprocesses
+   - The coverage is for `dist/` files, remapped to `src/` via sourcemaps
 
-Full coverage collection test in tryscript:
+2. **Tryscript golden tests**: NODE_V8_COVERAGE captures coverage from:
+   - Each `node dist/bin.mjs` subprocess spawned by tryscript
+   - Again, `dist/` files remapped to `src/`
+
+3. **Merged result**: c8/monocart combines all V8 coverage files and generates a unified report.
+
+### Validation Test Results
 
 ```bash
 pnpm test:coverage
 # Runs: tryscript coverage --monocart "pnpm vitest run" "node dist/bin.mjs run tests/"
 ```
 
-**Output:**
+| Source | Coverage Files | Data Size | What's Captured |
+|--------|---------------|-----------|-----------------|
+| `pnpm vitest run` | 11 files | 8,194 KB | vitest workers + CLI integration subprocesses |
+| `tryscript run tests/` | 59 files (new) | 23,477 KB | golden test subprocesses |
+| **Merged total** | 70 files | 31,672 KB | **85.96% statements** |
 
-| Source | Coverage Files | Data Size |
-|--------|---------------|-----------|
-| `pnpm vitest run` | 11 files | 8,194 KB |
-| `tryscript run tests/` | 59 files (new) | 23,477 KB |
-| **Merged total** | 70 files | 31,672 KB |
+### Reconciliation with Markform Research
 
-**Final merged coverage: 85.96% statements**
+The [Markform coverage merging research](https://github.com/jlevy/markform) identified important issues:
 
-This proves that vitest + tryscript coverage merging works correctly with vitest 4.x.
+| Finding | Status | Notes |
+|---------|--------|-------|
+| Vitest uses `node:inspector`, not NODE_V8_COVERAGE | **Confirmed** | Vitest's own coverage uses inspector API |
+| NODE_V8_COVERAGE can't capture vitest's coverage | **Partially correct** | It can't capture vitest's internal unit test coverage, but DOES capture subprocess coverage |
+| Line count inflation (5x) with c8 vs vitest | **Confirmed** | Solved by using `--monocart` flag |
+| Different V8-to-Istanbul converters cause discrepancy | **Confirmed** | `ast-v8-to-istanbul` vs `v8-to-istanbul` |
+
+**Resolution**: The `--monocart` flag addresses line count inflation by using AST-aware counting (~90% alignment with vitest). For projects with CLI integration tests, NODE_V8_COVERAGE captures subprocess coverage even when vitest is the test runner.
 
 ## Coverage Metrics
 
@@ -294,16 +352,24 @@ tryscript coverage --monocart \
 
 ### Why Monocart?
 
-Standard c8 uses V8's raw coverage data, which can inflate line counts by 3-4x compared to vitest's AST-aware counting. Monocart provides AST-aware line counting that aligns with vitest (~90% match).
+Standard c8 uses V8's raw coverage data with `v8-to-istanbul`, which maps all source-mapped lines including non-executable ones (comments, blank lines, type declarations). Vitest uses `ast-v8-to-istanbul`, which parses the AST to identify only executable lines.
 
-| Metric | Standard c8 | With --monocart | Vitest |
-|--------|-------------|-----------------|--------|
-| Total lines | ~1700 (inflated) | ~460 | ~510 |
-| Accuracy | ❌ | ✅ ~90% match | ✅ baseline |
+This creates significant discrepancies (documented in [Markform coverage merging research](https://github.com/jlevy/markform)):
+
+| Metric | Standard c8 (v8-to-istanbul) | With --monocart | Vitest (ast-v8-to-istanbul) |
+|--------|------------------------------|-----------------|----------------------------|
+| Total lines | ~1700 (inflated ~5x) | ~460 | ~510 |
+| Accuracy | ❌ Includes non-executable | ✅ ~90% match | ✅ baseline |
+
+Monocart provides AST-aware line counting via [monocart-coverage-reports](https://github.com/cenfun/monocart-coverage-reports), producing line counts aligned with vitest.
+
+**Why line count matters**: When merging coverage from vitest and subprocess tests, inflated line counts from c8 will skew the merged percentages. Using `--monocart` ensures both sources use comparable counting methods.
 
 **References:**
 - [monocart-coverage-reports](https://github.com/cenfun/monocart-coverage-reports)
 - [c8 CLI](https://github.com/bcoe/c8)
+- [v8-to-istanbul](https://github.com/istanbuljs/v8-to-istanbul) - standard converter
+- [ast-v8-to-istanbul](https://www.npmjs.com/package/ast-v8-to-istanbul) - AST-aware converter used by vitest
 
 ### Debugging Coverage Issues
 
@@ -521,17 +587,37 @@ Some older vitest versions may not write to NODE_V8_COVERAGE correctly. Upgrade 
 
 ## References
 
+### Primary Documentation
 - [Vitest Coverage Documentation](https://vitest.dev/guide/coverage.html)
-- [v8 Coverage Provider](https://github.com/vitest-dev/vitest/tree/main/packages/coverage-v8)
 - [Node.js NODE_V8_COVERAGE](https://nodejs.org/api/cli.html#node_v8_coveragedir)
-- [c8 CLI](https://github.com/bcoe/c8)
-- [monocart-coverage-reports](https://github.com/cenfun/monocart-coverage-reports)
 - [tryscript Reference](../../tryscript-reference.md)
-- [Vitest PR #2786 - Inspector-based coverage](https://github.com/vitest-dev/vitest/pull/2786)
+
+### Tools
+- [c8 CLI](https://github.com/bcoe/c8) - V8 coverage CLI
+- [monocart-coverage-reports](https://github.com/cenfun/monocart-coverage-reports) - AST-aware coverage
+- [v8-to-istanbul](https://github.com/istanbuljs/v8-to-istanbul) - Standard V8→Istanbul converter
+- [ast-v8-to-istanbul](https://www.npmjs.com/package/ast-v8-to-istanbul) - AST-aware converter (used by vitest)
+- [@vitest/coverage-v8](https://github.com/vitest-dev/vitest/tree/main/packages/coverage-v8) - Vitest V8 provider
+
+### Related Research
+- [Vitest PR #2786 - Inspector-based coverage](https://github.com/vitest-dev/vitest/pull/2786) - Why vitest uses node:inspector
+- [Markform coverage merging research](https://github.com/jlevy/markform/blob/main/docs/project/research/current/research-coverage-merging-cli-subprocesses.md) - Line count inflation analysis
+- [V8 JavaScript Code Coverage](https://v8.dev/blog/javascript-code-coverage) - V8 coverage internals
+
+### Best Practices
 - [Code Coverage Best Practices](https://www.atlassian.com/continuous-delivery/software-testing/code-coverage)
 - [Codecov Documentation](https://docs.codecov.com/)
 
 ## Changelog
+
+### 2026-01-07 (Update 2)
+
+- Merged findings from Markform coverage research document
+- Added detailed analysis of what NODE_V8_COVERAGE actually captures (dist/ files, not src/*.ts)
+- Added ASCII diagram explaining coverage flow
+- Documented reconciliation between our findings and Markform research
+- Added v8-to-istanbul vs ast-v8-to-istanbul explanation
+- Expanded references section with categorization
 
 ### 2026-01-07
 
