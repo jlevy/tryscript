@@ -13,7 +13,7 @@
 | TypeScript | 5.9.3 | Language version |
 | c8 | 10.1.3 | V8 coverage CLI |
 | monocart-coverage-reports | 2.12.9 | AST-aware coverage merging |
-| tryscript | 0.1.2 | Golden testing with coverage support |
+| tryscript | 0.1.3 | Golden testing with coverage support |
 
 ## Executive Summary
 
@@ -23,7 +23,7 @@ This document covers comprehensive code coverage strategies for TypeScript proje
 2. **CLI/subprocess coverage** using NODE_V8_COVERAGE and tryscript
 3. **Multi-source coverage merging** for projects with both unit tests and CLI tests
 
-Key finding: **Vitest 4.x works correctly with NODE_V8_COVERAGE**, allowing unified coverage collection from both vitest unit tests and CLI subprocess tests using `tryscript coverage`.
+Key finding: **NODE_V8_COVERAGE captures subprocess coverage from vitest integration tests** that spawn CLI processes. While vitest's own unit test coverage uses `node:inspector` (not NODE_V8_COVERAGE), CLI subprocess spawns from integration tests ARE captured, enabling unified coverage collection using `tryscript coverage`.
 
 ## Validation Methodology
 
@@ -410,9 +410,21 @@ If a command shows "0 files (0 new)", that command is not producing coverage dat
 - The command doesn't spawn Node.js processes
 - The command uses a coverage provider that doesn't use NODE_V8_COVERAGE (see troubleshooting)
 
+### When to Use Which Approach
+
+**Use `tryscript coverage` when:**
+- Your vitest tests include integration tests that spawn CLI subprocesses (like `cli.integration.test.ts`)
+- You want merged coverage from both subprocess spawns and golden tests
+- Your CLI is a significant part of the codebase being tested
+
+**Use LCOV merging when:**
+- Your code is primarily tested via programmatic imports (not CLI subprocess spawns)
+- You need vitest's unit test coverage for code that isn't exercised via CLI
+- Your vitest tests don't spawn subprocesses
+
 ### Alternative: LCOV Merging
 
-If you cannot use `tryscript coverage`, merge LCOV files manually:
+If your tests don't spawn CLI subprocesses, merge LCOV files manually:
 
 ```bash
 # Step 1: Run vitest with coverage
