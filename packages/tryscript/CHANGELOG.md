@@ -1,5 +1,11 @@
 # tryscript
 
+## 0.1.3
+
+### Patch Changes
+
+- 26ea6fb: Add coverage debugging output and --verbose flag for troubleshooting coverage collection
+
 ## 0.1.2
 
 ### Patch Changes
