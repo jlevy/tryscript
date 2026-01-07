@@ -7,6 +7,16 @@
 
 Golden testing for CLI applications - a TypeScript port of [trycmd](https://github.com/assert-rs/trycmd).
 
+> [!NOTE]
+> 100% of the code and specs in this repository were written by Claude Code.
+> The design and management and prompting was by me ([jlevy](https://github.com/jlevy)) supported by  the workflows, agent rules,
+> and other research docs in [Speculate](https://github.com/jlevy/speculate).
+> 
+> You can see what you think, but I find the code quality higher than most agent-written code I've
+> seen because of the spec-driven process.
+> You can review the architecture doc and all of the specs all of the specs in [docs/project](docs/project).
+> The general research, guideline, and rules docs I use are in [docs/general](docs/general).
+
 ## What It Does
 
 Write CLI tests as Markdown. tryscript runs commands, captures output, and compares against expected results. Tests become documentation; documentation becomes tests.
@@ -113,6 +123,8 @@ For complete syntax reference, run `tryscript docs` or see the [reference docume
 | `--filter <regex>` | Filter tests by name |
 | `--verbose` | Show detailed output |
 | `--coverage` | Collect code coverage (requires c8) |
+| `--coverage-exclude-node-modules` | Exclude node_modules from coverage (default: true) |
+| `--coverage-exclude <pattern>` | Exclude patterns from coverage |
 
 ## Development
 

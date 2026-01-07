@@ -44,6 +44,11 @@ interface RunOptions {
   coverage?: boolean;
   coverageDir?: string;
   coverageReporter?: string[];
+  coverageExclude?: string[];
+  coverageExcludeNodeModules?: boolean;
+  coverageExcludeAfterRemap?: boolean;
+  coverageSkipFull?: boolean;
+  coverageAllowExternal?: boolean;
 }
 
 /**
@@ -67,6 +72,24 @@ export function registerRunCommand(program: Command): void {
       '--coverage-reporter <reporter...>',
       'Coverage reporters (default: text, html). Can be specified multiple times.',
     )
+    .option(
+      '--coverage-exclude <pattern...>',
+      'Patterns to exclude from coverage (c8 --exclude). Can be specified multiple times.',
+    )
+    .option(
+      '--coverage-exclude-node-modules',
+      'Exclude node_modules from coverage (c8 --exclude-node-modules, default: true)',
+    )
+    .option(
+      '--no-coverage-exclude-node-modules',
+      'Include node_modules in coverage (c8 --no-exclude-node-modules)',
+    )
+    .option(
+      '--coverage-exclude-after-remap',
+      'Apply exclude logic after sourcemap remapping (c8 --exclude-after-remap)',
+    )
+    .option('--coverage-skip-full', 'Hide files with 100% coverage (c8 --skip-full)')
+    .option('--coverage-allow-external', 'Allow files from outside cwd (c8 --allowExternal)')
     .action(runCommand);
 }
 
@@ -116,6 +139,13 @@ async function runCommand(files: string[], options: RunOptions): Promise<void> {
       ...globalConfig.coverage,
       reportsDir: options.coverageDir ?? globalConfig.coverage?.reportsDir,
       reporters: options.coverageReporter ?? globalConfig.coverage?.reporters,
+      exclude: options.coverageExclude ?? globalConfig.coverage?.exclude,
+      excludeNodeModules:
+        options.coverageExcludeNodeModules ?? globalConfig.coverage?.excludeNodeModules,
+      excludeAfterRemap:
+        options.coverageExcludeAfterRemap ?? globalConfig.coverage?.excludeAfterRemap,
+      skipFull: options.coverageSkipFull ?? globalConfig.coverage?.skipFull,
+      allowExternal: options.coverageAllowExternal ?? globalConfig.coverage?.allowExternal,
     });
     coverageEnv = getCoverageEnv(coverageCtx);
   }

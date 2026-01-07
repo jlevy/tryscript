@@ -33,6 +33,11 @@ describe('coverage', () => {
         reportsDir: 'my-coverage',
         reporters: ['lcov', 'json'],
         include: ['build/**'],
+        exclude: ['**/vendor/**'],
+        excludeNodeModules: false,
+        excludeAfterRemap: true,
+        skipFull: true,
+        allowExternal: true,
         src: 'source',
       };
       const result = resolveCoverageConfig(customConfig);

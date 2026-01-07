@@ -35,6 +35,11 @@ export const DEFAULT_COVERAGE_CONFIG: Required<CoverageConfig> = {
   reportsDir: 'coverage-tryscript',
   reporters: ['text', 'html'],
   include: ['dist/**'],
+  exclude: [],
+  excludeNodeModules: true,
+  excludeAfterRemap: false,
+  skipFull: false,
+  allowExternal: false,
   src: 'src',
 };
 
@@ -46,6 +51,11 @@ export function resolveCoverageConfig(config?: CoverageConfig): Required<Coverag
     reportsDir: config?.reportsDir ?? DEFAULT_COVERAGE_CONFIG.reportsDir,
     reporters: config?.reporters ?? DEFAULT_COVERAGE_CONFIG.reporters,
     include: config?.include ?? DEFAULT_COVERAGE_CONFIG.include,
+    exclude: config?.exclude ?? DEFAULT_COVERAGE_CONFIG.exclude,
+    excludeNodeModules: config?.excludeNodeModules ?? DEFAULT_COVERAGE_CONFIG.excludeNodeModules,
+    excludeAfterRemap: config?.excludeAfterRemap ?? DEFAULT_COVERAGE_CONFIG.excludeAfterRemap,
+    skipFull: config?.skipFull ?? DEFAULT_COVERAGE_CONFIG.skipFull,
+    allowExternal: config?.allowExternal ?? DEFAULT_COVERAGE_CONFIG.allowExternal,
     src: config?.src ?? DEFAULT_COVERAGE_CONFIG.src,
   };
 }

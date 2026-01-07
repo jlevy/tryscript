@@ -52,29 +52,42 @@ Usage: tryscript run [options] [files...]
 Run golden tests
 
 Arguments:
-  files                              Test files to run (default:
-                                     **/*.tryscript.md)
+  files                               Test files to run (default:
+                                      **/*.tryscript.md)
 
 Options:
-  --update                           Update golden files with actual output
-  --diff                             Show diff on failure (default: true)
-  --no-diff                          Hide diff on failure
-  --fail-fast                        Stop on first failure
-  --filter <pattern>                 Filter tests by name pattern
-  --verbose                          Show detailed output including passing test
-                                     output
-  --quiet                            Suppress non-essential output (only show
-                                     failures)
-  --coverage                         Enable code coverage collection (requires
-                                     c8)
-  --coverage-dir <dir>               Coverage output directory (default:
-                                     coverage-tryscript)
-  --coverage-reporter <reporter...>  Coverage reporters (default: text, html).
-                                     Can be specified multiple times.
-  -h, --help                         display help for command
+  --update                            Update golden files with actual output
+  --diff                              Show diff on failure (default: true)
+  --no-diff                           Hide diff on failure
+  --fail-fast                         Stop on first failure
+  --filter <pattern>                  Filter tests by name pattern
+  --verbose                           Show detailed output including passing
+                                      test output
+  --quiet                             Suppress non-essential output (only show
+                                      failures)
+  --coverage                          Enable code coverage collection (requires
+                                      c8)
+  --coverage-dir <dir>                Coverage output directory (default:
+                                      coverage-tryscript)
+  --coverage-reporter <reporter...>   Coverage reporters (default: text, html).
+                                      Can be specified multiple times.
+  --coverage-exclude <pattern...>     Patterns to exclude from coverage (c8
+                                      --exclude). Can be specified multiple
+                                      times.
+  --coverage-exclude-node-modules     Exclude node_modules from coverage (c8
+                                      --exclude-node-modules, default: true)
+  --no-coverage-exclude-node-modules  Include node_modules in coverage (c8
+                                      --no-exclude-node-modules)
+  --coverage-exclude-after-remap      Apply exclude logic after sourcemap
+                                      remapping (c8 --exclude-after-remap)
+  --coverage-skip-full                Hide files with 100% coverage (c8
+                                      --skip-full)
+  --coverage-allow-external           Allow files from outside cwd (c8
+                                      --allowExternal)
+  -h, --help                          display help for command
 
 Global Options:
-  --version                          Show version number
+  --version                           Show version number
 ? 0
 ```
 

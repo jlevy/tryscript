@@ -123,6 +123,8 @@ For complete syntax reference, run `tryscript docs` or see the [reference docume
 | `--filter <regex>` | Filter tests by name |
 | `--verbose` | Show detailed output |
 | `--coverage` | Collect code coverage (requires c8) |
+| `--coverage-exclude-node-modules` | Exclude node_modules from coverage (default: true) |
+| `--coverage-exclude <pattern>` | Exclude patterns from coverage |
 
 ## Development
 
