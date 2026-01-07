@@ -33,13 +33,14 @@ Usage: tryscript [options] [command]
 Golden testing for CLI applications
 
 Options:
-  --version                 Show version number
-  -h, --help                display help for command
+  --version                         Show version number
+  -h, --help                        display help for command
 
 Commands:
-  run [options] [files...]  Run golden tests
-  readme [options]          Display README documentation
-  docs [options]            Display concise syntax reference
+  run [options] [files...]          Run golden tests
+  coverage [options] <commands...>  Run commands with merged V8 coverage
+  readme [options]                  Display README documentation
+  docs [options]                    Display concise syntax reference
 ? 0
 ```
 
