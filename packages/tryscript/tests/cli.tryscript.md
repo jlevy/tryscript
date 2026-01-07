@@ -131,6 +131,24 @@ configuration, and patterns needed to write accurate CLI tests on the first try.
 ? 0
 ```
 
+# Test: docs command with --color formats markdown
+
+The NO_COLOR env must be unset for colors to work. Output contains ANSI escape sequences.
+
+```console
+$ NO_COLOR= node $TRYSCRIPT_TEST_DIR/../dist/bin.mjs docs --color 2>&1 | head -1 | cat -v
+^[[1m^[[36m# tryscript Reference^[[39m^[[22m
+? 0
+```
+
+# Test: readme command with --color formats markdown
+
+```console
+$ NO_COLOR= node $TRYSCRIPT_TEST_DIR/../dist/bin.mjs readme --color 2>&1 | head -1 | cat -v
+^[[1m^[[36m# tryscript^[[39m^[[22m
+? 0
+```
+
 ## Running Tests
 
 # Test: Run passing test and show summary
