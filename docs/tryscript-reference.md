@@ -422,18 +422,34 @@ tryscript coverage "tryscript run tests/cli/" "node dist/bin.mjs --help"
 tryscript coverage --monocart "tryscript run tests/"
 ```
 
-> **Important: Vitest Incompatibility**
+> **Important: Vitest and NODE_V8_COVERAGE**
 >
-> The `tryscript coverage` command uses `NODE_V8_COVERAGE` to collect coverage data from subprocesses.
-> However, **vitest does not use `NODE_V8_COVERAGE`** - it controls the V8 profiler directly via
-> `node:inspector` ([see vitest PR #2786](https://github.com/vitest-dev/vitest/pull/2786)).
+> Vitest uses `node:inspector` directly for its own coverage collection, not `NODE_V8_COVERAGE`
+> ([see vitest PR #2786](https://github.com/vitest-dev/vitest/pull/2786)). This means:
 >
-> This means `tryscript coverage "vitest run" ...` will NOT collect coverage from vitest tests.
-> The coverage command will warn you if a command produces no new coverage files.
+> - Vitest's **unit test coverage** (for code imported directly by tests) is NOT captured by NODE_V8_COVERAGE
+> - **Subprocess coverage IS captured** - if your vitest tests spawn CLI processes (e.g., via `spawnSync`),
+>   that subprocess execution IS tracked by NODE_V8_COVERAGE
+>
+> This is why tryscript's own `test:coverage` script uses:
+> ```bash
+> tryscript coverage --monocart "pnpm vitest run" "node dist/bin.mjs run tests/"
+> ```
+>
+> The vitest command contributes subprocess coverage from CLI integration tests, while the tryscript
+> command contributes coverage from golden tests. Both are merged into a single report.
+>
+> **When to use this pattern:**
+> - Your vitest tests include integration tests that spawn CLI subprocesses
+> - You want merged coverage from both unit tests (subprocess spawns) and golden tests
+>
+> **When to use LCOV merging instead:**
+> - Your code is primarily tested via programmatic imports (not CLI subprocess spawns)
+> - You need vitest's unit test coverage for code that isn't exercised via CLI
 
-#### Merging Vitest + Tryscript Coverage
+#### Alternative: LCOV File Merging
 
-To merge coverage from vitest and tryscript, use **LCOV file merging** instead:
+If your tests don't spawn CLI subprocesses, merge coverage from separate runs:
 
 ```bash
 # Step 1: Run vitest with its own coverage

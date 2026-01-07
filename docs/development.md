@@ -325,6 +325,16 @@ Add to your `package.json`:
 This provides realistic coverage metrics from actual CLI usage rather than just unit
 tests. By default, `node_modules` is excluded from coverage reports.
 
+#### Deep Dive: Coverage Architecture
+
+For comprehensive documentation on coverage strategies, including:
+- How NODE_V8_COVERAGE works with vitest subprocess spawns
+- When to use `tryscript coverage` vs LCOV merging
+- Monocart for accurate line counts
+- Troubleshooting coverage issues
+
+See [Research: Code Coverage Best Practices](general/research/current/research-code-coverage-typescript.md).
+
 ### Watch Mode
 
 ```bash
