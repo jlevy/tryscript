@@ -347,15 +347,28 @@ tryscript readme             # Show README
 | `--verbose` | Show detailed output |
 | `--quiet` | Suppress non-essential output |
 | `--coverage` | Enable code coverage collection (requires c8) |
-| `--coverage-dir <dir>` | Coverage output directory (default: coverage-tryscript) |
-| `--coverage-reporter <reporter...>` | Coverage reporters (default: text, html) |
+
+#### Coverage Options
+
+All coverage options mirror [c8](https://github.com/bcoe/c8) CLI flags for familiarity:
+
+| Option | Description | Default |
+|--------|-------------|---------|
+| `--coverage-dir <dir>` | Output directory for reports | `coverage-tryscript` |
+| `--coverage-reporter <r...>` | Coverage reporters | `text`, `html` |
+| `--coverage-exclude <p...>` | Patterns to exclude | none |
+| `--coverage-exclude-node-modules` | Exclude node_modules | `true` |
+| `--no-coverage-exclude-node-modules` | Include node_modules | - |
+| `--coverage-exclude-after-remap` | Exclude after sourcemap remap | `false` |
+| `--coverage-skip-full` | Hide 100% covered files | `false` |
+| `--coverage-allow-external` | Allow files outside cwd | `false` |
 
 ## Code Coverage
 
 Collect code coverage from subprocess execution using the `--coverage` flag:
 
 ```bash
-# Basic coverage
+# Basic coverage (node_modules excluded by default)
 tryscript run --coverage tests/
 
 # Custom output directory
@@ -363,6 +376,12 @@ tryscript run --coverage --coverage-dir my-coverage tests/
 
 # Custom reporters
 tryscript run --coverage --coverage-reporter text --coverage-reporter lcov tests/
+
+# Exclude additional patterns
+tryscript run --coverage --coverage-exclude '**/vendor/**' tests/
+
+# Include node_modules in coverage (not recommended)
+tryscript run --coverage --no-coverage-exclude-node-modules tests/
 ```
 
 Coverage uses [c8](https://github.com/bcoe/c8) and `NODE_V8_COVERAGE` to track code executed
@@ -371,6 +390,13 @@ by spawned CLI processes. Install c8 as a dev dependency:
 ```bash
 npm install -D c8
 ```
+
+### Default Behavior
+
+By default, tryscript coverage:
+- **Excludes node_modules** - Your reports show only your code, not dependencies
+- **Includes all source files** - Files with 0% coverage are shown (use `--coverage-skip-full` to hide 100% covered files)
+- **Uses dist/** include pattern - Tracks your built CLI output
 
 ### Sourcemap Requirement
 
@@ -423,6 +449,8 @@ export default defineConfig({
 
 After enabling sourcemaps, rebuild your project before running coverage.
 
+### Configuration
+
 Configure coverage in `tryscript.config.ts`:
 
 ```typescript
@@ -433,10 +461,27 @@ export default defineConfig({
     reportsDir: 'coverage-tryscript',
     reporters: ['text', 'html'],
     include: ['dist/**'],
+    exclude: [],                  // Additional exclude patterns
+    excludeNodeModules: true,     // Exclude node_modules (recommended)
+    excludeAfterRemap: false,     // Apply exclude after sourcemap remap
+    skipFull: false,              // Hide 100% covered files
+    allowExternal: false,         // Allow files outside cwd
     src: 'src',
   },
 });
 ```
+
+| Config Option | CLI Flag | Description |
+|---------------|----------|-------------|
+| `reportsDir` | `--coverage-dir` | Output directory |
+| `reporters` | `--coverage-reporter` | Reporter list |
+| `include` | - | Include patterns (config only) |
+| `exclude` | `--coverage-exclude` | Exclude patterns |
+| `excludeNodeModules` | `--coverage-exclude-node-modules` | Exclude node_modules |
+| `excludeAfterRemap` | `--coverage-exclude-after-remap` | Post-sourcemap exclude |
+| `skipFull` | `--coverage-skip-full` | Hide 100% files |
+| `allowExternal` | `--coverage-allow-external` | Allow external files |
+| `src` | - | Source dir for mapping (config only) |
 
 ## Best Practices
 
