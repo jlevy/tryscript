@@ -16,6 +16,7 @@ fixtures:
   - cli-fixtures/multi2.md
   - cli-fixtures/counts.md
   - cli-fixtures/coverage-pass.tryscript.md
+  - cli-fixtures/update-test.md
 ---
 
 # Master CLI Test Suite
@@ -294,6 +295,60 @@ Failed to generate coverage report: c8 report exited with code 1
 ? 0
 ```
 
+## Coverage Command
+
+# Test: coverage --help shows coverage options
+
+```console
+$ node $TRYSCRIPT_TEST_DIR/../dist/bin.mjs coverage --help
+Usage: tryscript coverage [options] <commands...>
+
+Run commands with merged V8 coverage
+
+Arguments:
+  commands                   Commands to run (each will inherit coverage
+                             environment)
+
+Options:
+  --reports-dir <dir>        Coverage output directory (default: coverage)
+  --reporters <reporters>    Comma-separated coverage reporters (default:
+                             text,json,json-summary,lcov,html)
+  --include <patterns>       Comma-separated patterns to include in coverage
+  --exclude <patterns>       Comma-separated patterns to exclude from coverage
+  --exclude-node-modules     Exclude node_modules from coverage (default: true)
+                             (default: true)
+  --no-exclude-node-modules  Include node_modules in coverage
+  --exclude-after-remap      Apply exclude logic after sourcemap remapping
+  --skip-full                Hide files with 100% coverage
+  --allow-external           Allow files from outside cwd
+  --monocart                 Use monocart for accurate line counts (recommended
+                             for merging)
+  --src <dir>                Source directory for sourcemap remapping (default:
+                             src)
+  -h, --help                 display help for command
+
+Global Options:
+  --version                  Show version number
+? 0
+```
+
+## Update Mode
+
+# Test: --update updates test file with actual output
+
+This test verifies the --update flag modifies files. We use a fixture that
+has wrong expected output and verify it gets updated. We grep to check the
+file was updated correctly (avoids backtick issues in expected output).
+
+```console
+$ cp update-test.md update-test-copy.md; node $TRYSCRIPT_TEST_DIR/../dist/bin.mjs run --update update-test-copy.md 2>&1; grep "old output" update-test-copy.md; rm update-test-copy.md
+...
+  ↻ Updated: Update test
+...
+old output
+? 0
+```
+
 ## CLI Error Handling
 
 # Test: Invalid argument shows error message
@@ -301,6 +356,16 @@ Failed to generate coverage report: c8 report exited with code 1
 ```console
 $ node $TRYSCRIPT_TEST_DIR/../dist/bin.mjs invalid-arg 2>&1; echo "exit: $?"
 error: too many arguments. Expected 0 arguments but got 1.
+(use --help for usage)
+exit: 1
+? 0
+```
+
+# Test: coverage command requires arguments
+
+```console
+$ node $TRYSCRIPT_TEST_DIR/../dist/bin.mjs coverage 2>&1; echo "exit: $?"
+error: missing required argument 'commands'
 (use --help for usage)
 exit: 1
 ? 0
