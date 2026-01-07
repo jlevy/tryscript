@@ -17,6 +17,7 @@ fixtures:
   - cli-fixtures/counts.md
   - cli-fixtures/coverage-pass.tryscript.md
   - cli-fixtures/update-test.md
+  - cli-fixtures/mock-c8.sh
 ---
 
 # Master CLI Test Suite
@@ -127,6 +128,24 @@ $ node $TRYSCRIPT_TEST_DIR/../dist/bin.mjs docs --raw | head -5
 Complete reference for writing tryscript golden tests. This document covers all syntax,
 configuration, and patterns needed to write accurate CLI tests on the first try.
 
+? 0
+```
+
+# Test: docs command with --color formats markdown
+
+The NO_COLOR env must be unset for colors to work. Output contains ANSI escape sequences.
+
+```console
+$ NO_COLOR= node $TRYSCRIPT_TEST_DIR/../dist/bin.mjs docs --color 2>&1 | head -1 | cat -v
+^[[1m^[[36m# tryscript Reference^[[39m^[[22m
+? 0
+```
+
+# Test: readme command with --color formats markdown
+
+```console
+$ NO_COLOR= node $TRYSCRIPT_TEST_DIR/../dist/bin.mjs readme --color 2>&1 | head -1 | cat -v
+^[[1m^[[36m# tryscript^[[39m^[[22m
 ? 0
 ```
 
@@ -367,6 +386,94 @@ exit: 1
 $ node $TRYSCRIPT_TEST_DIR/../dist/bin.mjs coverage 2>&1; echo "exit: $?"
 error: missing required argument 'commands'
 (use --help for usage)
+exit: 1
+? 0
+```
+
+## Coverage Command with Mock c8
+
+These tests use a mock c8 script to verify the coverage command logic.
+
+# Test: coverage command runs commands and generates report
+
+```console
+$ TRYSCRIPT_C8_COMMAND="$PWD/mock-c8.sh" node $TRYSCRIPT_TEST_DIR/../dist/bin.mjs coverage "echo hello" 2>&1
+Collecting V8 coverage to [..]
+
+=== Running command 1/1: echo hello ===
+hello
+
+=== Generating merged coverage report ===
+mock-c8 called with: report --temp-directory [..] --reports-dir coverage --src src --all --include dist/** --exclude-node-modules --reporter text --reporter json --reporter json-summary --reporter lcov --reporter html
+
+Coverage report written to coverage/
+? 0
+```
+
+# Test: coverage command with --monocart flag
+
+```console
+$ TRYSCRIPT_C8_COMMAND="$PWD/mock-c8.sh" node $TRYSCRIPT_TEST_DIR/../dist/bin.mjs coverage --monocart "echo test" 2>&1
+...
+mock-c8 called with: report --temp-directory [..] --reports-dir coverage --src src --all --include dist/** --exclude-node-modules --experimental-monocart --reporter text --reporter json --reporter json-summary --reporter lcov --reporter html
+...
+? 0
+```
+
+# Test: coverage command with custom reporters
+
+```console
+$ TRYSCRIPT_C8_COMMAND="$PWD/mock-c8.sh" node $TRYSCRIPT_TEST_DIR/../dist/bin.mjs coverage --reporters text,html "echo test" 2>&1
+...
+mock-c8 called with: report --temp-directory [..] --reports-dir coverage --src src --all --include dist/** --exclude-node-modules --reporter text --reporter html
+...
+? 0
+```
+
+# Test: coverage command with multiple commands
+
+```console
+$ TRYSCRIPT_C8_COMMAND="$PWD/mock-c8.sh" node $TRYSCRIPT_TEST_DIR/../dist/bin.mjs coverage "echo first" "echo second" 2>&1
+...
+=== Running command 1/2: echo first ===
+first
+...
+=== Running command 2/2: echo second ===
+second
+...
+mock-c8 called with: report [..]
+...
+? 0
+```
+
+# Test: coverage command with custom reports-dir
+
+```console
+$ TRYSCRIPT_C8_COMMAND="$PWD/mock-c8.sh" node $TRYSCRIPT_TEST_DIR/../dist/bin.mjs coverage --reports-dir my-coverage "echo test" 2>&1
+...
+mock-c8 called with: report --temp-directory [..] --reports-dir my-coverage --src src --all --include dist/** --exclude-node-modules --reporter text --reporter json --reporter json-summary --reporter lcov --reporter html
+...
+Coverage report written to my-coverage/
+? 0
+```
+
+# Test: coverage command with --no-exclude-node-modules
+
+```console
+$ TRYSCRIPT_C8_COMMAND="$PWD/mock-c8.sh" node $TRYSCRIPT_TEST_DIR/../dist/bin.mjs coverage --no-exclude-node-modules "echo test" 2>&1
+...
+mock-c8 called with: report --temp-directory [..] --reports-dir coverage --src src --all --include dist/** --no-exclude-node-modules --reporter text --reporter json --reporter json-summary --reporter lcov --reporter html
+...
+? 0
+```
+
+# Test: coverage command exits with failure when command fails
+
+```console
+$ TRYSCRIPT_C8_COMMAND="$PWD/mock-c8.sh" node $TRYSCRIPT_TEST_DIR/../dist/bin.mjs coverage "exit 1" 2>&1; echo "exit: $?"
+...
+Command exited with code 1: exit 1
+...
 exit: 1
 ? 0
 ```

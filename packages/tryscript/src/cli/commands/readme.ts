@@ -117,12 +117,12 @@ function isInteractive(): boolean {
  * Display the README content.
  * Exported for use as the default command.
  */
-export function showReadme(options?: { raw?: boolean }): void {
+export function showReadme(options?: { raw?: boolean; color?: boolean }): void {
   try {
     const readme = loadReadme();
 
     // Determine if we should colorize
-    const shouldColorize = !options?.raw && isInteractive();
+    const shouldColorize = options?.color ?? (!options?.raw && isInteractive());
 
     const formatted = formatMarkdown(readme, shouldColorize);
     console.log(formatted);
@@ -141,5 +141,6 @@ export function registerReadmeCommand(program: Command): void {
     .command('readme')
     .description('Display README documentation')
     .option('--raw', 'Output raw markdown without formatting')
+    .option('--color', 'Force colorized output (for testing)')
     .action(showReadme);
 }

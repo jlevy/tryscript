@@ -121,12 +121,13 @@ export function registerDocsCommand(program: Command): void {
     .command('docs')
     .description('Display concise syntax reference')
     .option('--raw', 'Output raw markdown without formatting')
-    .action((options: { raw?: boolean }) => {
+    .option('--color', 'Force colorized output (for testing)')
+    .action((options: { raw?: boolean; color?: boolean }) => {
       try {
         const docs = loadDocs();
 
         // Determine if we should colorize
-        const shouldColorize = !options.raw && isInteractive();
+        const shouldColorize = options.color ?? (!options.raw && isInteractive());
 
         const formatted = formatMarkdown(docs, shouldColorize);
         console.log(formatted);

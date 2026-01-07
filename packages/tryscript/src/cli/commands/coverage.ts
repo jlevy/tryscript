@@ -82,8 +82,15 @@ async function runCommand(
 
 /**
  * Find the c8 executable path.
+ * Can be overridden via TRYSCRIPT_C8_COMMAND env var for testing.
  */
 function findC8Path(): string | null {
+  // Allow override for testing - when set, we trust it exists
+  const override = process.env.TRYSCRIPT_C8_COMMAND;
+  if (override) {
+    return override;
+  }
+
   const localPaths = [
     resolve(process.cwd(), 'node_modules', '.bin', 'c8'),
     resolve(process.cwd(), '..', '..', 'node_modules', '.bin', 'c8'),
