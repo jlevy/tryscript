@@ -330,10 +330,11 @@ Done
 ## CLI Usage
 
 ```bash
-tryscript                    # Show help (same as --help)
-tryscript run [files...]     # Run golden tests
-tryscript docs               # Show this reference
-tryscript readme             # Show README
+tryscript                              # Show help (same as --help)
+tryscript run [files...]               # Run golden tests
+tryscript coverage <commands...>       # Run commands with merged coverage
+tryscript docs                         # Show this reference
+tryscript readme                       # Show README
 ```
 
 ### Run Options
@@ -386,10 +387,16 @@ tryscript run --coverage --no-coverage-exclude-node-modules tests/
 ```
 
 Coverage uses [c8](https://github.com/bcoe/c8) and `NODE_V8_COVERAGE` to track code executed
-by spawned CLI processes. Install c8 as a dev dependency:
+by spawned CLI processes.
+
+**Required dependencies:**
 
 ```bash
+# Basic coverage
 npm install -D c8
+
+# For --monocart flag (recommended for merging with vitest)
+npm install -D c8 monocart-coverage-reports
 ```
 
 ### Default Behavior
@@ -401,15 +408,80 @@ By default, tryscript coverage:
 
 ### Merging with Vitest Coverage
 
-If you need to merge tryscript coverage with vitest unit test coverage, use `--coverage-monocart`:
+The `coverage` command provides a simple way to merge coverage from multiple sources (e.g., vitest unit tests + CLI golden tests):
 
 ```bash
-tryscript run --coverage --coverage-monocart tests/
+# Merge vitest and tryscript coverage into a single report
+tryscript coverage "pnpm vitest run" "tryscript run tests/"
+
+# With monocart for accurate line counts
+tryscript coverage --monocart "pnpm vitest run" "tryscript run tests/"
+
+# Custom reporters
+tryscript coverage --reporters text,html,lcov "pnpm vitest run" "tryscript run tests/"
 ```
 
-This uses [monocart-coverage-reports](https://github.com/cenfun/monocart-coverage-reports) for AST-aware
+#### Coverage Command Options
+
+| Option | Description | Default |
+|--------|-------------|---------|
+| `--reports-dir <dir>` | Output directory | `coverage` |
+| `--reporters <list>` | Comma-separated reporters | `text,json,json-summary,lcov,html` |
+| `--include <patterns>` | Patterns to include | `dist/**` |
+| `--exclude <patterns>` | Patterns to exclude | none |
+| `--exclude-node-modules` | Exclude node_modules | `true` |
+| `--no-exclude-node-modules` | Include node_modules | - |
+| `--exclude-after-remap` | Post-sourcemap exclude | `false` |
+| `--skip-full` | Hide 100% files | `false` |
+| `--allow-external` | Allow external files | `false` |
+| `--monocart` | AST-aware line counts | `false` |
+| `--src <dir>` | Source dir for mapping | `src` |
+
+#### How It Works
+
+The `coverage` command:
+1. Creates a shared temporary directory for V8 coverage data
+2. Sets `NODE_V8_COVERAGE` environment variable
+3. Runs each command in sequence (all inherit the coverage env)
+4. Generates a merged coverage report using c8
+
+#### Example: CI Coverage Script
+
+```typescript
+// scripts/coverage.ts
+import { spawn } from 'node:child_process';
+
+// Use tryscript coverage to merge vitest + golden tests
+const proc = spawn('node', [
+  'dist/bin.mjs',
+  'coverage',
+  '--monocart',
+  '--reporters', 'text,json,json-summary,lcov,html',
+  'pnpm vitest run',
+  'node dist/bin.mjs run tests/**/*.tryscript.md',
+], { stdio: 'inherit' });
+```
+
+Or in bash:
+```bash
+#!/bin/bash
+node dist/bin.mjs coverage \
+  --monocart \
+  --reporters text,json,json-summary,lcov,html \
+  "pnpm vitest run" \
+  "node dist/bin.mjs run tests/**/*.tryscript.md"
+```
+
+#### Why Monocart?
+
+The `--monocart` flag uses [monocart-coverage-reports](https://github.com/cenfun/monocart-coverage-reports) for AST-aware
 line counting, producing line counts ~90% aligned with vitest. Without this flag, standard c8 may inflate
 line counts by 3-4x, making merged coverage percentages inaccurate.
+
+| Metric | Standard c8 | With --monocart | Vitest |
+|--------|-------------|-----------------|--------|
+| Total lines | ~1700 (inflated) | ~460 | ~510 |
+| Accuracy | ❌ | ✅ ~90% match | ✅ baseline |
 
 ### Sourcemap Requirement
 

@@ -48,6 +48,12 @@ The `[..]` matches any text on that line. The `...` matches zero or more lines. 
 # Install
 pnpm add -D tryscript
 
+# For coverage support (optional)
+pnpm add -D c8
+
+# For accurate line counts when merging with vitest (optional)
+pnpm add -D c8 monocart-coverage-reports
+
 # Run tests
 npx tryscript run tests/
 
@@ -106,10 +112,11 @@ Error: unknown command 'unknown-command'
 ## CLI Reference
 
 ```bash
-tryscript run [files...]  # Run golden tests
-tryscript docs            # Show syntax quick reference
-tryscript readme          # Show this documentation
-tryscript --help          # Show all options
+tryscript run [files...]          # Run golden tests
+tryscript coverage <commands...>  # Run commands with merged coverage
+tryscript docs                    # Show syntax quick reference
+tryscript readme                  # Show this documentation
+tryscript --help                  # Show all options
 ```
 
 For complete syntax reference, run `tryscript docs` or see the [reference documentation](https://github.com/jlevy/tryscript/blob/main/docs/tryscript-reference.md).
@@ -123,6 +130,7 @@ For complete syntax reference, run `tryscript docs` or see the [reference docume
 | `--filter <regex>` | Filter tests by name |
 | `--verbose` | Show detailed output |
 | `--coverage` | Collect code coverage (requires c8) |
+| `--coverage-monocart` | Use monocart for accurate line counts (requires monocart-coverage-reports) |
 | `--coverage-exclude-node-modules` | Exclude node_modules from coverage (default: true) |
 | `--coverage-exclude <pattern>` | Exclude patterns from coverage |
 
