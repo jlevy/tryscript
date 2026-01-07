@@ -367,6 +367,10 @@ All coverage options mirror [c8](https://github.com/bcoe/c8) CLI flags for famil
 
 ## Code Coverage
 
+> **Experimental**: Coverage features are experimental. Line counts may not perfectly match other tools
+> like vitest, especially without the `--monocart` flag. Use `--monocart` for best accuracy when merging
+> coverage reports from multiple sources.
+
 Collect code coverage from subprocess execution using the `--coverage` flag:
 
 ```bash

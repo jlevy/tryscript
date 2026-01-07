@@ -1,7 +1,7 @@
 # tryscript
 
-[![CI](https://github.com/jlevy/tryscript/actions/workflows/ci.yml/badge.svg)](https://github.com/jlevy/tryscript/actions/workflows/ci.yml)
-[![Coverage](https://raw.githubusercontent.com/jlevy/tryscript/main/badges/packages/tryscript/coverage-total.svg)](https://github.com/jlevy/tryscript/actions/workflows/ci.yml)
+[![CI](https://github.com/jlevy/tryscript/actions/workflows/ci.yml/badge.svg)](https://github.com/jlevy/tryscript/actions/runs/20771237745)
+[![Coverage](https://raw.githubusercontent.com/jlevy/tryscript/main/badges/packages/tryscript/coverage-total.svg)](https://github.com/jlevy/tryscript/actions/runs/20771237745)
 [![npm version](https://img.shields.io/npm/v/tryscript)](https://www.npmjs.com/package/tryscript)
 [![X Follow](https://img.shields.io/twitter/follow/ojoshe)](https://x.com/ojoshe)
 
@@ -68,7 +68,7 @@ npx tryscript run --update tests/
 - **Custom patterns** - Define regex patterns for timestamps, versions, UUIDs
 - **Update mode** - Regenerate expected output with `--update`
 - **Sandbox mode** - Isolate tests in temp directories
-- **Code coverage** - Track coverage from subprocess execution with `--coverage`
+- **Code coverage** - Track coverage from subprocess execution with `--coverage` (experimental; use `--coverage-monocart` for best accuracy)
 
 ## Example Test File
 
@@ -133,6 +133,8 @@ For complete syntax reference, run `tryscript docs` or see the [reference docume
 | `--coverage-monocart` | Use monocart for accurate line counts (requires monocart-coverage-reports) |
 | `--coverage-exclude-node-modules` | Exclude node_modules from coverage (default: true) |
 | `--coverage-exclude <pattern>` | Exclude patterns from coverage |
+
+> **Note**: Coverage features are experimental. See the [reference documentation](packages/tryscript/docs/tryscript-reference.md#code-coverage) for details on merged coverage, monocart integration, and sourcemap requirements.
 
 ## Development
 
