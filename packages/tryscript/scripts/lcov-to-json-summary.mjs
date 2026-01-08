@@ -107,4 +107,6 @@ mkdirSync(dirname(outputPath), { recursive: true });
 writeFileSync(outputPath, JSON.stringify(summary, null, 2));
 
 console.log(`Coverage summary written to ${outputPath}`);
-console.log(`Total: ${summary.total.lines.pct}% lines, ${summary.total.statements.pct}% statements, ${summary.total.functions.pct}% functions, ${summary.total.branches.pct}% branches`);
+console.log(
+  `Total: ${summary.total.lines.pct}% lines, ${summary.total.statements.pct}% statements, ${summary.total.functions.pct}% functions, ${summary.total.branches.pct}% branches`,
+);
