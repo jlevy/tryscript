@@ -49,7 +49,7 @@
     "test:golden": "node dist/bin.mjs run 'tests/**/*.tryscript.md'",
     "test:coverage:vitest": "vitest run --coverage",
     "test:coverage:tryscript": "node dist/bin.mjs run 'tests/**/*.tryscript.md' --coverage --coverage-reporter text --coverage-reporter lcov",
-    "test:coverage:merge": "mkdir -p coverage-merged && npx lcov-result-merger 'coverage*/lcov.info' coverage-merged/lcov.info && echo 'Merged coverage written to coverage-merged/lcov.info'",
+    "test:coverage:merge": "mkdir -p coverage-merged && npx lcov-result-merger 'coverage*/lcov.info' coverage-merged/lcov.info && node scripts/lcov-to-json-summary.mjs coverage-merged/lcov.info coverage-merged/coverage-summary.json",
     "test:coverage": "pnpm test:coverage:vitest && pnpm test:coverage:tryscript && pnpm test:coverage:merge",
     "publint": "publint",
     "prepack": "pnpm build",
