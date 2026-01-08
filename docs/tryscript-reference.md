@@ -450,15 +450,15 @@ The `--merge-lcov` flag:
 ```yaml
 - run: pnpm test:coverage
 
-# Upload to Codecov
-- uses: codecov/codecov-action@v4
-  with:
-    files: coverage-tryscript/lcov.info
-
-# Generate badges (optional)
+# Generate badges from local coverage-summary.json
 - uses: jpb06/coverage-badges-action@v1
   with:
     coverage-summary-path: coverage-tryscript/coverage-summary.json
+
+# Optional: Upload to Codecov for historical tracking and PR comments
+# - uses: codecov/codecov-action@v4
+#   with:
+#     files: coverage-tryscript/lcov.info
 ```
 
 **Why this approach?**
