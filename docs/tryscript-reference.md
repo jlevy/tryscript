@@ -432,6 +432,11 @@ The `--merge-lcov` flag:
 - Merges both coverage sources (taking max hit count per line)
 - Writes merged `lcov.info` and `coverage-summary.json`
 
+**Output files** (in `coverage-tryscript/` by default):
+- `lcov.info` - Merged LCOV file (for Codecov, SonarQube, etc.)
+- `coverage-summary.json` - JSON summary (for badge generation)
+- `index.html` - HTML coverage report
+
 **In package.json:**
 ```json
 {
@@ -439,6 +444,21 @@ The `--merge-lcov` flag:
     "test:coverage": "vitest run --coverage && tryscript run 'tests/**/*.tryscript.md' --coverage --merge-lcov coverage/lcov.info"
   }
 }
+```
+
+**Example CI workflow** (GitHub Actions):
+```yaml
+- run: pnpm test:coverage
+
+# Upload to Codecov
+- uses: codecov/codecov-action@v4
+  with:
+    files: coverage-tryscript/lcov.info
+
+# Generate badges (optional)
+- uses: jpb06/coverage-badges-action@v1
+  with:
+    coverage-summary-path: coverage-tryscript/coverage-summary.json
 ```
 
 **Why this approach?**
