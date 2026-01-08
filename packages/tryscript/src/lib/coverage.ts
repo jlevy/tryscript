@@ -11,6 +11,13 @@ import { join, resolve } from 'node:path';
 import { existsSync } from 'node:fs';
 import type { CoverageContext, CoverageConfig } from './types.js';
 import { resolveCoverageConfig } from './config.js';
+import {
+  readLcovFile,
+  mergeLcov,
+  writeLcovFile,
+  lcovToJsonSummary,
+  writeJsonSummary,
+} from './lcov.js';
 
 /**
  * Find the c8 executable path.
@@ -148,4 +155,46 @@ export async function cleanupCoverageContext(ctx: CoverageContext): Promise<void
   } catch {
     // Directory doesn't exist, nothing to clean up
   }
+}
+
+/**
+ * Merge external LCOV file with generated coverage.
+ * Reads the generated lcov.info, merges with external LCOV, and writes back.
+ * Also generates coverage-summary.json for badge generation.
+ *
+ * @returns Object with merged coverage percentages, or null if merge failed
+ */
+export function mergeExternalCoverage(
+  reportsDir: string,
+  externalLcovPath: string,
+): { lines: number; functions: number } | null {
+  const generatedLcovPath = join(reportsDir, 'lcov.info');
+
+  if (!existsSync(externalLcovPath)) {
+    console.error(`External LCOV file not found: ${externalLcovPath}`);
+    return null;
+  }
+
+  if (!existsSync(generatedLcovPath)) {
+    console.error(`Generated LCOV file not found: ${generatedLcovPath}`);
+    console.error('Make sure "lcov" is included in reporters');
+    return null;
+  }
+
+  // Read and merge LCOV files
+  const externalLcov = readLcovFile(externalLcovPath);
+  const generatedLcov = readLcovFile(generatedLcovPath);
+  const mergedLcov = mergeLcov(externalLcov, generatedLcov);
+
+  // Write merged LCOV
+  writeLcovFile(generatedLcovPath, mergedLcov);
+
+  // Write JSON summary from merged data
+  const summary = lcovToJsonSummary(mergedLcov);
+  writeJsonSummary(join(reportsDir, 'coverage-summary.json'), summary);
+
+  return {
+    lines: summary.total.lines.pct,
+    functions: summary.total.functions.pct,
+  };
 }

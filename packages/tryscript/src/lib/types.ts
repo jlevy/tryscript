@@ -140,6 +140,8 @@ export const CoverageConfigSchema = z.object({
   src: z.string().optional(),
   /** Use monocart for more accurate line counts (c8 --experimental-monocart) */
   monocart: z.boolean().optional(),
+  /** Path to external LCOV file to merge (e.g., vitest coverage output) */
+  mergeLcov: z.string().optional(),
 });
 
 /**
@@ -149,10 +151,11 @@ export type CoverageConfig = z.infer<typeof CoverageConfigSchema>;
 
 /**
  * Runtime context for coverage collection during test execution.
+ * Note: options type is defined in config.ts as ResolvedCoverageConfig
  */
 export interface CoverageContext {
   /** Temporary directory for V8 coverage data files */
   tempDir: string;
   /** Resolved coverage options with defaults applied */
-  options: Required<CoverageConfig>;
+  options: Omit<Required<CoverageConfig>, 'mergeLcov'> & { mergeLcov?: string };
 }

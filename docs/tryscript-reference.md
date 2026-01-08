@@ -364,6 +364,7 @@ All coverage options mirror [c8](https://github.com/bcoe/c8) CLI flags for famil
 | `--coverage-skip-full` | Hide 100% covered files | `false` |
 | `--coverage-allow-external` | Allow files outside cwd | `false` |
 | `--coverage-monocart` | Use monocart for accurate line counts | `false` |
+| `--merge-lcov <path>` | Merge with external LCOV file (e.g., vitest) | none |
 
 ## Code Coverage
 
@@ -412,7 +413,70 @@ By default, tryscript coverage:
 
 ### Merging Coverage from Multiple Sources
 
-The `coverage` command merges V8 coverage from multiple CLI commands into a single report:
+Most projects have both **unit tests** (testing code via imports) and **CLI tests** (testing via subprocess).
+To get complete coverage, merge results from both sources using the `--merge-lcov` flag.
+
+#### Recommended: Built-in LCOV Merging
+
+```bash
+# Step 1: Run vitest with coverage (produces coverage/lcov.info)
+vitest run --coverage
+
+# Step 2: Run tryscript with --merge-lcov to merge vitest's coverage
+tryscript run 'tests/**/*.tryscript.md' --coverage --merge-lcov coverage/lcov.info
+```
+
+The `--merge-lcov` flag:
+- Reads the external LCOV file (e.g., from vitest)
+- Runs tryscript tests with coverage collection
+- Merges both coverage sources (taking max hit count per line)
+- Writes merged `lcov.info` and `coverage-summary.json`
+
+**Output files** (in `coverage-tryscript/` by default):
+- `lcov.info` - Merged LCOV file (for Codecov, SonarQube, etc.)
+- `coverage-summary.json` - JSON summary (for badge generation)
+- `index.html` - HTML coverage report
+
+**In package.json:**
+```json
+{
+  "scripts": {
+    "test:coverage": "vitest run --coverage && tryscript run 'tests/**/*.tryscript.md' --coverage --merge-lcov coverage/lcov.info"
+  }
+}
+```
+
+**Example CI workflow** (GitHub Actions):
+```yaml
+- run: pnpm test:coverage
+
+# Generate badges from local coverage-summary.json
+- uses: jpb06/coverage-badges-action@v1
+  with:
+    coverage-summary-path: coverage-tryscript/coverage-summary.json
+
+# Optional: Upload to Codecov for historical tracking and PR comments
+# - uses: codecov/codecov-action@v4
+#   with:
+#     files: coverage-tryscript/lcov.info
+```
+
+**Why this approach?**
+
+| Coverage Source | What It Captures |
+|-----------------|------------------|
+| `vitest run --coverage` | Code imported directly by unit tests |
+| `tryscript run --coverage` | Code executed by CLI subprocess spawns |
+| `--merge-lcov` | Combines both into single report |
+
+> **Technical Note**: Vitest uses `node:inspector` for coverage, not `NODE_V8_COVERAGE`.
+> This means vitest's coverage and tryscript's coverage use different collection mechanisms
+> and must be merged via LCOV files rather than combined at the V8 level.
+
+#### Alternative: tryscript coverage command
+
+For projects that **only** test via CLI subprocesses (no unit tests with direct imports),
+the `tryscript coverage` command provides a simpler workflow:
 
 ```bash
 # Merge coverage from multiple CLI test commands
@@ -422,47 +486,8 @@ tryscript coverage "tryscript run tests/cli/" "node dist/bin.mjs --help"
 tryscript coverage --monocart "tryscript run tests/"
 ```
 
-> **Important: Vitest and NODE_V8_COVERAGE**
->
-> Vitest uses `node:inspector` directly for its own coverage collection, not `NODE_V8_COVERAGE`
-> ([see vitest PR #2786](https://github.com/vitest-dev/vitest/pull/2786)). This means:
->
-> - Vitest's **unit test coverage** (for code imported directly by tests) is NOT captured by NODE_V8_COVERAGE
-> - **Subprocess coverage IS captured** - if your vitest tests spawn CLI processes (e.g., via `spawnSync`),
->   that subprocess execution IS tracked by NODE_V8_COVERAGE
->
-> This is why tryscript's own `test:coverage` script uses:
-> ```bash
-> tryscript coverage --monocart "pnpm vitest run" "node dist/bin.mjs run tests/"
-> ```
->
-> The vitest command contributes subprocess coverage from CLI integration tests, while the tryscript
-> command contributes coverage from golden tests. Both are merged into a single report.
->
-> **When to use this pattern:**
-> - Your vitest tests include integration tests that spawn CLI subprocesses
-> - You want merged coverage from both unit tests (subprocess spawns) and golden tests
->
-> **When to use LCOV merging instead:**
-> - Your code is primarily tested via programmatic imports (not CLI subprocess spawns)
-> - You need vitest's unit test coverage for code that isn't exercised via CLI
-
-#### Alternative: LCOV File Merging
-
-If your tests don't spawn CLI subprocesses, merge coverage from separate runs:
-
-```bash
-# Step 1: Run vitest with its own coverage
-vitest run --coverage
-
-# Step 2: Run tryscript with coverage
-tryscript run --coverage tests/
-
-# Step 3: Merge the LCOV files using lcov or a merge tool
-lcov -a coverage/lcov.info -a coverage-tryscript/lcov.info -o coverage-merged/lcov.info
-```
-
-Or use tools like `nyc merge`, `istanbul-merge`, or custom scripts to combine LCOV/JSON coverage.
+> **Note**: This approach does NOT capture vitest unit test coverage. Use LCOV merging
+> if you have unit tests that import code directly.
 
 #### Coverage Command Options
 
@@ -597,6 +622,7 @@ export default defineConfig({
 | `allowExternal` | `--coverage-allow-external` | Allow external files |
 | `src` | - | Source dir for mapping (config only) |
 | `monocart` | `--coverage-monocart` | AST-aware line counts |
+| `mergeLcov` | `--merge-lcov` | Path to external LCOV to merge |
 
 ## Best Practices
 

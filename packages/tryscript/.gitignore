@@ -4,3 +4,7 @@ dist/
 # Generated files (copied during build)
 README.md
 docs/
+
+# Coverage output
+coverage/
+coverage-tryscript/
