@@ -34,7 +34,7 @@ jobs:
         uses: codecov/codecov-action@v4
         if: always()
         with:
-          files: packages/tryscript/coverage-merged/lcov.info
+          files: packages/tryscript/coverage-tryscript/lcov.info
           fail_ci_if_error: false
           verbose: true
 
@@ -43,7 +43,7 @@ jobs:
         uses: jpb06/coverage-badges-action@v1.4.6
         if: github.ref == 'refs/heads/main' && github.event_name == 'push'
         with:
-          coverage-summary-path: packages/tryscript/coverage-merged/coverage-summary.json
+          coverage-summary-path: packages/tryscript/coverage-tryscript/coverage-summary.json
           output-folder: ./badges
           branches: main
           no-commit: true

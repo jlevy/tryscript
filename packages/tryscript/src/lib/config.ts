@@ -30,8 +30,13 @@ export interface TryscriptConfig {
   coverage?: CoverageConfig;
 }
 
+/** Resolved coverage config with required fields (except optional mergeLcov) */
+export type ResolvedCoverageConfig = Omit<Required<CoverageConfig>, 'mergeLcov'> & {
+  mergeLcov?: string;
+};
+
 /** Default coverage configuration values. */
-export const DEFAULT_COVERAGE_CONFIG: Required<CoverageConfig> = {
+export const DEFAULT_COVERAGE_CONFIG: ResolvedCoverageConfig = {
   reportsDir: 'coverage-tryscript',
   reporters: ['text', 'html'],
   include: ['dist/**'],
@@ -47,7 +52,7 @@ export const DEFAULT_COVERAGE_CONFIG: Required<CoverageConfig> = {
 /**
  * Resolve coverage options by merging user config with defaults.
  */
-export function resolveCoverageConfig(config?: CoverageConfig): Required<CoverageConfig> {
+export function resolveCoverageConfig(config?: CoverageConfig): ResolvedCoverageConfig {
   return {
     reportsDir: config?.reportsDir ?? DEFAULT_COVERAGE_CONFIG.reportsDir,
     reporters: config?.reporters ?? DEFAULT_COVERAGE_CONFIG.reporters,
@@ -59,6 +64,7 @@ export function resolveCoverageConfig(config?: CoverageConfig): Required<Coverag
     allowExternal: config?.allowExternal ?? DEFAULT_COVERAGE_CONFIG.allowExternal,
     src: config?.src ?? DEFAULT_COVERAGE_CONFIG.src,
     monocart: config?.monocart ?? DEFAULT_COVERAGE_CONFIG.monocart,
+    mergeLcov: config?.mergeLcov,
   };
 }
 
