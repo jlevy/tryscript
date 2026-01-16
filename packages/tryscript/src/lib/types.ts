@@ -25,6 +25,10 @@ export const TestConfigSchema = z.object({
     .optional()
     .describe('Custom elision patterns'),
   tests: z.array(z.string()).optional().describe('Test file glob patterns'),
+  path: z
+    .array(z.string())
+    .optional()
+    .describe('Directories to prepend to PATH (resolved relative to test file)'),
 });
 
 /**

@@ -28,6 +28,11 @@ export interface TryscriptConfig {
   tests?: string[];
   /** Coverage configuration (used with --coverage flag) */
   coverage?: CoverageConfig;
+  /**
+   * Directories to prepend to PATH (resolved relative to test file).
+   * Makes executables in these directories available by name in commands.
+   */
+  path?: string[];
 }
 
 /** Default coverage configuration values. */
@@ -91,6 +96,8 @@ export function mergeConfig(base: TryscriptConfig, frontmatter: TestConfig): Try
     env: { ...base.env, ...frontmatter.env },
     patterns: { ...base.patterns, ...frontmatter.patterns },
     fixtures: [...(base.fixtures ?? []), ...(frontmatter.fixtures ?? [])],
+    // Frontmatter paths have higher priority, so they come first
+    path: [...(frontmatter.path ?? []), ...(base.path ?? [])],
   };
 }
 

@@ -1,7 +1,7 @@
 import { spawn } from 'node:child_process';
 import { mkdtemp, realpath, rm, cp } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
-import { join, dirname, resolve, basename } from 'node:path';
+import { join, dirname, resolve, basename, delimiter } from 'node:path';
 import treeKill from 'tree-kill';
 import type { TestBlock, TestBlockResult } from './types.js';
 import type { TryscriptConfig, Fixture } from './config.js';
@@ -42,6 +42,23 @@ function normalizeFixture(fixture: string | Fixture): Fixture {
     return { source: fixture };
   }
   return fixture;
+}
+
+/**
+ * Build PATH by prepending configured directories.
+ * Paths are resolved relative to the test file directory.
+ */
+function buildPath(configPaths: string[] | undefined, testDir: string): string {
+  const existingPath = process.env.PATH ?? '';
+
+  if (!configPaths || configPaths.length === 0) {
+    return existingPath;
+  }
+
+  // Resolve paths relative to test file directory
+  const resolvedPaths = configPaths.map((p) => resolve(testDir, p));
+
+  return [...resolvedPaths, existingPath].join(delimiter);
 }
 
 /**
@@ -125,6 +142,8 @@ export async function createExecutionContext(
       FORCE_COLOR: '0',
       // Provide test directory for portable test commands
       TRYSCRIPT_TEST_DIR: testDir,
+      // Prepend custom paths to PATH
+      PATH: buildPath(config.path, testDir),
     } as Record<string, string>,
     timeout: config.timeout ?? DEFAULT_TIMEOUT,
     before: config.before,
