@@ -1,10 +1,12 @@
 # Plan Spec: PATH and Binary Configuration
 
+**Status**: DRAFT
+
 ## Purpose
 
-This plan analyzes and designs features to make CLI testing cleaner and more ergonomic,
-particularly for testing package binaries in sandbox mode. The goal is to enable tests that
-read like documentation rather than implementation details.
+This plan designs features to make CLI testing cleaner and more ergonomic, particularly for
+testing package binaries in sandbox mode. The goal is to enable tests that read like
+documentation rather than implementation details.
 
 **Related Issue**: [#32 - Feature: Add packageBin option to automatically expose package.json
 bin entries in PATH](https://github.com/jlevy/tryscript/issues/32)
@@ -51,11 +53,13 @@ Following tryscript's existing philosophy:
 
 ## Summary of Task
 
-Design and implement one or more features to enable cleaner binary invocation in tests:
+Implement three complementary features for cleaner binary invocation in tests:
 
-1. **Analyze approaches** for PATH/binary configuration
-2. **Recommend a phased implementation** starting with highest-value features
-3. **Ensure flexibility** for both Node packages and other binaries
+| Phase | Feature | Value | Complexity |
+|-------|---------|-------|------------|
+| I | `path` option | Generic PATH control for any binary | Low |
+| II | `packageBin` option | Zero-config for Node.js packages | Medium |
+| III | `TRYSCRIPT_PACKAGE_ROOT` env var | Advanced/manual use cases | Low |
 
 ## Backward Compatibility
 
@@ -66,32 +70,222 @@ Design and implement one or more features to enable cleaner binary invocation in
 | Test file syntax | Unchanged | No changes to test syntax |
 | Default behavior | Unchanged | Features are opt-in |
 
-## Stage 1: Planning Stage
+---
 
-### Problem Analysis
+## Phase I: `path` Configuration Option
 
-**Core problem**: In sandbox mode, test commands cannot easily reference the package binary
-because:
+### Overview
 
-1. CWD is a temp directory (sandbox isolation)
-2. `$TRYSCRIPT_TEST_DIR` points to test file location, not package root
-3. PATH doesn't include the package's bin directory
+Add a `path` config option that prepends directories to the PATH environment variable,
+making binaries in those directories available by name.
 
-**Use cases to support**:
+**Use cases**:
+- Built binaries in `dist/`, `build/`, or custom locations
+- Non-Node binaries (Rust, Go, Python, etc.)
+- Utility scripts in project directories
+- Pre-existing `node_modules/.bin` directory
 
-1. **Node.js packages** with `bin` entries in package.json (most common)
-2. **Built binaries** in `dist/`, `build/`, or custom locations
-3. **Non-Node binaries** (Rust, Go, Python, etc.)
-4. **Monorepo packages** where binary is in a different package
-5. **Multiple binaries** in a single package
+### Configuration
 
-### Approaches Analyzed
+**Frontmatter**:
+```yaml
+---
+sandbox: true
+path:
+  - ../dist              # Relative to test file directory
+  - ../node_modules/.bin # Access installed package bins
+  - /usr/local/bin       # Absolute paths supported
+---
+```
 
-#### Approach A: `packageBin` Option (Proposed in Issue #32)
+**Config file** (`tryscript.config.ts`):
+```typescript
+export default defineConfig({
+  path: ['../dist'],
+});
+```
 
-Automatically expose package.json `bin` entries in PATH.
+### Behavior
 
-**Configuration**:
+1. Paths are resolved relative to the test file directory (not the sandbox CWD)
+2. Resolved paths are prepended to PATH in order (first entry has highest priority)
+3. Works with or without sandbox mode
+4. Paths from frontmatter and config file are concatenated (frontmatter paths first)
+
+### Implementation
+
+**Files to modify**:
+
+| File | Changes |
+|------|---------|
+| `src/lib/types.ts` | Add `path` to `TestConfigSchema` |
+| `src/lib/config.ts` | Add `path` to interface, update `mergeConfig()` |
+| `src/lib/runner.ts` | Build PATH in `createExecutionContext()` |
+
+**Schema addition** (`types.ts`):
+```typescript
+export const TestConfigSchema = z.object({
+  // ... existing fields ...
+  path: z.array(z.string()).optional(),
+});
+```
+
+**Interface addition** (`config.ts`):
+```typescript
+export interface TryscriptConfig {
+  // ... existing fields ...
+
+  /**
+   * Directories to prepend to PATH (resolved relative to test file).
+   * Makes executables in these directories available by name in commands.
+   */
+  path?: string[];
+}
+```
+
+**Merge logic** (`config.ts`):
+```typescript
+export function mergeConfig(base: TryscriptConfig, frontmatter: TestConfig): TryscriptConfig {
+  return {
+    ...base,
+    ...frontmatter,
+    env: { ...base.env, ...frontmatter.env },
+    patterns: { ...base.patterns, ...frontmatter.patterns },
+    fixtures: [...(base.fixtures ?? []), ...(frontmatter.fixtures ?? [])],
+    path: [...(frontmatter.path ?? []), ...(base.path ?? [])],  // frontmatter first
+  };
+}
+```
+
+**PATH building** (`runner.ts`):
+```typescript
+import { delimiter, resolve } from 'node:path';
+
+function buildPath(configPaths: string[] | undefined, testDir: string): string {
+  const existingPath = process.env.PATH ?? '';
+
+  if (!configPaths || configPaths.length === 0) {
+    return existingPath;
+  }
+
+  // Resolve paths relative to test file directory
+  const resolvedPaths = configPaths.map((p) => resolve(testDir, p));
+
+  return [...resolvedPaths, existingPath].join(delimiter);
+}
+
+// In createExecutionContext():
+const ctx: ExecutionContext = {
+  // ... existing fields ...
+  env: {
+    ...process.env,
+    ...config.env,
+    ...coverageEnv,
+    NO_COLOR: config.env?.NO_COLOR ?? '1',
+    FORCE_COLOR: '0',
+    TRYSCRIPT_TEST_DIR: testDir,
+    PATH: buildPath(config.path, testDir),  // New: custom PATH
+  } as Record<string, string>,
+};
+```
+
+### Tests
+
+**Unit tests** (`runner.test.ts`):
+- Empty `path` config returns original PATH
+- Single path is prepended correctly
+- Multiple paths prepended in order
+- Relative paths resolved from test directory
+- Absolute paths used as-is
+- Path delimiter correct for platform
+
+**Golden test** (`tests/path-option.tryscript.md`):
+```yaml
+---
+sandbox: true
+path:
+  - cli-fixtures/bin
+---
+
+# Test: Binary from custom path
+
+Binaries in path directories are available by name.
+
+```console
+$ hello-world
+Hello from custom bin!
+? 0
+```
+```
+
+With fixture `tests/cli-fixtures/bin/hello-world`:
+```bash
+#!/bin/sh
+echo "Hello from custom bin!"
+```
+
+### Documentation
+
+Update `tryscript-reference.md`:
+
+```markdown
+### path
+
+Directories to prepend to PATH, making executables available by name.
+
+**Type**: `string[]`
+**Default**: `undefined` (use system PATH)
+
+Paths are resolved relative to the test file directory. This is useful for:
+- Testing built binaries without full paths
+- Adding utility scripts to PATH
+- Using `node_modules/.bin` for installed packages
+
+**Example**:
+```yaml
+---
+sandbox: true
+path:
+  - ../dist           # Your built binary
+  - ../scripts        # Utility scripts
+---
+
+# Now you can call binaries by name
+```console
+$ my-cli --version
+1.0.0
+```
+```
+```
+
+### Acceptance Criteria
+
+- [ ] `path: [../dist]` adds `../dist` (resolved) to PATH
+- [ ] Multiple paths prepended in order specified
+- [ ] Paths resolve relative to test file, not sandbox CWD
+- [ ] Works with and without sandbox mode
+- [ ] Config file and frontmatter paths merge correctly
+- [ ] Documentation updated
+- [ ] Tests pass
+
+---
+
+## Phase II: `packageBin` Configuration Option
+
+### Overview
+
+Add a `packageBin` config option that automatically exposes `package.json` bin entries in
+PATH by creating wrapper scripts. This provides zero-config binary access for Node.js
+packages.
+
+**Use cases**:
+- Testing the CLI you're developing
+- Zero-config setup for npm packages
+- Matching `npx`/`pnpm exec` developer experience
+
+### Configuration
+
+**Frontmatter**:
 ```yaml
 ---
 sandbox: true
@@ -99,471 +293,862 @@ packageBin: true
 ---
 ```
 
-**How it works**:
-1. Find nearest `package.json` from test file directory
-2. Read `bin` field (string or object form)
-3. Create wrapper scripts or symlinks in a temp `.bin` directory
-4. Prepend `.bin` directory to PATH
-
-**Pros**:
-- Zero-config for standard npm packages
-- Uses existing npm convention
-- Matches `npx`/`pnpm exec` developer experience
-- Handles both `"bin": "./cli.js"` and `"bin": { "name": "./cli.js" }` forms
-
-**Cons**:
-- Node.js/npm specific
-- Requires Node.js runtime for execution (even if binary is compiled)
-- Doesn't help non-Node packages
-
-**Complexity**: Medium (package.json parsing, wrapper generation)
-
----
-
-#### Approach B: Enhanced Environment Variables
-
-Add more environment variables to make path construction easier.
-
-**New variables**:
-```
-TRYSCRIPT_PACKAGE_ROOT  - Root of nearest package.json
-TRYSCRIPT_BIN_DIR       - Package's bin directory if defined
-TRYSCRIPT_DIST          - Package's dist/build directory
-```
-
-**Example usage**:
-```console
-$ node $TRYSCRIPT_PACKAGE_ROOT/dist/bin.mjs create "task"
-```
-
-**Pros**:
-- Simple to implement
-- Works for any language
-- No new configuration needed
-- Backwards compatible
-
-**Cons**:
-- Still verbose commands
-- Doesn't solve the ergonomics problem
-- Variable names may not match actual project structure
-
-**Complexity**: Low
-
----
-
-#### Approach C: `path` Configuration Option
-
-Allow users to prepend custom directories to PATH.
-
-**Configuration**:
-```yaml
----
-sandbox: true
-path:
-  - ../dist           # Relative to test file
-  - /usr/local/bin    # Absolute paths
----
-```
-
-**How it works**:
-1. Resolve paths relative to test file directory
-2. Prepend to PATH in execution environment
-
-**Pros**:
-- Language-agnostic
-- Explicit control over PATH
-- Works with any binary location
-- Simple mental model
-
-**Cons**:
-- Requires manual configuration
-- Doesn't handle Node.js `bin` field conventions
-- User must know binary location
-
-**Complexity**: Low
-
----
-
-#### Approach D: `bin` Configuration (Command Aliases)
-
-Allow explicit command-to-binary mappings.
-
-**Configuration**:
-```yaml
----
-sandbox: true
-bin:
-  bd: ../dist/bin.mjs           # Generates wrapper script
-  bd: node ../dist/bin.mjs      # Or explicit command
----
-```
-
-**How it works**:
-1. For each entry, create executable wrapper in sandbox
-2. Wrappers resolve paths relative to test directory
-
-**Pros**:
-- Explicit control
-- Works with any runtime
-- Can alias to complex commands
-
-**Cons**:
-- Duplicates package.json bin field
-- More configuration to maintain
-- Risk of drift from actual package setup
-
-**Complexity**: Medium
-
----
-
-#### Approach E: Before Hook Utilities
-
-Provide helper functions for common patterns.
-
-**Configuration**:
-```yaml
----
-sandbox: true
-before: tryscript:expose-package-bin
----
-```
-
-Or shell functions:
-```yaml
----
-sandbox: true
-before: |
-  eval "$(tryscript --export-bin-helpers)"
----
-```
-
-**Pros**:
-- Composable
-- No new config fields
-- Leverages existing `before` mechanism
-
-**Cons**:
-- Less discoverable
-- More verbose than dedicated option
-- Relies on shell-specific syntax
-
-**Complexity**: Low to Medium
-
----
-
-### Comparative Analysis
-
-| Approach | Node Packages | Other Binaries | Ergonomics | Complexity |
-|----------|---------------|----------------|------------|------------|
-| A: packageBin | ★★★ | ✗ | ★★★ | Medium |
-| B: Env vars | ★★ | ★★ | ★ | Low |
-| C: path option | ★★ | ★★★ | ★★ | Low |
-| D: bin aliases | ★★ | ★★★ | ★★★ | Medium |
-| E: Hook utils | ★★ | ★★ | ★ | Low |
-
-### Recommended Strategy
-
-**Implement multiple complementary features** in phases, prioritizing high-value, low-risk
-additions:
-
-1. **Phase 1: `path` option** (Low complexity, high flexibility)
-   - Works for all languages
-   - Simple implementation
-   - Provides immediate value
-
-2. **Phase 2: `packageBin` option** (Medium complexity, best Node.js experience)
-   - Zero-config for npm packages
-   - Builds on Phase 1 infrastructure
-   - Most requested feature
-
-3. **Phase 3 (Optional): Additional environment variables**
-   - `TRYSCRIPT_PACKAGE_ROOT` for advanced use cases
-   - Backwards compatible enhancement
-
-### Scope Definition
-
-**In Scope**:
-- `path` config option (array of paths to prepend to PATH)
-- `packageBin` config option (boolean to auto-expose package.json bins)
-- Documentation and examples
-- Tests for new features
-
-**Out of Scope**:
-- Command aliases (`bin` config) - can be added later if needed
-- Cross-package bin resolution in monorepos (defer to explicit `path`)
-- Windows-specific handling beyond basic compatibility
-
-**Non-Goals**:
-- Replacing shell's PATH mechanism
-- Auto-detecting binary locations without configuration
-- Supporting every edge case of package.json bin field
-
-## Stage 2: Architecture Stage
-
-### Configuration Schema Changes
-
+**Config file** (`tryscript.config.ts`):
 ```typescript
-// In config.ts
-export interface TryscriptConfig {
-  // ... existing fields ...
+export default defineConfig({
+  packageBin: true,
+});
+```
 
-  /**
-   * Directories to prepend to PATH (resolved relative to test file).
-   * Makes binaries in these directories available by name.
-   */
-  path?: string[];
+### Behavior
 
-  /**
-   * Auto-expose package.json bin entries in PATH.
-   * When true, finds nearest package.json and makes its bin commands available.
-   */
-  packageBin?: boolean;
+1. When `packageBin: true`, find nearest `package.json` walking up from test file
+2. Parse the `bin` field (supports both string and object forms)
+3. Create wrapper scripts in a temp `.bin` directory within the sandbox temp dir
+4. Prepend `.bin` directory to PATH (before any `path` config entries)
+
+**package.json bin formats supported**:
+
+```json
+// String form: command name = package name
+{
+  "name": "my-cli",
+  "bin": "./dist/cli.mjs"
 }
-```
+// Result: `my-cli` command available
 
-### Implementation Architecture
-
-#### Phase 1: `path` Option
-
-**Files to modify**:
-- `packages/tryscript/src/lib/types.ts` - Add `path` to schema
-- `packages/tryscript/src/lib/config.ts` - Add `path` to interface and merge logic
-- `packages/tryscript/src/lib/runner.ts` - Prepend paths to PATH env var
-
-**Implementation**:
-```typescript
-// In runner.ts createExecutionContext()
-function buildPath(config: TryscriptConfig, testDir: string): string {
-  const existingPath = process.env.PATH ?? '';
-
-  if (!config.path || config.path.length === 0) {
-    return existingPath;
+// Object form: explicit command names
+{
+  "name": "my-package",
+  "bin": {
+    "cmd1": "./dist/cmd1.mjs",
+    "cmd2": "./dist/cmd2.js"
   }
-
-  // Resolve paths relative to test directory
-  const resolvedPaths = config.path.map(p => resolve(testDir, p));
-
-  return [...resolvedPaths, existingPath].join(delimiter);
 }
+// Result: `cmd1` and `cmd2` commands available
 ```
 
-#### Phase 2: `packageBin` Option
+### Implementation
 
-**Files to modify**:
-- `packages/tryscript/src/lib/types.ts` - Add `packageBin` to schema
-- `packages/tryscript/src/lib/config.ts` - Add `packageBin` to interface
-- `packages/tryscript/src/lib/runner.ts` - Package.json detection and bin setup
-- New: `packages/tryscript/src/lib/package-bin.ts` - Package.json bin utilities
-
-**Implementation approach**:
-
-1. **Find package.json**: Walk up from test file directory
-2. **Parse bin field**: Handle both string and object forms
-3. **Create bin directory**: Temp directory with wrapper scripts
-4. **Generate wrappers**:
-   - For `.js`/`.mjs` files: Node.js wrapper
-   - For other files: Direct execution wrapper
-5. **Prepend to PATH**: Add bin directory to PATH
+**New file**: `src/lib/package-bin.ts`
 
 ```typescript
-// New file: package-bin.ts
-interface PackageBin {
+import { existsSync } from 'node:fs';
+import { readFile, mkdir, writeFile } from 'node:fs/promises';
+import { dirname, join, resolve, extname } from 'node:path';
+
+export interface PackageBinEntry {
+  /** Command name (what user types) */
   name: string;
-  path: string;  // Absolute path to binary
+  /** Absolute path to the binary file */
+  path: string;
 }
 
+/**
+ * Find nearest package.json by walking up from startDir.
+ * Returns the path to package.json, or null if not found.
+ */
 export async function findPackageJson(startDir: string): Promise<string | null> {
   let dir = startDir;
-  while (dir !== dirname(dir)) {
+  const root = dirname(dir);
+
+  while (dir !== root) {
     const pkgPath = join(dir, 'package.json');
     if (existsSync(pkgPath)) {
       return pkgPath;
     }
-    dir = dirname(dir);
+    const parent = dirname(dir);
+    if (parent === dir) break;  // Reached filesystem root
+    dir = parent;
   }
+
+  // Check root directory
+  const rootPkg = join(dir, 'package.json');
+  if (existsSync(rootPkg)) {
+    return rootPkg;
+  }
+
   return null;
 }
 
-export function parsePackageBin(pkgJson: unknown, pkgDir: string): PackageBin[] {
-  const pkg = pkgJson as { name?: string; bin?: string | Record<string, string> };
+/**
+ * Parse package.json and extract bin entries.
+ * Handles both string form ("bin": "./cli.js") and object form ("bin": {"name": "./cli.js"}).
+ */
+export function parsePackageBin(
+  pkgJson: unknown,
+  pkgDir: string,
+): PackageBinEntry[] {
+  const pkg = pkgJson as {
+    name?: string;
+    bin?: string | Record<string, string>;
+  };
 
-  if (!pkg.bin) return [];
+  if (!pkg.bin) {
+    return [];
+  }
 
   if (typeof pkg.bin === 'string') {
-    // "bin": "./cli.js" - use package name
-    const name = pkg.name ?? 'cli';
+    // String form: use package name as command name
+    const name = pkg.name?.replace(/^@[^/]+\//, '') ?? 'cli';  // Strip scope
     return [{ name, path: resolve(pkgDir, pkg.bin) }];
   }
 
-  // "bin": { "cmd1": "./a.js", "cmd2": "./b.js" }
+  // Object form: explicit command names
   return Object.entries(pkg.bin).map(([name, relPath]) => ({
     name,
     path: resolve(pkgDir, relPath),
   }));
 }
 
+/**
+ * Create executable wrapper scripts for bin entries.
+ * Wrappers handle Node.js files specially (invoke with node).
+ */
 export async function createBinWrappers(
-  bins: PackageBin[],
+  bins: PackageBinEntry[],
   binDir: string,
 ): Promise<void> {
   await mkdir(binDir, { recursive: true });
 
   for (const bin of bins) {
     const wrapperPath = join(binDir, bin.name);
-    const ext = extname(bin.path);
+    const ext = extname(bin.path).toLowerCase();
 
-    // Generate appropriate wrapper
-    let wrapper: string;
-    if (['.js', '.mjs', '.cjs'].includes(ext)) {
-      wrapper = `#!/bin/sh\nexec node "${bin.path}" "$@"\n`;
-    } else {
-      wrapper = `#!/bin/sh\nexec "${bin.path}" "$@"\n`;
-    }
+    // Generate wrapper script
+    // Node.js files need to be invoked with node
+    // Other files (compiled binaries) can be executed directly
+    const wrapper =
+      ['.js', '.mjs', '.cjs'].includes(ext)
+        ? `#!/bin/sh\nexec node "${bin.path}" "$@"\n`
+        : `#!/bin/sh\nexec "${bin.path}" "$@"\n`;
 
     await writeFile(wrapperPath, wrapper, { mode: 0o755 });
   }
 }
+
+/**
+ * Set up package bin wrappers and return the bin directory path.
+ * Returns null if packageBin is false or no package.json found.
+ */
+export async function setupPackageBin(
+  enabled: boolean | undefined,
+  testDir: string,
+  tempDir: string,
+): Promise<string | null> {
+  if (!enabled) {
+    return null;
+  }
+
+  const pkgPath = await findPackageJson(testDir);
+  if (!pkgPath) {
+    return null;  // No package.json found, silently skip
+  }
+
+  const pkgDir = dirname(pkgPath);
+  const pkgContent = await readFile(pkgPath, 'utf-8');
+  const pkgJson = JSON.parse(pkgContent) as unknown;
+
+  const bins = parsePackageBin(pkgJson, pkgDir);
+  if (bins.length === 0) {
+    return null;  // No bin entries
+  }
+
+  const binDir = join(tempDir, '.bin');
+  await createBinWrappers(bins, binDir);
+
+  return binDir;
+}
 ```
 
-### Environment Variable Additions (Phase 3)
-
+**Schema addition** (`types.ts`):
 ```typescript
-// In runner.ts
-env: {
-  ...process.env,
-  ...config.env,
-  NO_COLOR: config.env?.NO_COLOR ?? '1',
-  FORCE_COLOR: '0',
-  TRYSCRIPT_TEST_DIR: testDir,
-  // New: package root if found
-  ...(packageRoot && { TRYSCRIPT_PACKAGE_ROOT: packageRoot }),
-},
+export const TestConfigSchema = z.object({
+  // ... existing fields ...
+  path: z.array(z.string()).optional(),
+  packageBin: z.boolean().optional(),
+});
 ```
 
-### Test Strategy
+**Interface addition** (`config.ts`):
+```typescript
+export interface TryscriptConfig {
+  // ... existing fields ...
+  path?: string[];
 
-**Unit tests**:
-- `path` resolution (relative, absolute, mixed)
-- `packageBin` parsing (string form, object form, no bin)
-- PATH construction (prepending, delimiter handling)
-- Wrapper generation (Node files, other files)
+  /**
+   * Auto-expose package.json bin entries in PATH.
+   * When true, finds nearest package.json and creates wrapper scripts
+   * for each bin entry, making them available as commands.
+   */
+  packageBin?: boolean;
+}
+```
 
-**Golden tests**:
-- `path` option with sandbox
-- `packageBin` with test package
-- Combined `path` and `packageBin`
-- Edge cases (missing package.json, empty bin field)
+**Integration** (`runner.ts`):
+```typescript
+import { setupPackageBin } from './package-bin.js';
 
-## Stage 3: Implementation Phase
+export async function createExecutionContext(
+  config: TryscriptConfig,
+  testFilePath: string,
+  coverageEnv?: Record<string, string>,
+): Promise<ExecutionContext> {
+  // ... existing setup ...
 
-### Phase 1: `path` Configuration Option
+  // Set up package bin wrappers (Phase II)
+  const packageBinDir = await setupPackageBin(config.packageBin, testDir, tempDir);
 
-- [ ] Add `path` field to `TestConfigSchema` in types.ts
-- [ ] Add `path` field to `TryscriptConfig` interface in config.ts
-- [ ] Add `path` merging in `mergeConfig()` (concatenate arrays)
-- [ ] Implement PATH building in runner.ts `createExecutionContext()`
-- [ ] Add unit tests for path resolution
-- [ ] Add golden test demonstrating `path` usage
-- [ ] Update tryscript-reference.md documentation
+  // Build PATH: packageBin dir (highest priority) > config paths > system PATH
+  const pathParts: string[] = [];
+  if (packageBinDir) {
+    pathParts.push(packageBinDir);
+  }
+  if (config.path && config.path.length > 0) {
+    pathParts.push(...config.path.map((p) => resolve(testDir, p)));
+  }
+  pathParts.push(process.env.PATH ?? '');
 
-### Phase 2: `packageBin` Configuration Option
+  const ctx: ExecutionContext = {
+    // ... existing fields ...
+    env: {
+      ...process.env,
+      ...config.env,
+      ...coverageEnv,
+      NO_COLOR: config.env?.NO_COLOR ?? '1',
+      FORCE_COLOR: '0',
+      TRYSCRIPT_TEST_DIR: testDir,
+      PATH: pathParts.join(delimiter),
+    } as Record<string, string>,
+  };
 
-- [ ] Create `packages/tryscript/src/lib/package-bin.ts`
-- [ ] Implement `findPackageJson()` function
-- [ ] Implement `parsePackageBin()` function
-- [ ] Implement `createBinWrappers()` function
-- [ ] Add `packageBin` field to schema and interface
-- [ ] Integrate into runner.ts `createExecutionContext()`
-- [ ] Add unit tests for package-bin.ts
-- [ ] Add golden test with test package.json
-- [ ] Update tryscript-reference.md documentation
+  return ctx;
+}
+```
 
-### Phase 3: Environment Variable Enhancement (Optional)
+### Tests
 
-- [ ] Add `TRYSCRIPT_PACKAGE_ROOT` environment variable
-- [ ] Document new environment variable
-- [ ] Add test coverage
+**Unit tests** (`package-bin.test.ts`):
+- `findPackageJson()` finds package.json in current directory
+- `findPackageJson()` walks up directory tree
+- `findPackageJson()` returns null when not found
+- `parsePackageBin()` handles string form
+- `parsePackageBin()` handles object form with multiple entries
+- `parsePackageBin()` strips scope from package name
+- `parsePackageBin()` returns empty array when no bin field
+- `createBinWrappers()` creates executable wrappers
+- `createBinWrappers()` uses node for .js/.mjs/.cjs files
+- `createBinWrappers()` uses direct exec for other files
 
-## Outstanding Questions
+**Golden test** (`tests/package-bin.tryscript.md`):
 
-1. **Windows compatibility**: Should wrappers be `.cmd` files on Windows?
-   - Recommendation: Yes, detect platform and generate appropriate wrapper
+Create a test fixture with its own package.json:
+```
+tests/cli-fixtures/pkg-with-bin/
+├── package.json
+└── cli.mjs
+```
 
-2. **Monorepo support**: Should `packageBin` search parent directories?
-   - Recommendation: Yes, walk up until package.json found (matches npm behavior)
+`package.json`:
+```json
+{
+  "name": "test-cli",
+  "bin": {
+    "test-cli": "./cli.mjs"
+  }
+}
+```
 
-3. **Binary detection**: For non-.js files, should we check if file is executable?
-   - Recommendation: No, trust the package.json; user error if misconfigured
+`cli.mjs`:
+```javascript
+console.log('test-cli v1.0.0');
+```
 
-4. **TypeScript sources**: Should we support `"bin": "./src/cli.ts"` with tsx?
-   - Recommendation: Out of scope for Phase 2; users can use `path` option
+Test file (`tests/package-bin.tryscript.md`):
+```yaml
+---
+sandbox: true
+cwd: cli-fixtures/pkg-with-bin
+packageBin: true
+---
 
-## Acceptance Criteria
+# Test: packageBin exposes package.json bins
 
-### Phase 1 (`path` option)
-- [ ] Tests can specify `path: [../dist]` to add directory to PATH
-- [ ] Paths resolve correctly relative to test file
-- [ ] Works with sandbox mode
-- [ ] Documentation updated
+```console
+$ test-cli
+test-cli v1.0.0
+? 0
+```
+```
 
-### Phase 2 (`packageBin` option)
-- [ ] Tests can specify `packageBin: true` to expose package.json bins
-- [ ] Both string and object bin forms work
-- [ ] Generated wrappers execute correctly
-- [ ] Works with sandbox mode
-- [ ] Documentation updated
+### Documentation
 
-### Phase 3 (Environment variables)
-- [ ] `TRYSCRIPT_PACKAGE_ROOT` available when package.json found
-- [ ] Documentation updated
+Update `tryscript-reference.md`:
 
-## Example Usage After Implementation
+```markdown
+### packageBin
 
-### Simple Node Package Testing
+Automatically expose package.json bin entries in PATH.
 
+**Type**: `boolean`
+**Default**: `false`
+
+When `true`, tryscript:
+1. Finds the nearest `package.json` (walking up from test file)
+2. Reads the `bin` field
+3. Creates wrapper scripts for each entry
+4. Adds them to PATH (highest priority)
+
+This lets you test your CLI with the same command users will use:
+
+**Example**:
+
+Given `package.json`:
+```json
+{
+  "name": "my-cli",
+  "bin": "./dist/cli.mjs"
+}
+```
+
+Test file:
 ```yaml
 ---
 sandbox: true
 packageBin: true
 ---
 
-# Test: CLI Help
-
+# Now the binary is available by name
 ```console
 $ my-cli --help
-Usage: my-cli [options] [command]
-...
+Usage: my-cli [options]
+```
+```
+
+Supports both bin formats:
+- String: `"bin": "./cli.js"` → command name from package name
+- Object: `"bin": {"cmd": "./cli.js"}` → explicit command names
+```
+
+### Acceptance Criteria
+
+- [ ] `packageBin: true` creates wrappers for package.json bin entries
+- [ ] String form bin uses package name as command
+- [ ] Object form bin supports multiple commands
+- [ ] Scoped package names handled correctly (`@scope/name` → `name`)
+- [ ] Wrappers invoke Node.js for .js/.mjs/.cjs files
+- [ ] Wrappers exec directly for other files
+- [ ] packageBin paths have priority over `path` config
+- [ ] No error when package.json not found (silent skip)
+- [ ] No error when bin field empty (silent skip)
+- [ ] Works with sandbox mode
+- [ ] Documentation updated
+- [ ] Tests pass
+
+---
+
+## Phase III: `TRYSCRIPT_PACKAGE_ROOT` Environment Variable
+
+### Overview
+
+Add a `TRYSCRIPT_PACKAGE_ROOT` environment variable that points to the directory containing
+the nearest `package.json`. This enables manual path construction for advanced use cases.
+
+**Use cases**:
+- Custom binary locations not in package.json bin
+- TypeScript source files (using tsx/ts-node)
+- Complex monorepo setups
+- Debugging and introspection
+
+### Behavior
+
+1. When creating execution context, find nearest `package.json` from test file
+2. If found, set `TRYSCRIPT_PACKAGE_ROOT` to the directory containing it
+3. If not found, variable is not set
+
+### Implementation
+
+**Integration** (`runner.ts`):
+
+```typescript
+import { findPackageJson } from './package-bin.js';
+
+export async function createExecutionContext(
+  config: TryscriptConfig,
+  testFilePath: string,
+  coverageEnv?: Record<string, string>,
+): Promise<ExecutionContext> {
+  // ... existing setup ...
+
+  // Find package root for TRYSCRIPT_PACKAGE_ROOT (Phase III)
+  const pkgPath = await findPackageJson(testDir);
+  const packageRoot = pkgPath ? dirname(pkgPath) : undefined;
+
+  // Set up package bin wrappers (Phase II)
+  const packageBinDir = await setupPackageBin(config.packageBin, testDir, tempDir);
+
+  // Build PATH
+  const pathParts: string[] = [];
+  if (packageBinDir) {
+    pathParts.push(packageBinDir);
+  }
+  if (config.path && config.path.length > 0) {
+    pathParts.push(...config.path.map((p) => resolve(testDir, p)));
+  }
+  pathParts.push(process.env.PATH ?? '');
+
+  const ctx: ExecutionContext = {
+    // ... existing fields ...
+    env: {
+      ...process.env,
+      ...config.env,
+      ...coverageEnv,
+      NO_COLOR: config.env?.NO_COLOR ?? '1',
+      FORCE_COLOR: '0',
+      TRYSCRIPT_TEST_DIR: testDir,
+      PATH: pathParts.join(delimiter),
+      // Phase III: package root
+      ...(packageRoot && { TRYSCRIPT_PACKAGE_ROOT: packageRoot }),
+    } as Record<string, string>,
+  };
+
+  return ctx;
+}
+```
+
+### Tests
+
+**Golden test** (`tests/package-root-var.tryscript.md`):
+```yaml
+---
+sandbox: true
+---
+
+# Test: TRYSCRIPT_PACKAGE_ROOT points to package root
+
+```console
+$ echo $TRYSCRIPT_PACKAGE_ROOT
+[ROOT]
 ? 0
 ```
 ```
 
-### Custom Binary Location
+(Where `[ROOT]` matches the repository root containing package.json)
+
+### Documentation
+
+Update `tryscript-reference.md`:
+
+```markdown
+## Environment Variables
+
+Tryscript provides these environment variables to test commands:
+
+| Variable | Description |
+|----------|-------------|
+| `TRYSCRIPT_TEST_DIR` | Directory containing the test file |
+| `TRYSCRIPT_PACKAGE_ROOT` | Directory containing nearest package.json (if found) |
+
+**Example usage**:
 
 ```yaml
 ---
 sandbox: true
-path:
-  - ../build/release
 ---
 
-# Test: Rust CLI
+# Access files relative to package root
+```console
+$ node $TRYSCRIPT_PACKAGE_ROOT/dist/cli.mjs --help
+Usage: cli [options]
+```
+```
+```
+
+### Acceptance Criteria
+
+- [ ] `TRYSCRIPT_PACKAGE_ROOT` set when package.json found
+- [ ] Points to directory containing package.json (not the file itself)
+- [ ] Not set when no package.json found (no error)
+- [ ] Walks up directory tree like Phase II
+- [ ] Documentation updated
+- [ ] Tests pass
+
+---
+
+## Outstanding Questions
+
+1. **Windows compatibility**: Should wrappers be `.cmd` files on Windows?
+   - **Recommendation**: Defer to future work. Current implementation uses shell scripts
+     which work in Git Bash, WSL, and most CI environments.
+
+2. **Monorepo with multiple package.json**: Which one wins?
+   - **Recommendation**: Nearest package.json (walking up from test file). This matches
+     npm/pnpm behavior and is intuitive for monorepo users.
+
+3. **TypeScript bin entries**: Should we support `"bin": "./src/cli.ts"`?
+   - **Recommendation**: Out of scope. Users can use `path` to add tsx/ts-node to PATH,
+     or build first. Keeps implementation simple.
+
+4. **Empty bin field warning**: Should we warn when packageBin is true but bin is empty?
+   - **Recommendation**: No warning, silent skip. Enables setting `packageBin: true` in
+     global config without errors for packages without bins.
+
+---
+
+## Implementation Order
+
+| Phase | Feature | Dependencies | Effort |
+|-------|---------|--------------|--------|
+| I | `path` option | None | Low |
+| II | `packageBin` option | None (can reuse `findPackageJson` from III) | Medium |
+| III | `TRYSCRIPT_PACKAGE_ROOT` | `findPackageJson` (can be implemented with II) | Low |
+
+**Recommended order**: Phase I → Phase II + III together (share `findPackageJson`)
+
+---
+
+## Documentation Changes
+
+### Files to Update
+
+| File | Changes |
+|------|---------|
+| `packages/tryscript/docs/tryscript-reference.md` | Add `path`, `packageBin` config options; update env vars table |
+| `packages/tryscript/README.md` | Add brief mention in features list |
+| `packages/tryscript/docs/tryscript-reference.md` | Add "Testing CLIs" best practices section |
+
+### New Documentation Section: Testing CLIs
+
+Add a new section to `tryscript-reference.md` covering best practices for different CLI types:
+
+```markdown
+## Testing CLI Applications
+
+Tryscript provides several ways to make CLI binaries available in tests. Choose the
+approach that fits your project:
+
+### Node.js / npm Packages (Recommended: `packageBin`)
+
+For npm packages with a `bin` field in `package.json`, use `packageBin: true` for
+zero-config setup:
+
+**package.json**:
+```json
+{
+  "name": "my-cli",
+  "bin": "./dist/cli.mjs"
+}
+```
+
+**Test file**:
+```yaml
+---
+sandbox: true
+packageBin: true
+---
+
+# Test: CLI responds to --help
+
+```console
+$ my-cli --help
+Usage: my-cli [options] [command]
+
+Options:
+  -V, --version  output the version number
+  -h, --help     display help for command
+? 0
+```
+```
+
+This approach:
+- Automatically reads `package.json` bin entries
+- Creates wrapper scripts that invoke Node.js
+- Works exactly like `npx my-cli` or `pnpm exec my-cli`
+
+### Rust CLIs
+
+For Rust projects, add the build output directory to PATH:
+
+**Project structure**:
+```
+my-rust-cli/
+├── Cargo.toml
+├── src/
+│   └── main.rs
+├── target/
+│   └── release/
+│       └── my-rust-cli    # Built binary
+└── tests/
+    └── cli.tryscript.md
+```
+
+**Test file** (`tests/cli.tryscript.md`):
+```yaml
+---
+sandbox: true
+path:
+  - ../target/release
+---
+
+# Test: Version flag
 
 ```console
 $ my-rust-cli --version
 my-rust-cli 1.0.0
 ? 0
 ```
+
+# Test: Basic functionality
+
+```console
+$ my-rust-cli process input.txt
+Processing input.txt...
+Done.
+? 0
+```
 ```
 
-### Combined Approach
+**Tip**: Run `cargo build --release` before tests, or add it to your test script:
+```json
+{
+  "scripts": {
+    "test": "cargo build --release && tryscript run"
+  }
+}
+```
+
+### Python CLIs
+
+For Python projects using entry points or scripts:
+
+**Option 1: Virtual environment bin directory**
 
 ```yaml
 ---
 sandbox: true
-packageBin: true
 path:
-  - ../scripts  # Additional utility scripts
+  - ../.venv/bin
+---
+
+# Test: CLI installed in venv
+
+```console
+$ my-python-cli --version
+my-python-cli 1.0.0
+? 0
+```
+```
+
+**Option 2: Direct script invocation**
+
+```yaml
+---
+sandbox: true
+path:
+  - ../src
+env:
+  PYTHONPATH: $TRYSCRIPT_PACKAGE_ROOT/src
+---
+
+# Test: Run as module
+
+```console
+$ python -m my_cli --help
+Usage: my_cli [options]
+? 0
+```
+```
+
+**Option 3: Using the script directly**
+
+```yaml
+---
+sandbox: true
+path:
+  - ../scripts
+---
+
+# Test: Executable script with shebang
+
+```console
+$ my-script.py --help
+Usage: my-script.py [options]
+? 0
+```
+```
+
+Make sure your script has a shebang and is executable:
+```python
+#!/usr/bin/env python3
+# scripts/my-script.py
+```
+
+### Go CLIs
+
+For Go projects:
+
+```yaml
+---
+sandbox: true
+path:
+  - ../bin        # Or wherever `go build -o` outputs
+---
+
+# Test: Go CLI
+
+```console
+$ my-go-cli version
+v1.0.0
+? 0
+```
+```
+
+### Multiple Binaries
+
+You can combine `packageBin` with `path` for projects with multiple tools:
+
+```yaml
+---
+sandbox: true
+packageBin: true          # Your main CLI from package.json
+path:
+  - ../scripts            # Additional utility scripts
+  - ../tools/bin          # Third-party tools
+---
+```
+
+PATH priority (highest to lowest):
+1. `packageBin` wrappers
+2. `path` entries (in order specified)
+3. System PATH
+
+### Environment Variables for Manual Paths
+
+For complex setups, use environment variables:
+
+| Variable | Description |
+|----------|-------------|
+| `TRYSCRIPT_TEST_DIR` | Directory containing the test file |
+| `TRYSCRIPT_PACKAGE_ROOT` | Directory containing nearest package.json |
+
+```yaml
+---
+sandbox: true
+---
+
+# Manual invocation using env vars
+
+```console
+$ node $TRYSCRIPT_PACKAGE_ROOT/dist/experimental-cli.mjs --help
+Experimental CLI v0.1.0
+? 0
+```
+```
+
+### Config File for Project-Wide Settings
+
+Set defaults in `tryscript.config.ts` to avoid repetition:
+
+```typescript
+import { defineConfig } from 'tryscript';
+
+export default defineConfig({
+  // All tests get these settings by default
+  packageBin: true,
+  path: ['./scripts'],
+  sandbox: true,
+});
+```
+
+Individual test files can override or extend:
+
+```yaml
+---
+# Inherits packageBin: true and sandbox: true from config
+path:
+  - ../extra-tools   # Added to config's path
+---
+```
+```
+
+### Updated Config Options Table
+
+Update the existing config options table in `tryscript-reference.md`:
+
+```markdown
+## Configuration Options
+
+| Option | Type | Default | Description |
+|--------|------|---------|-------------|
+| `cwd` | `string` | test file dir | Working directory for commands |
+| `sandbox` | `boolean \| string` | `false` | Run in isolated sandbox |
+| `fixtures` | `(string \| Fixture)[]` | `[]` | Files to copy to sandbox |
+| `before` | `string` | - | Script to run before first test |
+| `after` | `string` | - | Script to run after all tests |
+| `env` | `Record<string, string>` | `{}` | Environment variables |
+| `timeout` | `number` | `30000` | Command timeout in ms |
+| `patterns` | `Record<string, string \| RegExp>` | `{}` | Custom output patterns |
+| **`path`** | `string[]` | `[]` | **Directories to prepend to PATH** |
+| **`packageBin`** | `boolean` | `false` | **Auto-expose package.json bin entries** |
+```
+
+### Updated Environment Variables Section
+
+```markdown
+## Environment Variables
+
+Tryscript sets these environment variables for test commands:
+
+| Variable | Description |
+|----------|-------------|
+| `NO_COLOR` | Set to `"1"` by default (disable colors) |
+| `FORCE_COLOR` | Set to `"0"` (disable forced colors) |
+| `TRYSCRIPT_TEST_DIR` | Absolute path to directory containing the test file |
+| `TRYSCRIPT_PACKAGE_ROOT` | Absolute path to directory containing nearest `package.json` (if found) |
+
+Custom environment variables can be set via `env` config:
+
+```yaml
+---
 env:
   DEBUG: "1"
+  API_KEY: "test-key"
 ---
+```
+```
+
+---
+
+## Summary
+
+After implementation, users can choose the approach that fits their needs:
+
+**Node.js package (zero config)**:
+```yaml
+packageBin: true
+```
+
+**Rust/Go/compiled binary**:
+```yaml
+path:
+  - ../target/release    # Rust
+  - ../bin               # Go
+```
+
+**Python with venv**:
+```yaml
+path:
+  - ../.venv/bin
+```
+
+**Combined (Node + utilities)**:
+```yaml
+packageBin: true
+path:
+  - ../scripts
+```
+
+**Manual (advanced)**:
+```console
+$ node $TRYSCRIPT_PACKAGE_ROOT/dist/cli.mjs
 ```
