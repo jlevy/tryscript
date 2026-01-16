@@ -1,6 +1,6 @@
 {
   "name": "tryscript",
-  "version": "0.1.4",
+  "version": "0.1.3",
   "description": "Golden testing for CLI applications - TypeScript port of trycmd",
   "license": "MIT",
   "author": "Joshua Levy",
@@ -47,9 +47,7 @@
     "test:watch": "vitest",
     "test:self": "tsx src/bin.ts",
     "test:golden": "node dist/bin.mjs run 'tests/**/*.tryscript.md'",
-    "test:coverage:vitest": "vitest run --coverage",
-    "test:coverage:tryscript": "node dist/bin.mjs run 'tests/**/*.tryscript.md' --coverage --merge-lcov coverage/lcov.info",
-    "test:coverage": "pnpm test:coverage:vitest && pnpm test:coverage:tryscript",
+    "test:coverage": "node dist/bin.mjs coverage --monocart \"pnpm vitest run\" \"node dist/bin.mjs run 'tests/**/*.tryscript.md'\"",
     "publint": "publint",
     "prepack": "pnpm build",
     "tryscript": "tsx src/bin.ts"

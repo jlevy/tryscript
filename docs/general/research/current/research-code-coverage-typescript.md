@@ -2,7 +2,7 @@
 
 ## Research Date
 
-2025-12-23 (initial), 2026-01-07 (NODE_V8_COVERAGE investigation), 2026-01-08 (LCOV merging)
+2025-12-23 (initial), 2026-01-07 (updated with NODE_V8_COVERAGE investigation)
 
 ## Tool Versions Researched
 
@@ -13,7 +13,7 @@
 | TypeScript | 5.9.3 | Language version |
 | c8 | 10.1.3 | V8 coverage CLI |
 | monocart-coverage-reports | 2.12.9 | AST-aware coverage merging |
-| tryscript | 0.1.3 | Golden testing with coverage support |
+| tryscript | 0.1.2 | Golden testing with coverage support |
 
 ## Executive Summary
 
@@ -23,13 +23,7 @@ This document covers comprehensive code coverage strategies for TypeScript proje
 2. **CLI/subprocess coverage** using NODE_V8_COVERAGE and tryscript
 3. **Multi-source coverage merging** for projects with both unit tests and CLI tests
 
-**Key findings:**
-
-1. **Vitest uses `node:inspector` for coverage, NOT `NODE_V8_COVERAGE`** - This means `tryscript coverage "vitest run"` does NOT capture vitest's unit test coverage. It only captures coverage from subprocess spawns (like CLI integration tests).
-
-2. **LCOV merging is the recommended approach** - Run vitest and tryscript separately, then merge their LCOV outputs. Tryscript now has a built-in `--merge-lcov` flag that handles this automatically.
-
-3. **Codecov is optional** - The `coverage-summary.json` file can be used locally for badge generation without any third-party service.
+Key finding: **Vitest 4.x works correctly with NODE_V8_COVERAGE**, allowing unified coverage collection from both vitest unit tests and CLI subprocess tests using `tryscript coverage`.
 
 ## Validation Methodology
 
@@ -323,65 +317,53 @@ export default defineConfig({
 
 Many TypeScript projects have two types of tests:
 
-1. **Unit tests** (vitest) - test internal functions and modules via imports
+1. **Unit tests** (vitest) - test internal functions and modules
 2. **CLI/integration tests** (tryscript, subprocess) - test the built CLI binary
 
 Both should contribute to a single coverage report.
 
-### Understanding What Each Approach Captures
+### Recommended Solution: tryscript coverage command
 
-| Coverage Source | What It Captures |
-|-----------------|------------------|
-| `vitest run --coverage` | Code imported directly by unit tests (uses `node:inspector`) |
-| `tryscript run --coverage` | Code executed by CLI subprocess spawns (uses `NODE_V8_COVERAGE`) |
-| **Merged result** | Complete coverage from both sources |
-
-**Critical insight**: Vitest uses `node:inspector` for its own coverage, NOT `NODE_V8_COVERAGE`. This means:
-- `tryscript coverage "vitest run"` does NOT capture vitest's unit test coverage
-- It only captures subprocess spawns from integration tests
-- **You must use LCOV merging to get complete coverage**
-
-### Recommended Solution: Built-in LCOV Merging
-
-Tryscript's `--merge-lcov` flag provides the simplest workflow:
+The `tryscript coverage` command wraps multiple commands and merges their V8 coverage:
 
 ```bash
-# Step 1: Run vitest with coverage (produces coverage/lcov.info)
-vitest run --coverage
+# Install dependencies
+pnpm add -D c8 monocart-coverage-reports
 
-# Step 2: Run tryscript with --merge-lcov to merge vitest's coverage
-tryscript run 'tests/**/*.tryscript.md' --coverage --merge-lcov coverage/lcov.info
+# Run merged coverage
+tryscript coverage --monocart \
+  "pnpm vitest run" \
+  "node dist/bin.mjs run 'tests/**/*.tryscript.md'"
 ```
 
-**How `--merge-lcov` works:**
-1. Runs tryscript tests with NODE_V8_COVERAGE enabled
-2. Generates coverage report (lcov.info)
-3. Reads the external LCOV file (vitest's output)
-4. Merges both sources (taking max hit count per line)
-5. Writes merged `lcov.info` and `coverage-summary.json`
+**How it works:**
 
-**Output files** (in `coverage-tryscript/` by default):
-- `lcov.info` - Merged LCOV file (standard format)
-- `coverage-summary.json` - JSON summary (for badge generation)
-- `index.html` - HTML coverage report
+1. Creates a temporary directory for V8 coverage files
+2. Sets `NODE_V8_COVERAGE` environment variable
+3. Runs each command sequentially (all inherit the coverage env)
+4. Shows file statistics after each command (warns if none produced)
+5. Generates merged coverage report using c8/monocart
 
-### Package.json Configuration
+### Package.json Configuration (tryscript pattern)
 
 ```json
 {
   "scripts": {
     "test": "vitest run",
-    "test:coverage:vitest": "vitest run --coverage",
-    "test:coverage:tryscript": "tryscript run 'tests/**/*.tryscript.md' --coverage --merge-lcov coverage/lcov.info",
-    "test:coverage": "pnpm test:coverage:vitest && pnpm test:coverage:tryscript"
+    "test:self": "tsx src/bin.ts",
+    "test:golden": "node dist/bin.mjs run 'tests/**/*.tryscript.md'",
+    "test:coverage": "node dist/bin.mjs coverage --monocart \"pnpm vitest run\" \"node dist/bin.mjs run 'tests/**/*.tryscript.md'\""
   },
-  "devDependencies": {
-    "c8": "^10.1.3"
+  "peerDependencies": {
+    "c8": ">=10.0.0",
+    "monocart-coverage-reports": ">=2.0.0"
+  },
+  "peerDependenciesMeta": {
+    "c8": { "optional": true },
+    "monocart-coverage-reports": { "optional": true }
   }
 }
 ```
-
-**Note**: No external LCOV merging tool is needed. The `--merge-lcov` flag handles everything.
 
 ### Why Monocart?
 
@@ -428,32 +410,25 @@ If a command shows "0 files (0 new)", that command is not producing coverage dat
 - The command doesn't spawn Node.js processes
 - The command uses a coverage provider that doesn't use NODE_V8_COVERAGE (see troubleshooting)
 
-### When to Use Which Approach
+### Alternative: LCOV Merging
 
-| Approach | Unit test coverage | CLI subprocess coverage | Recommendation |
-|----------|-------------------|------------------------|----------------|
-| `vitest run --coverage` alone | ✅ Yes | ❌ No | Only if no CLI tests |
-| `tryscript run --coverage` alone | ❌ No | ✅ Yes | Only if no unit tests |
-| `tryscript coverage "vitest run"` | ❌ No | ✅ Yes (spawns only) | **Not recommended** |
-| **LCOV merging with `--merge-lcov`** | ✅ Yes | ✅ Yes | **Recommended** |
-
-**Use LCOV merging (`--merge-lcov`)** for any project with both unit tests AND CLI tests. This is the only approach that captures complete coverage.
-
-**Use `tryscript coverage` command** only for projects that exclusively test via CLI subprocesses (no unit tests that import code directly).
-
-### Alternative: tryscript coverage Command
-
-For projects that **only** test via CLI subprocesses (no unit tests with direct imports), the `tryscript coverage` command provides a simpler workflow:
+If you cannot use `tryscript coverage`, merge LCOV files manually:
 
 ```bash
-# Merge coverage from multiple CLI test commands
-tryscript coverage "tryscript run tests/cli/" "node dist/bin.mjs --help"
+# Step 1: Run vitest with coverage
+vitest run --coverage
 
-# With monocart for accurate line counts
-tryscript coverage --monocart "tryscript run tests/"
+# Step 2: Run tryscript with coverage
+tryscript run --coverage tests/
+
+# Step 3: Merge LCOV files
+lcov -a coverage/lcov.info -a coverage-tryscript/lcov.info -o coverage-merged/lcov.info
 ```
 
-> **Note**: This approach does NOT capture vitest unit test coverage. Use `--merge-lcov` if you have unit tests that import code directly.
+Tools for merging:
+- `lcov` (Linux)
+- `nyc merge`
+- `istanbul-merge`
 
 ## CI/CD Integration
 
@@ -461,30 +436,14 @@ tryscript coverage --monocart "tryscript run tests/"
 
 ```yaml
 - name: Run tests with coverage
-  run: pnpm test:coverage
+  run: npm run test:coverage
 
-# Generate coverage badges locally (no external service needed)
-- name: Coverage Badges
-  uses: jpb06/coverage-badges-action@v1
+- name: Upload coverage to Codecov
+  uses: codecov/codecov-action@v4
   with:
-    coverage-summary-path: coverage-tryscript/coverage-summary.json
-    output-folder: ./badges
-
-# Optional: Upload to Codecov for historical tracking and PR comments
-# - uses: codecov/codecov-action@v4
-#   with:
-#     files: coverage-tryscript/lcov.info
+    files: ./coverage/lcov.info
+    fail_ci_if_error: true
 ```
-
-### Coverage Reporting Options
-
-| Option | External Service | Cost | Features |
-|--------|-----------------|------|----------|
-| **Local badges** (`jpb06/coverage-badges-action`) | No | Free | Badge SVGs committed to repo |
-| **Codecov** (`codecov/codecov-action`) | Yes | Free for public repos | Historical tracking, PR comments, web dashboard |
-| **Coveralls** (`coverallsapp/github-action`) | Yes | Free for public repos | Similar to Codecov |
-
-**Recommendation**: Start with local badge generation. Add Codecov/Coveralls later if you need historical tracking or PR comments.
 
 ### Fail Builds on Threshold Violations
 
@@ -664,17 +623,6 @@ Some older vitest versions may not write to NODE_V8_COVERAGE correctly. Upgrade 
 - [Codecov Documentation](https://docs.codecov.com/)
 
 ## Changelog
-
-### 2026-01-08
-
-- **Major clarification**: Vitest does NOT use NODE_V8_COVERAGE for its own coverage - it uses `node:inspector`
-- This means `tryscript coverage "vitest run"` does NOT capture vitest unit test coverage
-- Added `--merge-lcov` flag documentation as the recommended approach
-- Removed lcov-result-merger dependency - LCOV merging is now built into tryscript
-- Added comprehensive "What Each Approach Captures" table
-- Updated CI/CD section with local badge generation (no external service required)
-- Clarified Codecov/Coveralls are optional, not required
-- Added Coverage Reporting Options comparison table
 
 ### 2026-01-07
 

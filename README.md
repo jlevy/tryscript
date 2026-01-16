@@ -1,7 +1,7 @@
 # tryscript
 
-[![CI](https://github.com/jlevy/tryscript/actions/workflows/ci.yml/badge.svg)](https://github.com/jlevy/tryscript/actions/runs/20828507667)
-[![Coverage](https://raw.githubusercontent.com/jlevy/tryscript/main/badges/packages/tryscript/coverage-total.svg)](https://github.com/jlevy/tryscript/actions/runs/20828507667)
+[![CI](https://github.com/jlevy/tryscript/actions/workflows/ci.yml/badge.svg)](https://github.com/jlevy/tryscript/actions/runs/20775143258)
+[![Coverage](https://raw.githubusercontent.com/jlevy/tryscript/main/badges/packages/tryscript/coverage-total.svg)](https://github.com/jlevy/tryscript/actions/runs/20775143258)
 [![npm version](https://img.shields.io/npm/v/tryscript)](https://www.npmjs.com/package/tryscript)
 [![X Follow](https://img.shields.io/twitter/follow/ojoshe)](https://x.com/ojoshe)
 

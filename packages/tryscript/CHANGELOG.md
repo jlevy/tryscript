@@ -1,11 +1,5 @@
 # tryscript
 
-## 0.1.4
-
-### Patch Changes
-
-- 04c78ac: Add LCOV merging for complete coverage with --merge-lcov flag
-
 ## 0.1.3
 
 ### Patch Changes

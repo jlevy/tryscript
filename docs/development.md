@@ -218,53 +218,112 @@ works correctly.
 
 ### Coverage
 
-tryscript uses **LCOV merging** to combine coverage from unit tests and golden tests:
+tryscript supports two types of coverage measurement:
+
+**Unit Test Coverage** (vitest):
 
 ```bash
-pnpm test:coverage          # Run both and merge results
+pnpm test:coverage          # Unit tests with coverage
 ```
 
-This runs three steps:
-
-1. `test:coverage:vitest` - Unit tests with vitest coverage
-2. `test:coverage:tryscript` - Golden tests with c8/NODE_V8_COVERAGE
-3. `test:coverage:merge` - Merge LCOV files from both sources
-
-**Why LCOV merging?**
-
-- Vitest uses `node:inspector` for coverage (captures imports)
-- Tryscript uses `NODE_V8_COVERAGE` (captures subprocess spawns)
-- These are different mechanisms that must be merged via LCOV files
-
-The merged coverage is written to `coverage-merged/lcov.info`.
-
-#### Individual Coverage Scripts
+**Golden Test Coverage** (c8):
 
 ```bash
-pnpm test:coverage:vitest     # Unit tests only
-pnpm test:coverage:tryscript  # Golden tests only
-pnpm test:coverage:merge      # Merge existing LCOV files
+pnpm test:golden:coverage   # Golden tests with subprocess coverage
+```
+
+**Combined Coverage**:
+
+```bash
+pnpm test:all:coverage      # Both coverage types
+```
+
+#### Why c8 for Golden Tests?
+
+Standard coverage tools like `vitest --coverage` only track code executed in the main
+process. When tryscript runs CLI commands as subprocesses, that execution isn’t tracked.
+
+[c8](https://github.com/bcoe/c8) solves this by leveraging Node’s built-in V8 coverage
+collection via the `NODE_V8_COVERAGE` environment variable.
+When c8 wraps a command:
+
+1. c8 sets `NODE_V8_COVERAGE` to a temp directory
+
+2. Node.js writes coverage data when each process exits
+
+3. c8 collects coverage from all subprocesses
+
+4. Coverage is mapped back to source files via sourcemaps
+
+#### c8 Configuration
+
+The golden test coverage script uses these flags:
+
+```bash
+c8 --src src --all --include 'dist/**' --reporter text --reporter html \
+   --reports-dir coverage-golden node dist/bin.mjs 'tests/**/*.tryscript.md'
+```
+
+| Flag | Purpose |
+| --- | --- |
+| `--src src` | Map coverage back to source directory |
+| `--all` | Include files with 0% coverage in report |
+| `--include 'dist/**'` | Only track your built CLI (not node_modules) |
+| `--reporter text` | Terminal output |
+| `--reporter html` | HTML report for detailed analysis |
+| `--reports-dir coverage-golden` | Separate from vitest coverage |
+
+#### Coverage CLI Options
+
+When using `--coverage`, tryscript supports the following c8 flags:
+
+| CLI Option | Description | Default |
+| --- | --- | --- |
+| `--coverage-dir <dir>` | Output directory for coverage reports | `coverage-tryscript` |
+| `--coverage-reporter <reporter...>` | Coverage reporters to use | `text`, `html` |
+| `--coverage-exclude <pattern...>` | Patterns to exclude from coverage | none |
+| `--coverage-exclude-node-modules` | Exclude node_modules from coverage | `true` |
+| `--no-coverage-exclude-node-modules` | Include node_modules in coverage | - |
+| `--coverage-exclude-after-remap` | Apply exclude logic after sourcemap remapping | `false` |
+| `--coverage-skip-full` | Hide files with 100% coverage | `false` |
+| `--coverage-allow-external` | Allow files from outside cwd | `false` |
+| `--coverage-monocart` | Use monocart for accurate line counts (vitest-compatible) | `false` |
+
+These options can also be configured in `tryscript.config.ts`:
+
+```typescript
+export default {
+  coverage: {
+    reportsDir: 'coverage-tryscript',
+    reporters: ['text', 'html'],
+    include: ['dist/**'],
+    exclude: ['**/vendor/**'],
+    excludeNodeModules: true,
+    excludeAfterRemap: false,
+    skipFull: false,
+    allowExternal: false,
+    src: 'src',
+    monocart: false,
+  },
+};
 ```
 
 #### For Users Testing Their Own CLIs
 
-Use the same LCOV merging approach for any CLI project:
+The same technique works for any CLI tested with tryscript.
+Add to your `package.json`:
 
 ```json
 {
   "scripts": {
-    "test:coverage:vitest": "vitest run --coverage",
-    "test:coverage:tryscript": "tryscript run 'tests/**/*.tryscript.md' --coverage --coverage-reporter text --coverage-reporter lcov",
-    "test:coverage:merge": "npx lcov-result-merger 'coverage*/lcov.info' coverage-merged/lcov.info",
-    "test:coverage": "pnpm test:coverage:vitest && pnpm test:coverage:tryscript && pnpm test:coverage:merge"
+    "test:golden": "tryscript 'tests/**/*.tryscript.md'",
+    "test:golden:coverage": "tryscript run --coverage 'tests/**/*.tryscript.md'"
   }
 }
 ```
 
-#### Deep Dive: Coverage Architecture
-
-For comprehensive documentation on coverage strategies, see
-[Research: Code Coverage Best Practices](general/research/current/research-code-coverage-typescript.md).
+This provides realistic coverage metrics from actual CLI usage rather than just unit
+tests. By default, `node_modules` is excluded from coverage reports.
 
 ### Watch Mode
 
