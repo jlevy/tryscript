@@ -1,6 +1,6 @@
 {
   "name": "tryscript",
-  "version": "0.1.3",
+  "version": "0.1.5",
   "description": "Golden testing for CLI applications - TypeScript port of trycmd",
   "license": "MIT",
   "author": "Joshua Levy",

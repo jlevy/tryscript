@@ -120,9 +120,37 @@ git add .
 git commit -m "chore: release tryscript v0.2.0"
 ```
 
-### Step 5: Push and Tag
+### Step 5: Write Release Notes
 
-**Option A: Direct git push (local development)**
+Before pushing, compose release notes categorizing changes. Follow this format:
+
+```markdown
+## What's Changed
+
+### Features
+- Brief description of new capabilities
+
+### Fixes
+- Bug fixes and corrections
+
+### Refactoring
+- Internal improvements (if user-visible)
+
+### Documentation
+- Documentation updates (if significant)
+
+**Full Changelog**: https://github.com/jlevy/tryscript/compare/v0.1.0...v0.2.0
+```
+
+Guidelines:
+- Each bullet should be concise and user-focused
+- Group related commits together
+- Include only user-visible changes (skip chore/CI updates)
+- Link to the full commit comparison at the end
+
+### Step 6: Push and Tag (Option A - Direct push)
+
+For local development with direct push access:
 
 ```bash
 git push
@@ -130,9 +158,9 @@ git tag v0.2.0
 git push --tags
 ```
 
-**Option B: Via PR and GitHub API (restricted environments like Claude Code Web)**
+### Step 7: Push and Tag (Option B - Via PR and API)
 
-When direct push to main is restricted, use GitHub CLI. See
+For restricted environments like Claude Code Web, use GitHub CLI. See
 [GitHub CLI Setup](general/agent-setup/github-cli-setup.md) for installation.
 
 ```bash
@@ -157,11 +185,32 @@ gh api repos/jlevy/tryscript/git/refs -X POST \
 The release workflow will automatically create the GitHub Release when the tag is
 pushed.
 
-### Step 6: Verify
+### Step 8: Update GitHub Release
+
+After the workflow creates the GitHub Release, add the formatted release notes:
+
+```bash
+# Edit the release to add proper notes
+gh release edit v0.2.0 -R jlevy/tryscript --notes "$(cat <<'EOF'
+## What's Changed
+
+### Features
+- Feature description here
+
+### Fixes
+- Fix description here
+
+**Full Changelog**: https://github.com/jlevy/tryscript/compare/v0.1.0...v0.2.0
+EOF
+)"
+```
+
+### Step 9: Verify
 
 ```bash
 gh run list -R jlevy/tryscript --limit 3  # Check release workflow started
 gh run view --log                          # Watch progress
+gh release view v0.2.0 -R jlevy/tryscript  # Verify release notes
 ```
 
 The GitHub Actions workflow will build and publish to npm using OIDC authentication.
@@ -178,6 +227,9 @@ git add .changeset && git commit -m "chore: add changeset for v0.2.0"
 pnpm version-packages
 git add . && git commit -m "chore: release tryscript v0.2.0"
 git push && git tag v0.2.0 && git push --tags
+
+# Update release notes after workflow creates the release
+gh release edit v0.2.0 -R jlevy/tryscript --notes-file RELEASE_NOTES.md
 ```
 
 ### Restricted Environments (via PR and API)
@@ -199,8 +251,12 @@ gh pr merge <pr-number> -R jlevy/tryscript --merge
 MERGE_SHA=$(gh pr view <pr-number> -R jlevy/tryscript --json mergeCommit -q '.mergeCommit.oid')
 gh api repos/jlevy/tryscript/git/refs -X POST -f ref="refs/tags/v0.2.0" -f sha="$MERGE_SHA"
 
-# Verify (release workflow creates GitHub Release automatically)
+# Update release notes after workflow creates the release
+gh release edit v0.2.0 -R jlevy/tryscript --notes-file RELEASE_NOTES.md
+
+# Verify
 gh run list -R jlevy/tryscript --limit 3
+gh release view v0.2.0 -R jlevy/tryscript
 ```
 
 ## How OIDC Publishing Works
@@ -222,12 +278,13 @@ The release workflow automatically creates a GitHub Release when a tag is pushed
 
 - **Release name**: Matches the tag (e.g., `v0.1.1`)
 
-- **Release notes**: Extracted from the CHANGELOG for the tagged version
+- **Release notes**: Initially extracted from the CHANGELOG; update with categorized
+  notes (see Step 8)
 
 - **Pre-release flag**: Automatically set for versions containing `-` (e.g.,
   `1.0.0-beta.1`)
 
-After pushing a tag, verify the release appears at:
+After pushing a tag, update the release notes and verify at:
 `https://github.com/jlevy/tryscript/releases`
 
 ## Troubleshooting

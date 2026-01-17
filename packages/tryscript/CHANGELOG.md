@@ -1,5 +1,11 @@
 # tryscript
 
+## 0.1.5
+
+### Patch Changes
+
+- 1d0e004: Add path configuration, environment variables (TRYSCRIPT_GIT_ROOT, TRYSCRIPT_PROJECT_ROOT, TRYSCRIPT_PACKAGE_BIN), and LCOV merging for complete coverage
+
 ## 0.1.3
 
 ### Patch Changes
