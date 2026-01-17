@@ -47,7 +47,7 @@
     "test:watch": "vitest",
     "test:self": "tsx src/bin.ts",
     "test:golden": "node dist/bin.mjs run 'tests/**/*.tryscript.md'",
-    "test:coverage": "node dist/bin.mjs coverage --monocart \"pnpm vitest run\" \"node dist/bin.mjs run 'tests/**/*.tryscript.md'\"",
+    "test:coverage": "vitest run --coverage && node dist/bin.mjs run --coverage --coverage-monocart --merge-lcov coverage/lcov.info 'tests/**/*.tryscript.md'",
     "publint": "publint",
     "prepack": "pnpm build",
     "tryscript": "tsx src/bin.ts"

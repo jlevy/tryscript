@@ -26,6 +26,7 @@ import {
   getCoverageEnv,
   generateCoverageReport,
   cleanupCoverageContext,
+  mergeExternalCoverage,
 } from '../../lib/coverage.js';
 import type {
   TestBlockResult,
@@ -50,6 +51,7 @@ interface RunOptions {
   coverageSkipFull?: boolean;
   coverageAllowExternal?: boolean;
   coverageMonocart?: boolean;
+  mergeLcov?: string;
 }
 
 /**
@@ -95,6 +97,10 @@ export function registerRunCommand(program: Command): void {
       '--coverage-monocart',
       'Use monocart for accurate line counts, better for merging with vitest (c8 --experimental-monocart)',
     )
+    .option(
+      '--merge-lcov <path>',
+      'Merge coverage from an existing LCOV file (e.g., from vitest --coverage)',
+    )
     .action(runCommand);
 }
 
@@ -139,11 +145,22 @@ async function runCommand(files: string[], options: RunOptions): Promise<void> {
       process.exit(1);
     }
 
+    // If --merge-lcov is specified, ensure lcov reporter is included
+    let reporters = options.coverageReporter ?? globalConfig.coverage?.reporters;
+    if (options.mergeLcov) {
+      // If no explicit reporters, use defaults plus lcov
+      if (!reporters) {
+        reporters = ['text', 'html', 'lcov'];
+      } else if (!reporters.includes('lcov')) {
+        reporters = [...reporters, 'lcov'];
+      }
+    }
+
     // Create coverage context with CLI options overriding config
     coverageCtx = await createCoverageContext({
       ...globalConfig.coverage,
       reportsDir: options.coverageDir ?? globalConfig.coverage?.reportsDir,
-      reporters: options.coverageReporter ?? globalConfig.coverage?.reporters,
+      reporters,
       exclude: options.coverageExclude ?? globalConfig.coverage?.exclude,
       excludeNodeModules:
         options.coverageExcludeNodeModules ?? globalConfig.coverage?.excludeNodeModules,
@@ -152,6 +169,7 @@ async function runCommand(files: string[], options: RunOptions): Promise<void> {
       skipFull: options.coverageSkipFull ?? globalConfig.coverage?.skipFull,
       allowExternal: options.coverageAllowExternal ?? globalConfig.coverage?.allowExternal,
       monocart: options.coverageMonocart ?? globalConfig.coverage?.monocart,
+      mergeLcov: options.mergeLcov ?? globalConfig.coverage?.mergeLcov,
     });
     coverageEnv = getCoverageEnv(coverageCtx);
   }
@@ -286,6 +304,22 @@ async function runCommand(files: string[], options: RunOptions): Promise<void> {
       console.error(
         colors.success(`Coverage report written to ${coverageCtx.options.reportsDir}/`),
       );
+
+      // Merge with external LCOV if specified
+      if (coverageCtx.options.mergeLcov) {
+        console.error(`Merging with external coverage: ${coverageCtx.options.mergeLcov}`);
+        const merged = mergeExternalCoverage(
+          coverageCtx.options.reportsDir,
+          coverageCtx.options.mergeLcov,
+        );
+        if (merged) {
+          console.error(
+            colors.success(
+              `Merged coverage: ${merged.lines}% lines, ${merged.functions}% functions`,
+            ),
+          );
+        }
+      }
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       logError(`Failed to generate coverage report: ${message}`);

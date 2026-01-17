@@ -16,6 +16,13 @@ import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { existsSync } from 'node:fs';
 import { logError, logWarn, colors } from '../lib/shared.js';
+import {
+  readLcovFile,
+  mergeLcov,
+  writeLcovFile,
+  lcovToJsonSummary,
+  writeJsonSummary,
+} from '../../lib/lcov.js';
 
 interface CoverageOptions {
   reportsDir?: string;
@@ -29,6 +36,7 @@ interface CoverageOptions {
   monocart?: boolean;
   src?: string;
   verbose?: boolean;
+  mergeLcov?: string;
 }
 
 /**
@@ -54,6 +62,10 @@ export function registerCoverageCommand(program: Command): void {
     .option('--monocart', 'Use monocart for accurate line counts (recommended for merging)')
     .option('--src <dir>', 'Source directory for sourcemap remapping (default: src)')
     .option('--verbose', 'Show coverage summary after each command for debugging')
+    .option(
+      '--merge-lcov <path>',
+      'Merge coverage from an existing LCOV file (e.g., from vitest --coverage)',
+    )
     .action(coverageCommand);
 }
 
@@ -323,7 +335,7 @@ async function coverageCommand(commands: string[], options: CoverageOptions): Pr
     }
 
     // Generate merged coverage report
-    console.error(colors.info('\n=== Generating merged coverage report ==='));
+    console.error(colors.info('\n=== Generating coverage report ==='));
 
     const reportSuccess = await generateReport(coverageTemp, parsedOptions);
     if (!reportSuccess) {
@@ -331,9 +343,46 @@ async function coverageCommand(commands: string[], options: CoverageOptions): Pr
       process.exit(1);
     }
 
-    console.error(
-      colors.success(`\nCoverage report written to ${parsedOptions.reportsDir ?? 'coverage'}/`),
-    );
+    const reportsDir = parsedOptions.reportsDir ?? 'coverage';
+
+    // If --merge-lcov is specified, merge with external LCOV and rewrite outputs
+    if (parsedOptions.mergeLcov) {
+      const externalLcovPath = parsedOptions.mergeLcov;
+      const generatedLcovPath = join(reportsDir, 'lcov.info');
+
+      if (!existsSync(externalLcovPath)) {
+        logError(`External LCOV file not found: ${externalLcovPath}`);
+        process.exit(1);
+      }
+
+      if (!existsSync(generatedLcovPath)) {
+        logError(`Generated LCOV file not found: ${generatedLcovPath}`);
+        logError('Make sure "lcov" is included in reporters');
+        process.exit(1);
+      }
+
+      console.error(colors.info(`\nMerging with external coverage: ${externalLcovPath}`));
+
+      // Read and merge LCOV files
+      const externalLcov = readLcovFile(externalLcovPath);
+      const generatedLcov = readLcovFile(generatedLcovPath);
+      const mergedLcov = mergeLcov(externalLcov, generatedLcov);
+
+      // Write merged LCOV
+      writeLcovFile(generatedLcovPath, mergedLcov);
+
+      // Write JSON summary from merged data
+      const summary = lcovToJsonSummary(mergedLcov);
+      writeJsonSummary(join(reportsDir, 'coverage-summary.json'), summary);
+
+      console.error(
+        colors.success(
+          `\nMerged coverage: ${summary.total.lines.pct}% lines, ${summary.total.functions.pct}% functions`,
+        ),
+      );
+    }
+
+    console.error(colors.success(`\nCoverage report written to ${reportsDir}/`));
   } finally {
     // Cleanup temp directory
     await rm(coverageTemp, { recursive: true, force: true });

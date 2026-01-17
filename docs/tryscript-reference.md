@@ -497,6 +497,7 @@ All coverage options mirror [c8](https://github.com/bcoe/c8) CLI flags for famil
 | `--coverage-skip-full` | Hide 100% covered files | `false` |
 | `--coverage-allow-external` | Allow files outside cwd | `false` |
 | `--coverage-monocart` | Use monocart for accurate line counts | `false` |
+| `--merge-lcov <path>` | Merge with external LCOV file (e.g., vitest coverage) | - |
 
 ## Code Coverage
 
@@ -566,14 +567,31 @@ tryscript coverage --monocart "tryscript run tests/"
 
 #### Merging Vitest + Tryscript Coverage
 
-To merge coverage from vitest and tryscript, use **LCOV file merging** instead:
+Use the built-in `--merge-lcov` flag to combine vitest and tryscript coverage in one step:
+
+```bash
+# Step 1: Run vitest with its own coverage (generates coverage/lcov.info)
+vitest run --coverage
+
+# Step 2: Run tryscript with coverage, merging vitest's LCOV file
+tryscript run --coverage --merge-lcov coverage/lcov.info tests/
+```
+
+The `--merge-lcov` flag:
+- Automatically adds the `lcov` reporter if not already specified
+- Merges the external LCOV file with tryscript's generated coverage
+- Outputs the combined `lcov.info` and `coverage-summary.json` for badge generation
+
+**Alternative: Manual LCOV Merging**
+
+If you need more control, you can merge LCOV files manually:
 
 ```bash
 # Step 1: Run vitest with its own coverage
 vitest run --coverage
 
 # Step 2: Run tryscript with coverage
-tryscript run --coverage tests/
+tryscript run --coverage --coverage-reporter lcov tests/
 
 # Step 3: Merge the LCOV files using lcov or a merge tool
 lcov -a coverage/lcov.info -a coverage-tryscript/lcov.info -o coverage-merged/lcov.info
@@ -714,6 +732,7 @@ export default defineConfig({
 | `allowExternal` | `--coverage-allow-external` | Allow external files |
 | `src` | - | Source dir for mapping (config only) |
 | `monocart` | `--coverage-monocart` | AST-aware line counts |
+| `mergeLcov` | `--merge-lcov` | Merge with external LCOV file |
 
 ## Best Practices
 
