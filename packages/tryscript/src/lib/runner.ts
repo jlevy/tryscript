@@ -5,7 +5,7 @@ import { join, dirname, resolve, basename, delimiter } from 'node:path';
 import treeKill from 'tree-kill';
 import type { TestBlock, TestBlockResult } from './types.js';
 import type { TryscriptConfig, Fixture } from './config.js';
-import { setupPackageBin, findPackageJson } from './package-bin.js';
+import { setupPackageBin, findPackageJson, findGitRoot } from './package-bin.js';
 
 /** Default timeout in milliseconds */
 const DEFAULT_TIMEOUT = 30_000;
@@ -116,6 +116,18 @@ export async function createExecutionContext(
   const pkgPath = findPackageJson(testDir);
   const packageRoot = pkgPath ? dirname(pkgPath) : undefined;
 
+  // Find git root for TRYSCRIPT_GIT_ROOT
+  const gitRoot = findGitRoot(testDir) ?? undefined;
+
+  // TRYSCRIPT_PROJECT_ROOT is the most specific (deepest) of package or git root
+  // Deeper path = longer string = more specific project boundary
+  const projectRoot =
+    packageRoot && gitRoot
+      ? packageRoot.length >= gitRoot.length
+        ? packageRoot
+        : gitRoot
+      : (packageRoot ?? gitRoot);
+
   // Set up package bin wrappers (packageBin option)
   // Use cwd for package.json lookup so it finds the right package in monorepos
   const packageBinDir = await setupPackageBin(config.packageBin, cwd, tempDir);
@@ -144,8 +156,10 @@ export async function createExecutionContext(
       FORCE_COLOR: '0',
       // Provide test directory for portable test commands
       TRYSCRIPT_TEST_DIR: testDir,
-      // Provide package root for manual path construction
+      // Provide project roots for manual path construction
       ...(packageRoot && { TRYSCRIPT_PACKAGE_ROOT: packageRoot }),
+      ...(gitRoot && { TRYSCRIPT_GIT_ROOT: gitRoot }),
+      ...(projectRoot && { TRYSCRIPT_PROJECT_ROOT: projectRoot }),
       // Custom PATH with packageBin and config paths
       PATH: pathParts.join(delimiter),
     } as Record<string, string>,

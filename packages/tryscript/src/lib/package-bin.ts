@@ -32,6 +32,28 @@ break;
 }
 
 /**
+ * Find nearest .git directory by walking up from startDir.
+ * Returns the directory containing .git, or null if not found.
+ */
+export function findGitRoot(startDir: string): string | null {
+  let dir = startDir;
+
+  while (true) {
+    const gitPath = join(dir, '.git');
+    if (existsSync(gitPath)) {
+      return dir;
+    }
+    const parent = dirname(dir);
+    if (parent === dir) {
+break;
+} // Reached filesystem root
+    dir = parent;
+  }
+
+  return null;
+}
+
+/**
  * Parse package.json and extract bin entries.
  * Handles both string form ("bin": "./cli.js") and object form ("bin": {"name": "./cli.js"}).
  */

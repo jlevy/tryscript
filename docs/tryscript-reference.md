@@ -241,11 +241,19 @@ Tryscript sets these environment variables for test commands:
 | `FORCE_COLOR` | Set to `"0"` (disables forced colors) |
 | `TRYSCRIPT_TEST_DIR` | Absolute path to directory containing the test file |
 | `TRYSCRIPT_PACKAGE_ROOT` | Absolute path to directory containing nearest `package.json` (if found) |
+| `TRYSCRIPT_GIT_ROOT` | Absolute path to directory containing nearest `.git` (if found) |
+| `TRYSCRIPT_PROJECT_ROOT` | Most specific of `PACKAGE_ROOT` or `GIT_ROOT` (deepest path) |
 
-**Example using TRYSCRIPT_PACKAGE_ROOT:**
+**Project root variables** help write portable tests that work across different project types:
+
+- **`TRYSCRIPT_PACKAGE_ROOT`** - For npm/Node.js projects with `package.json`
+- **`TRYSCRIPT_GIT_ROOT`** - For any git repository (Rust, Go, Python, etc.)
+- **`TRYSCRIPT_PROJECT_ROOT`** - Use this when you don't care about project type
+
+**Example using TRYSCRIPT_PROJECT_ROOT:**
 ```console
-$ echo $TRYSCRIPT_PACKAGE_ROOT | grep -q "my-project" && echo "found"
-found
+$ test -n "$TRYSCRIPT_PROJECT_ROOT" && echo "in a project"
+in a project
 ? 0
 ```
 
