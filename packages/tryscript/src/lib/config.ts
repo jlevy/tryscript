@@ -33,6 +33,12 @@ export interface TryscriptConfig {
    * Makes executables in these directories available by name in commands.
    */
   path?: string[];
+  /**
+   * Auto-expose package.json bin entries in PATH.
+   * When true, finds nearest package.json and creates wrapper scripts
+   * for each bin entry, making them available as commands.
+   */
+  packageBin?: boolean;
 }
 
 /** Default coverage configuration values. */

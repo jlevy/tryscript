@@ -5,6 +5,7 @@ import { join, dirname, resolve, basename, delimiter } from 'node:path';
 import treeKill from 'tree-kill';
 import type { TestBlock, TestBlockResult } from './types.js';
 import type { TryscriptConfig, Fixture } from './config.js';
+import { setupPackageBin, findPackageJson } from './package-bin.js';
 
 /** Default timeout in milliseconds */
 const DEFAULT_TIMEOUT = 30_000;
@@ -42,23 +43,6 @@ function normalizeFixture(fixture: string | Fixture): Fixture {
     return { source: fixture };
   }
   return fixture;
-}
-
-/**
- * Build PATH by prepending configured directories.
- * Paths are resolved relative to the test file directory.
- */
-function buildPath(configPaths: string[] | undefined, testDir: string): string {
-  const existingPath = process.env.PATH ?? '';
-
-  if (!configPaths || configPaths.length === 0) {
-    return existingPath;
-  }
-
-  // Resolve paths relative to test file directory
-  const resolvedPaths = configPaths.map((p) => resolve(testDir, p));
-
-  return [...resolvedPaths, existingPath].join(delimiter);
 }
 
 /**
@@ -128,6 +112,24 @@ export async function createExecutionContext(
     await setupFixtures(config.fixtures, testDir, tempDir);
   }
 
+  // Find package root for TRYSCRIPT_PACKAGE_ROOT (always available)
+  const pkgPath = findPackageJson(testDir);
+  const packageRoot = pkgPath ? dirname(pkgPath) : undefined;
+
+  // Set up package bin wrappers (packageBin option)
+  // Use cwd for package.json lookup so it finds the right package in monorepos
+  const packageBinDir = await setupPackageBin(config.packageBin, cwd, tempDir);
+
+  // Build PATH: packageBin dir (highest priority) > config paths > system PATH
+  const pathParts: string[] = [];
+  if (packageBinDir) {
+    pathParts.push(packageBinDir);
+  }
+  if (config.path && config.path.length > 0) {
+    pathParts.push(...config.path.map((p) => resolve(testDir, p)));
+  }
+  pathParts.push(process.env.PATH ?? '');
+
   const ctx: ExecutionContext = {
     tempDir,
     testDir,
@@ -142,8 +144,10 @@ export async function createExecutionContext(
       FORCE_COLOR: '0',
       // Provide test directory for portable test commands
       TRYSCRIPT_TEST_DIR: testDir,
-      // Prepend custom paths to PATH
-      PATH: buildPath(config.path, testDir),
+      // Provide package root for manual path construction
+      ...(packageRoot && { TRYSCRIPT_PACKAGE_ROOT: packageRoot }),
+      // Custom PATH with packageBin and config paths
+      PATH: pathParts.join(delimiter),
     } as Record<string, string>,
     timeout: config.timeout ?? DEFAULT_TIMEOUT,
     before: config.before,
