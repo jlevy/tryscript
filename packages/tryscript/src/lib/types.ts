@@ -29,7 +29,6 @@ export const TestConfigSchema = z.object({
     .array(z.string())
     .optional()
     .describe('Directories to prepend to PATH (resolved relative to test file)'),
-  packageBin: z.boolean().optional().describe('Auto-expose package.json bin entries in PATH'),
 });
 
 /**

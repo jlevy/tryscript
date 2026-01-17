@@ -6,7 +6,7 @@ import { join, dirname, resolve, basename, delimiter } from 'node:path';
 import treeKill from 'tree-kill';
 import type { TestBlock, TestBlockResult } from './types.js';
 import type { TryscriptConfig, Fixture } from './config.js';
-import { setupPackageBin, findPackageJson, findGitRoot } from './package-bin.js';
+import { findPackageJson, findGitRoot } from './package-bin.js';
 import { createEnvExpander } from './env-vars.js';
 
 /** Default timeout in milliseconds */
@@ -146,15 +146,8 @@ export async function createExecutionContext(
   // Create expander with tryscript env vars taking precedence
   const expandEnvVars = createEnvExpander(tryscriptEnvVars);
 
-  // Set up package bin wrappers (packageBin option - DEPRECATED, use path: [$TRYSCRIPT_PACKAGE_BIN])
-  // Use cwd for package.json lookup so it finds the right package in monorepos
-  const packageBinDir = await setupPackageBin(config.packageBin, cwd, tempDir);
-
-  // Build PATH: packageBin dir (highest priority) > config paths > system PATH
+  // Build PATH: config paths > system PATH
   const pathParts: string[] = [];
-  if (packageBinDir) {
-    pathParts.push(packageBinDir);
-  }
   if (config.path && config.path.length > 0) {
     // Expand env vars in path entries, then resolve relative to testDir
     pathParts.push(
@@ -183,7 +176,7 @@ export async function createExecutionContext(
       TRYSCRIPT_TEST_DIR: testDir,
       // Provide project roots for manual path construction
       ...tryscriptEnvVars,
-      // Custom PATH with packageBin and config paths
+      // Custom PATH with config paths
       PATH: pathParts.join(delimiter),
     } as Record<string, string>,
     timeout: config.timeout ?? DEFAULT_TIMEOUT,

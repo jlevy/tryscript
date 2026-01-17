@@ -31,14 +31,9 @@ export interface TryscriptConfig {
   /**
    * Directories to prepend to PATH (resolved relative to test file).
    * Makes executables in these directories available by name in commands.
+   * Supports env var expansion: $VAR or ${VAR} syntax.
    */
   path?: string[];
-  /**
-   * Auto-expose package.json bin entries in PATH.
-   * When true, finds nearest package.json and creates wrapper scripts
-   * for each bin entry, making them available as commands.
-   */
-  packageBin?: boolean;
 }
 
 /** Default coverage configuration values. */

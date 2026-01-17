@@ -184,7 +184,6 @@ path:                      # Directories to prepend to PATH
 | `before` | `string` | - | Shell command before first test |
 | `after` | `string` | - | Shell command after all tests |
 | `path` | `string[]` | `[]` | Directories to prepend to PATH (supports `$VAR` expansion) |
-| `packageBin` | `boolean` | `false` | *(Deprecated)* Auto-expose package.json bin entries |
 
 ## Sandbox Mode
 
@@ -333,54 +332,6 @@ my-project/
 └── tests/
     └── cli.tryscript.md  # Your test file
 ```
-
-### packageBin: Auto-Expose package.json Binaries (Deprecated)
-
-> **Note:** Prefer using `path: [$TRYSCRIPT_PACKAGE_BIN]` instead - it's simpler and more composable.
-
-Use `packageBin: true` to expose binaries defined in the `package.json` `bin` field:
-
-```yaml
----
-sandbox: true
-packageBin: true
----
-
-# Your CLI is available by name from package.json bin field
-```console
-$ my-cli --help
-Usage: my-cli [options] [command]
-? 0
-```
-```
-
-**How it works:**
-1. Finds the nearest `package.json` (walking up from test file)
-2. Reads the `bin` field
-3. Creates wrapper scripts for each entry
-4. Adds them to PATH (highest priority)
-
-**Supported bin formats:**
-```json
-// String form: command name = package name
-{
-  "name": "my-cli",
-  "bin": "./dist/cli.mjs"
-}
-// Result: `my-cli` command available
-
-// Object form: explicit command names
-{
-  "name": "my-package",
-  "bin": {
-    "cmd1": "./dist/cmd1.mjs",
-    "cmd2": "./dist/cmd2.js"
-  }
-}
-// Result: `cmd1` and `cmd2` commands available
-```
-
-**Scoped packages:** For `@scope/name`, the scope is stripped (command name is `name`).
 
 ### Language-Specific Examples
 
@@ -833,7 +784,6 @@ export default defineConfig({
   },
   // CLI testing configuration
   path: ['./dist'],       // Directories to add to PATH
-  packageBin: true,       // Auto-expose package.json bin entries
 });
 ```
 
