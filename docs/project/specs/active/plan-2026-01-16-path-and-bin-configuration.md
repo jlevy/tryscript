@@ -1,6 +1,6 @@
 # Plan Spec: PATH and Binary Configuration
 
-**Status**: DRAFT
+**Status**: IMPLEMENTATION_COMPLETE (pending documentation updates)
 
 ## Purpose
 
@@ -260,13 +260,13 @@ $ my-cli --version
 
 ### Acceptance Criteria
 
-- [ ] `path: [../dist]` adds `../dist` (resolved) to PATH
-- [ ] Multiple paths prepended in order specified
-- [ ] Paths resolve relative to test file, not sandbox CWD
-- [ ] Works with and without sandbox mode
-- [ ] Config file and frontmatter paths merge correctly
+- [x] `path: [../dist]` adds `../dist` (resolved) to PATH
+- [x] Multiple paths prepended in order specified
+- [x] Paths resolve relative to test file, not sandbox CWD
+- [x] Works with and without sandbox mode
+- [x] Config file and frontmatter paths merge correctly
 - [ ] Documentation updated
-- [ ] Tests pass
+- [x] Tests pass
 
 ---
 
@@ -632,18 +632,18 @@ Supports both bin formats:
 
 ### Acceptance Criteria
 
-- [ ] `packageBin: true` creates wrappers for package.json bin entries
-- [ ] String form bin uses package name as command
-- [ ] Object form bin supports multiple commands
-- [ ] Scoped package names handled correctly (`@scope/name` → `name`)
-- [ ] Wrappers invoke Node.js for .js/.mjs/.cjs files
-- [ ] Wrappers exec directly for other files
-- [ ] packageBin paths have priority over `path` config
-- [ ] No error when package.json not found (silent skip)
-- [ ] No error when bin field empty (silent skip)
-- [ ] Works with sandbox mode
+- [x] `packageBin: true` creates wrappers for package.json bin entries
+- [x] String form bin uses package name as command
+- [x] Object form bin supports multiple commands
+- [x] Scoped package names handled correctly (`@scope/name` → `name`)
+- [x] Wrappers invoke Node.js for .js/.mjs/.cjs files
+- [x] Wrappers exec directly for other files
+- [x] packageBin paths have priority over `path` config
+- [x] No error when package.json not found (silent skip)
+- [x] No error when bin field empty (silent skip)
+- [x] Works with sandbox mode
 - [ ] Documentation updated
-- [ ] Tests pass
+- [x] Tests pass
 
 ---
 
@@ -766,12 +766,12 @@ Usage: cli [options]
 
 ### Acceptance Criteria
 
-- [ ] `TRYSCRIPT_PACKAGE_ROOT` set when package.json found
-- [ ] Points to directory containing package.json (not the file itself)
-- [ ] Not set when no package.json found (no error)
-- [ ] Walks up directory tree like Phase II
+- [x] `TRYSCRIPT_PACKAGE_ROOT` set when package.json found
+- [x] Points to directory containing package.json (not the file itself)
+- [x] Not set when no package.json found (no error)
+- [x] Walks up directory tree like Phase II
 - [ ] Documentation updated
-- [ ] Tests pass
+- [x] Tests pass
 
 ---
 
