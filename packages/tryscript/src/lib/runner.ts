@@ -1,4 +1,5 @@
 import { spawn } from 'node:child_process';
+import { existsSync } from 'node:fs';
 import { mkdtemp, realpath, rm, cp } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join, dirname, resolve, basename, delimiter } from 'node:path';
@@ -128,7 +129,27 @@ export async function createExecutionContext(
         : gitRoot
       : (packageRoot ?? gitRoot);
 
-  // Set up package bin wrappers (packageBin option)
+  // TRYSCRIPT_PACKAGE_BIN points to node_modules/.bin if it exists
+  const packageBinPath = packageRoot ? join(packageRoot, 'node_modules', '.bin') : undefined;
+  const packageBin = packageBinPath && existsSync(packageBinPath) ? packageBinPath : undefined;
+
+  // Build env vars map for path expansion (before building PATH)
+  const tryscriptEnvVars: Record<string, string> = {
+    ...(packageRoot && { TRYSCRIPT_PACKAGE_ROOT: packageRoot }),
+    ...(gitRoot && { TRYSCRIPT_GIT_ROOT: gitRoot }),
+    ...(projectRoot && { TRYSCRIPT_PROJECT_ROOT: projectRoot }),
+    ...(packageBin && { TRYSCRIPT_PACKAGE_BIN: packageBin }),
+    TRYSCRIPT_TEST_DIR: testDir,
+  };
+
+  // Helper to expand $VAR references in a string using tryscript env vars
+  const expandEnvVars = (str: string): string => {
+    return str.replace(/\$([A-Z_][A-Z0-9_]*)/g, (_, varName: string) => {
+      return tryscriptEnvVars[varName] ?? process.env[varName] ?? '';
+    });
+  };
+
+  // Set up package bin wrappers (packageBin option - DEPRECATED, use path: [$TRYSCRIPT_PACKAGE_BIN])
   // Use cwd for package.json lookup so it finds the right package in monorepos
   const packageBinDir = await setupPackageBin(config.packageBin, cwd, tempDir);
 
@@ -138,7 +159,14 @@ export async function createExecutionContext(
     pathParts.push(packageBinDir);
   }
   if (config.path && config.path.length > 0) {
-    pathParts.push(...config.path.map((p) => resolve(testDir, p)));
+    // Expand env vars in path entries, then resolve relative to testDir
+    pathParts.push(
+      ...config.path.map((p) => {
+        const expanded = expandEnvVars(p);
+        // If already absolute (after expansion), use as-is; otherwise resolve relative to testDir
+        return expanded.startsWith('/') ? expanded : resolve(testDir, expanded);
+      }),
+    );
   }
   pathParts.push(process.env.PATH ?? '');
 
@@ -157,9 +185,7 @@ export async function createExecutionContext(
       // Provide test directory for portable test commands
       TRYSCRIPT_TEST_DIR: testDir,
       // Provide project roots for manual path construction
-      ...(packageRoot && { TRYSCRIPT_PACKAGE_ROOT: packageRoot }),
-      ...(gitRoot && { TRYSCRIPT_GIT_ROOT: gitRoot }),
-      ...(projectRoot && { TRYSCRIPT_PROJECT_ROOT: projectRoot }),
+      ...tryscriptEnvVars,
       // Custom PATH with packageBin and config paths
       PATH: pathParts.join(delimiter),
     } as Record<string, string>,

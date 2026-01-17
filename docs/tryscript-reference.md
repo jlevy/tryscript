@@ -167,7 +167,7 @@ before: npm run build      # Run before first test
 after: rm -rf ./cache      # Run after all tests
 path:                      # Directories to prepend to PATH
   - ../dist
-packageBin: true           # Auto-expose package.json bin entries
+  - $TRYSCRIPT_PACKAGE_BIN # Access node_modules/.bin via env var
 ---
 ```
 
@@ -183,8 +183,8 @@ packageBin: true           # Auto-expose package.json bin entries
 | `fixtures` | `array` | `[]` | Files to copy to sandbox |
 | `before` | `string` | - | Shell command before first test |
 | `after` | `string` | - | Shell command after all tests |
-| `path` | `string[]` | `[]` | Directories to prepend to PATH |
-| `packageBin` | `boolean` | `false` | Auto-expose package.json bin entries |
+| `path` | `string[]` | `[]` | Directories to prepend to PATH (supports `$VAR` expansion) |
+| `packageBin` | `boolean` | `false` | *(Deprecated)* Auto-expose package.json bin entries |
 
 ## Sandbox Mode
 
@@ -243,12 +243,14 @@ Tryscript sets these environment variables for test commands:
 | `TRYSCRIPT_PACKAGE_ROOT` | Absolute path to directory containing nearest `package.json` (if found) |
 | `TRYSCRIPT_GIT_ROOT` | Absolute path to directory containing nearest `.git` (if found) |
 | `TRYSCRIPT_PROJECT_ROOT` | Most specific of `PACKAGE_ROOT` or `GIT_ROOT` (deepest path) |
+| `TRYSCRIPT_PACKAGE_BIN` | Absolute path to `node_modules/.bin` directory (if exists) |
 
 **Project root variables** help write portable tests that work across different project types:
 
 - **`TRYSCRIPT_PACKAGE_ROOT`** - For npm/Node.js projects with `package.json`
 - **`TRYSCRIPT_GIT_ROOT`** - For any git repository (Rust, Go, Python, etc.)
 - **`TRYSCRIPT_PROJECT_ROOT`** - Use this when you don't care about project type
+- **`TRYSCRIPT_PACKAGE_BIN`** - For npm packages with `node_modules/.bin` (use in `path:`)
 
 **Example using TRYSCRIPT_PROJECT_ROOT:**
 ```console
@@ -269,8 +271,8 @@ Use `path` to prepend directories to PATH, making executables available by name:
 ---
 sandbox: true
 path:
-  - ../dist              # Relative to test file directory
-  - ../node_modules/.bin # Access installed package bins
+  - ../dist                  # Relative to test file directory
+  - $TRYSCRIPT_PACKAGE_BIN   # Use node_modules/.bin via env var
 ---
 ```
 
@@ -285,10 +287,27 @@ $ my-cli --version
 - Multiple paths are prepended in order (first has highest priority)
 - Works with or without sandbox mode
 - Frontmatter and config file paths are merged (frontmatter first)
+- **Environment variable expansion:** Path entries support `$VAR` syntax for any `TRYSCRIPT_*` variable or process env var
 
-### packageBin: Auto-Expose package.json Binaries
+### Using node_modules/.bin
 
-Use `packageBin: true` for zero-config CLI testing with npm packages:
+For npm packages, use `$TRYSCRIPT_PACKAGE_BIN` to access installed executables:
+
+```yaml
+---
+sandbox: true
+path:
+  - $TRYSCRIPT_PACKAGE_BIN   # node_modules/.bin from nearest package.json
+---
+```
+
+This is the recommended approach for accessing npm package binaries. The path only exists if `node_modules/.bin` is present (i.e., packages are installed).
+
+### packageBin: Auto-Expose package.json Binaries (Deprecated)
+
+> **Note:** Prefer using `path: [$TRYSCRIPT_PACKAGE_BIN]` instead - it's simpler and more composable.
+
+Use `packageBin: true` to expose binaries defined in the `package.json` `bin` field:
 
 ```yaml
 ---
@@ -331,24 +350,6 @@ Usage: my-cli [options] [command]
 ```
 
 **Scoped packages:** For `@scope/name`, the scope is stripped (command name is `name`).
-
-### Combining path and packageBin
-
-You can use both options together:
-
-```yaml
----
-sandbox: true
-packageBin: true          # Your main CLI from package.json
-path:
-  - ../scripts            # Additional utility scripts
----
-```
-
-PATH priority (highest to lowest):
-1. `packageBin` wrappers
-2. `path` entries (in order specified)
-3. System PATH
 
 ### Language-Specific Examples
 

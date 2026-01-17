@@ -3,7 +3,7 @@
 ## Purpose
 
 This validation spec documents the testing performed for the PATH and binary configuration
-features (path option, packageBin option, and TRYSCRIPT_PACKAGE_ROOT environment variable).
+features including path option, packageBin option, environment variables, and env var expansion.
 
 **Feature Plan:** [plan-2026-01-16-path-and-bin-configuration.md](plan-2026-01-16-path-and-bin-configuration.md)
 
@@ -21,7 +21,7 @@ All features are validated through golden tests that test actual command executi
   - Multiple binaries from path (`version-check` command)
   - Path works alongside system PATH commands
 
-**Phase II - `packageBin` option:**
+**Phase II - `packageBin` option (deprecated):**
 - `tests/package-bin.tryscript.md` - Tests object-form bin with explicit command names
 - `tests/package-bin-string.tryscript.md` - Tests string-form bin (command name from package name)
 - `tests/package-bin-scoped.tryscript.md` - Tests scoped packages (`@scope/name` → `name`)
@@ -30,6 +30,23 @@ All features are validated through golden tests that test actual command executi
 - `tests/package-root-var.tryscript.md` - Tests:
   - Variable contains "tryscript" (points to package root)
   - Variable is an absolute path
+
+**Phase IV-V - `TRYSCRIPT_GIT_ROOT` and `TRYSCRIPT_PROJECT_ROOT`:**
+- `tests/project-root-vars.tryscript.md` - Tests:
+  - `TRYSCRIPT_GIT_ROOT` points to directory with `.git`
+  - `TRYSCRIPT_GIT_ROOT` is absolute path
+  - `TRYSCRIPT_PROJECT_ROOT` is set (most specific of package/git root)
+  - `TRYSCRIPT_PROJECT_ROOT` is absolute path
+
+**Phase VI - `TRYSCRIPT_PACKAGE_BIN`:**
+- `tests/package-bin-env.tryscript.md` - Tests:
+  - `TRYSCRIPT_PACKAGE_BIN` points to `node_modules/.bin`
+  - Variable is an absolute path
+
+**Phase VII - Environment variable expansion in `path:`:**
+- `tests/path-env-expansion.tryscript.md` - Tests `$TRYSCRIPT_PACKAGE_BIN` in path
+- `tests/path-env-project-root.tryscript.md` - Tests `$TRYSCRIPT_PROJECT_ROOT` in path
+- `tests/path-env-git-root.tryscript.md` - Tests `$TRYSCRIPT_GIT_ROOT` in path
 
 ### Test Fixtures
 
@@ -46,9 +63,9 @@ Existing unit tests in `tests/runner.test.ts` continue to pass, validating core 
 
 ### Test Results
 
-All 102 golden tests pass (100 existing + 5 new):
+All 111 golden tests pass:
 ```
-102 passed (27.05s)
+111 passed
 ```
 
 All 74 unit tests pass:
@@ -61,26 +78,27 @@ Tests       74 passed (74)
 
 ### 1. Review New Configuration Options
 
-The user should review the new configuration options work as documented:
+The recommended approach for npm packages is now:
 
 ```yaml
-# In a test file frontmatter
 ---
 sandbox: true
 path:
-  - ../dist           # Makes binaries in ../dist available by name
-packageBin: true      # Auto-exposes package.json bin entries
+  - $TRYSCRIPT_PACKAGE_BIN   # Access node_modules/.bin via env var
 ---
 ```
 
-### 2. Test packageBin with Your Own Package
+This is more composable than the deprecated `packageBin: true` option.
 
-Create a test file for your own CLI package and verify:
+### 2. Test with Your Own Package
+
+Verify `$TRYSCRIPT_PACKAGE_BIN` works in path:
 
 ```yaml
 ---
 sandbox: true
-packageBin: true
+path:
+  - $TRYSCRIPT_PACKAGE_BIN
 ---
 
 # Your CLI should work by name
@@ -91,22 +109,35 @@ $ your-cli --version
 ```
 ```
 
-### 3. Verify TRYSCRIPT_PACKAGE_ROOT
+### 3. Verify Environment Variables
 
-In any test file, verify the environment variable is set:
+In any test file, verify environment variables are set:
 
 ```console
 $ echo $TRYSCRIPT_PACKAGE_ROOT
-[should output absolute path to your package root]
+[absolute path to package root]
+? 0
+
+$ echo $TRYSCRIPT_GIT_ROOT
+[absolute path to git root]
+? 0
+
+$ echo $TRYSCRIPT_PROJECT_ROOT
+[most specific of package/git root]
+? 0
+
+$ echo $TRYSCRIPT_PACKAGE_BIN
+[absolute path to node_modules/.bin]
 ? 0
 ```
 
 ### 4. Documentation Review
 
-The following documentation updates are still pending (tryscript-336):
-- Update `packages/tryscript/docs/tryscript-reference.md` with new config options
-- Add "Testing CLIs" best practices section
-- Update environment variables table
+Documentation has been updated in `docs/tryscript-reference.md`:
+- Added `TRYSCRIPT_PACKAGE_BIN` to environment variables table
+- Documented env var expansion in `path:` settings
+- Marked `packageBin: true` as deprecated
+- Added "Using node_modules/.bin" section with recommended approach
 
 ## Open Questions
 
@@ -114,5 +145,9 @@ None at this time. All implementation questions from the plan spec have been add
 
 ## Remaining Work
 
-- [x] Update documentation (tryscript-336)
-- [x] Close epic bead (tryscript-327)
+- [x] Implement `TRYSCRIPT_GIT_ROOT` env var
+- [x] Implement `TRYSCRIPT_PROJECT_ROOT` env var
+- [x] Implement `TRYSCRIPT_PACKAGE_BIN` env var
+- [x] Implement env var expansion in `path:` settings
+- [x] Update documentation
+- [x] Update specs

@@ -53,13 +53,19 @@ Following tryscript's existing philosophy:
 
 ## Summary of Task
 
-Implement three complementary features for cleaner binary invocation in tests:
+Implement complementary features for cleaner binary invocation in tests:
 
 | Phase | Feature | Value | Complexity |
 |-------|---------|-------|------------|
 | I | `path` option | Generic PATH control for any binary | Low |
-| II | `packageBin` option | Zero-config for Node.js packages | Medium |
-| III | `TRYSCRIPT_PACKAGE_ROOT` env var | Advanced/manual use cases | Low |
+| II | `packageBin` option | Zero-config for Node.js packages (deprecated) | Medium |
+| III | `TRYSCRIPT_PACKAGE_ROOT` env var | Project root for manual path construction | Low |
+| IV | `TRYSCRIPT_GIT_ROOT` env var | Git root for non-npm projects | Low |
+| V | `TRYSCRIPT_PROJECT_ROOT` env var | Most specific of package/git root | Low |
+| VI | `TRYSCRIPT_PACKAGE_BIN` env var | `node_modules/.bin` directory | Low |
+| VII | Env var expansion in `path:` | Composable path construction | Low |
+
+**Note:** The preferred approach for accessing `node_modules/.bin` is now `path: [$TRYSCRIPT_PACKAGE_BIN]` rather than `packageBin: true`. This is more composable and explicit.
 
 ## Backward Compatibility
 
@@ -795,6 +801,65 @@ Usage: cli [options]
 
 ---
 
+## Phase IV-VII: Extended Environment Variables and Path Expansion
+
+### Overview
+
+Additional phases were added to provide a more composable and project-agnostic approach:
+
+- **Phase IV: `TRYSCRIPT_GIT_ROOT`** - Points to nearest `.git` directory for non-npm projects
+- **Phase V: `TRYSCRIPT_PROJECT_ROOT`** - Most specific of package or git root (useful for any project type)
+- **Phase VI: `TRYSCRIPT_PACKAGE_BIN`** - Points to `node_modules/.bin` if it exists
+- **Phase VII: Env var expansion in `path:`** - Allows `$VAR` syntax in path entries
+
+### TRYSCRIPT_GIT_ROOT
+
+Finds the nearest directory containing `.git` by walking up from the test file. This enables project-root-relative paths in non-npm projects (Rust, Go, Python, etc.).
+
+**Acceptance Criteria:**
+- [x] Set when `.git` directory found
+- [x] Points to directory containing `.git`
+- [x] Walks up directory tree
+- [x] Not set when no `.git` found (no error)
+
+### TRYSCRIPT_PROJECT_ROOT
+
+The "most specific" project boundary - whichever of `TRYSCRIPT_PACKAGE_ROOT` or `TRYSCRIPT_GIT_ROOT` is the deepest (longest path). This is useful for tests that should work in any project type.
+
+**Acceptance Criteria:**
+- [x] Set when either package.json or .git found
+- [x] Picks the deeper path when both exist
+- [x] Falls back to whichever exists when only one present
+
+### TRYSCRIPT_PACKAGE_BIN
+
+Points to `{TRYSCRIPT_PACKAGE_ROOT}/node_modules/.bin` if it exists. This replaces the need for `packageBin: true` in most cases.
+
+**Acceptance Criteria:**
+- [x] Set when `node_modules/.bin` exists
+- [x] Not set if directory doesn't exist
+- [x] Works in `path:` via env var expansion
+
+### Environment Variable Expansion in `path:`
+
+Path entries support `$VAR` syntax to reference any `TRYSCRIPT_*` variable or process env var.
+
+**Example:**
+```yaml
+path:
+  - $TRYSCRIPT_PACKAGE_BIN   # Expands to node_modules/.bin
+  - $TRYSCRIPT_GIT_ROOT/bin  # Expands to git root + /bin
+```
+
+**Acceptance Criteria:**
+- [x] `$TRYSCRIPT_*` vars expanded in path entries
+- [x] Process env vars also expanded as fallback
+- [x] Undefined vars expand to empty string
+- [x] Absolute paths (after expansion) used as-is
+- [x] Relative paths resolved from test directory
+
+---
+
 ## Implementation Order
 
 | Phase | Feature | Dependencies | Effort |
@@ -802,8 +867,12 @@ Usage: cli [options]
 | I | `path` option | None | Low |
 | II | `packageBin` option | None (can reuse `findPackageJson` from III) | Medium |
 | III | `TRYSCRIPT_PACKAGE_ROOT` | `findPackageJson` (can be implemented with II) | Low |
+| IV | `TRYSCRIPT_GIT_ROOT` | `findGitRoot` function | Low |
+| V | `TRYSCRIPT_PROJECT_ROOT` | III, IV | Low |
+| VI | `TRYSCRIPT_PACKAGE_BIN` | III | Low |
+| VII | Env var expansion | VI | Low |
 
-**Recommended order**: Phase I → Phase II + III together (share `findPackageJson`)
+**Recommended order**: Phase I → II + III → IV + V → VI + VII
 
 ---
 
