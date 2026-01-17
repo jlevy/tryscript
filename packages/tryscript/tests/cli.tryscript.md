@@ -90,6 +90,8 @@ Options:
   --coverage-monocart                 Use monocart for accurate line counts,
                                       better for merging with vitest (c8
                                       --experimental-monocart)
+  --merge-lcov <path>                 Merge coverage from an existing LCOV file
+                                      (e.g., from vitest --coverage)
   -h, --help                          display help for command
 
 Global Options:
@@ -346,6 +348,8 @@ Options:
                              src)
   --verbose                  Show coverage summary after each command for
                              debugging
+  --merge-lcov <path>        Merge coverage from an existing LCOV file (e.g.,
+                             from vitest --coverage)
   -h, --help                 display help for command
 
 Global Options:
@@ -400,7 +404,7 @@ These tests use a mock c8 script to verify the coverage command logic.
 
 ```console
 $ TRYSCRIPT_C8_COMMAND="$PWD/mock-c8.sh" node $TRYSCRIPT_TEST_DIR/../dist/bin.mjs coverage "echo hello" 2>&1
-Collecting V8 coverage to [..]
+Collecting V8 coverage to /tmp/tryscript-coverage-[..]
 
 === Running command 1/1: echo hello ===
 hello
@@ -408,8 +412,8 @@ hello
 V8 coverage: 0 files (0 new), 0.0 KB total
 No new coverage files from this command. This may indicate the command doesn't write to NODE_V8_COVERAGE.
 
-=== Generating merged coverage report ===
-mock-c8 called with: report --temp-directory [..] --reports-dir coverage --src src --all --include dist/** --exclude-node-modules --reporter text --reporter json --reporter json-summary --reporter lcov --reporter html
+=== Generating coverage report ===
+mock-c8 called with: report --temp-directory /tmp/tryscript-coverage-[..] --reports-dir coverage --src src --all --include dist/** --exclude-node-modules --reporter text --reporter json --reporter json-summary --reporter lcov --reporter html
 
 Coverage report written to coverage/
 ? 0

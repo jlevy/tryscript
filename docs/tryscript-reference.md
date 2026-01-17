@@ -293,19 +293,46 @@ $ my-cli --version
   - Tryscript env vars (`TRYSCRIPT_*`) are checked first, then process env vars
   - Undefined variables expand to empty string
 
-### Using node_modules/.bin
+### Using node_modules/.bin (npm/pnpm/bun)
 
-For npm packages, use `$TRYSCRIPT_PACKAGE_BIN` to access installed executables:
+For Node.js projects using npm, pnpm, or bun, use `$TRYSCRIPT_PACKAGE_BIN` to access installed CLI tools:
 
 ```yaml
 ---
 sandbox: true
 path:
-  - $TRYSCRIPT_PACKAGE_BIN   # node_modules/.bin from nearest package.json
+  - $TRYSCRIPT_PACKAGE_BIN   # Expands to node_modules/.bin
 ---
+
+# Test: Run your CLI by name
+```console
+$ my-cli --version
+1.0.0
+? 0
 ```
 
-This is the recommended approach for accessing npm package binaries. The path only exists if `node_modules/.bin` is present (i.e., packages are installed).
+# Test: Use any installed dev dependency
+```console
+$ prettier --check src/
+[..]
+? 0
+```
+```
+
+This works for any executable installed via `npm install`, `pnpm add`, or `bun add`. The variable only expands if `node_modules/.bin` exists (i.e., after running your package manager's install command).
+
+**Typical project setup:**
+```
+my-project/
+├── package.json          # TRYSCRIPT_PACKAGE_ROOT points here
+├── node_modules/
+│   └── .bin/             # TRYSCRIPT_PACKAGE_BIN points here
+│       ├── prettier
+│       ├── eslint
+│       └── my-cli        # Your package's bin entry
+└── tests/
+    └── cli.tryscript.md  # Your test file
+```
 
 ### packageBin: Auto-Expose package.json Binaries (Deprecated)
 

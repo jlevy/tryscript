@@ -7,6 +7,7 @@ import treeKill from 'tree-kill';
 import type { TestBlock, TestBlockResult } from './types.js';
 import type { TryscriptConfig, Fixture } from './config.js';
 import { setupPackageBin, findPackageJson, findGitRoot } from './package-bin.js';
+import { createEnvExpander } from './env-vars.js';
 
 /** Default timeout in milliseconds */
 const DEFAULT_TIMEOUT = 30_000;
@@ -142,17 +143,8 @@ export async function createExecutionContext(
     TRYSCRIPT_TEST_DIR: testDir,
   };
 
-  // Helper to expand $VAR and ${VAR} references in a string
-  // Uses standard shell variable syntax (lowercase and uppercase supported)
-  const expandEnvVars = (str: string): string => {
-    return str
-      .replace(/\$\{([A-Za-z_][A-Za-z0-9_]*)\}/g, (_, varName: string) => {
-        return tryscriptEnvVars[varName] ?? process.env[varName] ?? '';
-      })
-      .replace(/\$([A-Za-z_][A-Za-z0-9_]*)/g, (_, varName: string) => {
-        return tryscriptEnvVars[varName] ?? process.env[varName] ?? '';
-      });
-  };
+  // Create expander with tryscript env vars taking precedence
+  const expandEnvVars = createEnvExpander(tryscriptEnvVars);
 
   // Set up package bin wrappers (packageBin option - DEPRECATED, use path: [$TRYSCRIPT_PACKAGE_BIN])
   // Use cwd for package.json lookup so it finds the right package in monorepos
