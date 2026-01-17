@@ -90,6 +90,8 @@ Options:
   --coverage-monocart                 Use monocart for accurate line counts,
                                       better for merging with vitest (c8
                                       --experimental-monocart)
+  --merge-lcov <path>                 Merge coverage from an existing LCOV file
+                                      (e.g., from vitest --coverage)
   -h, --help                          display help for command
 
 Global Options:
