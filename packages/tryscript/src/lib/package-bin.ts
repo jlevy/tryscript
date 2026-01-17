@@ -23,8 +23,8 @@ export function findPackageJson(startDir: string): string | null {
     }
     const parent = dirname(dir);
     if (parent === dir) {
-break;
-} // Reached filesystem root
+      break;
+    } // Reached filesystem root
     dir = parent;
   }
 
@@ -45,8 +45,8 @@ export function findGitRoot(startDir: string): string | null {
     }
     const parent = dirname(dir);
     if (parent === dir) {
-break;
-} // Reached filesystem root
+      break;
+    } // Reached filesystem root
     dir = parent;
   }
 
