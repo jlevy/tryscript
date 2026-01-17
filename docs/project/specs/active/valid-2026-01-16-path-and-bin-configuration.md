@@ -114,5 +114,5 @@ None at this time. All implementation questions from the plan spec have been add
 
 ## Remaining Work
 
-- [ ] Update documentation (tryscript-336)
-- [ ] Close epic bead (tryscript-327) when documentation is complete
+- [x] Update documentation (tryscript-336)
+- [x] Close epic bead (tryscript-327)

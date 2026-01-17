@@ -1,6 +1,6 @@
 # Plan Spec: PATH and Binary Configuration
 
-**Status**: IMPLEMENTATION_COMPLETE (pending documentation updates)
+**Status**: COMPLETE
 
 ## Purpose
 
@@ -265,7 +265,7 @@ $ my-cli --version
 - [x] Paths resolve relative to test file, not sandbox CWD
 - [x] Works with and without sandbox mode
 - [x] Config file and frontmatter paths merge correctly
-- [ ] Documentation updated
+- [x] Documentation updated
 - [x] Tests pass
 
 ---
@@ -642,7 +642,7 @@ Supports both bin formats:
 - [x] No error when package.json not found (silent skip)
 - [x] No error when bin field empty (silent skip)
 - [x] Works with sandbox mode
-- [ ] Documentation updated
+- [x] Documentation updated
 - [x] Tests pass
 
 ---
@@ -770,7 +770,7 @@ Usage: cli [options]
 - [x] Points to directory containing package.json (not the file itself)
 - [x] Not set when no package.json found (no error)
 - [x] Walks up directory tree like Phase II
-- [ ] Documentation updated
+- [x] Documentation updated
 - [x] Tests pass
 
 ---

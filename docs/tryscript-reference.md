@@ -165,6 +165,9 @@ fixtures:                  # Files to copy to sandbox
   - data/input.txt
 before: npm run build      # Run before first test
 after: rm -rf ./cache      # Run after all tests
+path:                      # Directories to prepend to PATH
+  - ../dist
+packageBin: true           # Auto-expose package.json bin entries
 ---
 ```
 
@@ -180,6 +183,8 @@ after: rm -rf ./cache      # Run after all tests
 | `fixtures` | `array` | `[]` | Files to copy to sandbox |
 | `before` | `string` | - | Shell command before first test |
 | `after` | `string` | - | Shell command after all tests |
+| `path` | `string[]` | `[]` | Directories to prepend to PATH |
+| `packageBin` | `boolean` | `false` | Auto-expose package.json bin entries |
 
 ## Sandbox Mode
 
@@ -225,6 +230,143 @@ $ $CLI --version
 ```
 
 **Important:** Variables are for the shell, not for output matching.
+
+### Built-in Environment Variables
+
+Tryscript sets these environment variables for test commands:
+
+| Variable | Description |
+|----------|-------------|
+| `NO_COLOR` | Set to `"1"` by default (disables colors) |
+| `FORCE_COLOR` | Set to `"0"` (disables forced colors) |
+| `TRYSCRIPT_TEST_DIR` | Absolute path to directory containing the test file |
+| `TRYSCRIPT_PACKAGE_ROOT` | Absolute path to directory containing nearest `package.json` (if found) |
+
+**Example using TRYSCRIPT_PACKAGE_ROOT:**
+```console
+$ echo $TRYSCRIPT_PACKAGE_ROOT | grep -q "my-project" && echo "found"
+found
+? 0
+```
+
+## Testing CLI Applications
+
+Tryscript provides several ways to make CLI binaries available in tests.
+
+### path: Custom Binary Directories
+
+Use `path` to prepend directories to PATH, making executables available by name:
+
+```yaml
+---
+sandbox: true
+path:
+  - ../dist              # Relative to test file directory
+  - ../node_modules/.bin # Access installed package bins
+---
+```
+
+```console
+$ my-cli --version
+1.0.0
+? 0
+```
+
+**Key behaviors:**
+- Paths are resolved relative to the test file directory (not the sandbox CWD)
+- Multiple paths are prepended in order (first has highest priority)
+- Works with or without sandbox mode
+- Frontmatter and config file paths are merged (frontmatter first)
+
+### packageBin: Auto-Expose package.json Binaries
+
+Use `packageBin: true` for zero-config CLI testing with npm packages:
+
+```yaml
+---
+sandbox: true
+packageBin: true
+---
+
+# Your CLI is available by name from package.json bin field
+```console
+$ my-cli --help
+Usage: my-cli [options] [command]
+? 0
+```
+```
+
+**How it works:**
+1. Finds the nearest `package.json` (walking up from test file)
+2. Reads the `bin` field
+3. Creates wrapper scripts for each entry
+4. Adds them to PATH (highest priority)
+
+**Supported bin formats:**
+```json
+// String form: command name = package name
+{
+  "name": "my-cli",
+  "bin": "./dist/cli.mjs"
+}
+// Result: `my-cli` command available
+
+// Object form: explicit command names
+{
+  "name": "my-package",
+  "bin": {
+    "cmd1": "./dist/cmd1.mjs",
+    "cmd2": "./dist/cmd2.js"
+  }
+}
+// Result: `cmd1` and `cmd2` commands available
+```
+
+**Scoped packages:** For `@scope/name`, the scope is stripped (command name is `name`).
+
+### Combining path and packageBin
+
+You can use both options together:
+
+```yaml
+---
+sandbox: true
+packageBin: true          # Your main CLI from package.json
+path:
+  - ../scripts            # Additional utility scripts
+---
+```
+
+PATH priority (highest to lowest):
+1. `packageBin` wrappers
+2. `path` entries (in order specified)
+3. System PATH
+
+### Language-Specific Examples
+
+**Rust CLIs:**
+```yaml
+---
+path:
+  - ../target/release
+---
+```
+
+**Python with venv:**
+```yaml
+---
+path:
+  - ../.venv/bin
+---
+```
+
+**Go CLIs:**
+```yaml
+---
+path:
+  - ../bin
+---
+```
 
 ## Test Annotations
 
@@ -649,6 +791,9 @@ export default defineConfig({
     VERSION: '\\d+\\.\\d+\\.\\d+',
     UUID: '[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}',
   },
+  // CLI testing configuration
+  path: ['./dist'],       // Directories to add to PATH
+  packageBin: true,       // Auto-expose package.json bin entries
 });
 ```
 
