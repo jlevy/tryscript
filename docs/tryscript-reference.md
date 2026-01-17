@@ -165,6 +165,9 @@ fixtures:                  # Files to copy to sandbox
   - data/input.txt
 before: npm run build      # Run before first test
 after: rm -rf ./cache      # Run after all tests
+path:                      # Directories to prepend to PATH
+  - ../dist
+  - $TRYSCRIPT_PACKAGE_BIN # Access node_modules/.bin via env var
 ---
 ```
 
@@ -180,6 +183,7 @@ after: rm -rf ./cache      # Run after all tests
 | `fixtures` | `array` | `[]` | Files to copy to sandbox |
 | `before` | `string` | - | Shell command before first test |
 | `after` | `string` | - | Shell command after all tests |
+| `path` | `string[]` | `[]` | Directories to prepend to PATH (supports `$VAR` expansion) |
 
 ## Sandbox Mode
 
@@ -225,6 +229,135 @@ $ $CLI --version
 ```
 
 **Important:** Variables are for the shell, not for output matching.
+
+### Built-in Environment Variables
+
+Tryscript sets these environment variables for test commands:
+
+| Variable | Description |
+|----------|-------------|
+| `NO_COLOR` | Set to `"1"` by default (disables colors) |
+| `FORCE_COLOR` | Set to `"0"` (disables forced colors) |
+| `TRYSCRIPT_TEST_DIR` | Absolute path to directory containing the test file |
+| `TRYSCRIPT_PACKAGE_ROOT` | Absolute path to directory containing nearest `package.json` (if found) |
+| `TRYSCRIPT_GIT_ROOT` | Absolute path to directory containing nearest `.git` (if found) |
+| `TRYSCRIPT_PROJECT_ROOT` | Most specific of `PACKAGE_ROOT` or `GIT_ROOT` (deepest path) |
+| `TRYSCRIPT_PACKAGE_BIN` | Absolute path to `node_modules/.bin` directory (if exists) |
+
+**Project root variables** help write portable tests that work across different project types:
+
+- **`TRYSCRIPT_PACKAGE_ROOT`** - For npm/Node.js projects with `package.json`
+- **`TRYSCRIPT_GIT_ROOT`** - For any git repository (Rust, Go, Python, etc.)
+- **`TRYSCRIPT_PROJECT_ROOT`** - Use this when you don't care about project type
+- **`TRYSCRIPT_PACKAGE_BIN`** - For npm packages with `node_modules/.bin` (use in `path:`)
+
+**Example using TRYSCRIPT_PROJECT_ROOT:**
+```console
+$ test -n "$TRYSCRIPT_PROJECT_ROOT" && echo "in a project"
+in a project
+? 0
+```
+
+## Testing CLI Applications
+
+Tryscript provides several ways to make CLI binaries available in tests.
+
+### path: Custom Binary Directories
+
+Use `path` to prepend directories to PATH, making executables available by name:
+
+```yaml
+---
+sandbox: true
+path:
+  - ../dist                  # Relative to test file directory
+  - $TRYSCRIPT_PACKAGE_BIN   # Use node_modules/.bin via env var
+---
+```
+
+```console
+$ my-cli --version
+1.0.0
+? 0
+```
+
+**Key behaviors:**
+- Paths are resolved relative to the test file directory (not the sandbox CWD)
+- Multiple paths are prepended in order (first has highest priority)
+- Works with or without sandbox mode
+- Frontmatter and config file paths are merged (frontmatter first)
+- **Environment variable expansion:** Path entries support standard shell variable syntax:
+  - `$VAR` - expands any environment variable (lowercase or uppercase)
+  - `${VAR}` - braced syntax also supported
+  - Tryscript env vars (`TRYSCRIPT_*`) are checked first, then process env vars
+  - Undefined variables expand to empty string
+
+### Using node_modules/.bin (npm/pnpm/bun)
+
+For Node.js projects using npm, pnpm, or bun, use `$TRYSCRIPT_PACKAGE_BIN` to access installed CLI tools:
+
+```yaml
+---
+sandbox: true
+path:
+  - $TRYSCRIPT_PACKAGE_BIN   # Expands to node_modules/.bin
+---
+
+# Test: Run your CLI by name
+```console
+$ my-cli --version
+1.0.0
+? 0
+```
+
+# Test: Use any installed dev dependency
+```console
+$ prettier --check src/
+[..]
+? 0
+```
+```
+
+This works for any executable installed via `npm install`, `pnpm add`, or `bun add`. The variable only expands if `node_modules/.bin` exists (i.e., after running your package manager's install command).
+
+**Typical project setup:**
+```
+my-project/
+├── package.json          # TRYSCRIPT_PACKAGE_ROOT points here
+├── node_modules/
+│   └── .bin/             # TRYSCRIPT_PACKAGE_BIN points here
+│       ├── prettier
+│       ├── eslint
+│       └── my-cli        # Your package's bin entry
+└── tests/
+    └── cli.tryscript.md  # Your test file
+```
+
+### Language-Specific Examples
+
+**Rust CLIs:**
+```yaml
+---
+path:
+  - ../target/release
+---
+```
+
+**Python with venv:**
+```yaml
+---
+path:
+  - ../.venv/bin
+---
+```
+
+**Go CLIs:**
+```yaml
+---
+path:
+  - ../bin
+---
+```
 
 ## Test Annotations
 
@@ -649,6 +782,8 @@ export default defineConfig({
     VERSION: '\\d+\\.\\d+\\.\\d+',
     UUID: '[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}',
   },
+  // CLI testing configuration
+  path: ['./dist'],       // Directories to add to PATH
 });
 ```
 

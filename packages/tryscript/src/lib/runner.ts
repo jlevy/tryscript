@@ -1,10 +1,13 @@
 import { spawn } from 'node:child_process';
+import { existsSync } from 'node:fs';
 import { mkdtemp, realpath, rm, cp } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
-import { join, dirname, resolve, basename } from 'node:path';
+import { join, dirname, resolve, basename, delimiter } from 'node:path';
 import treeKill from 'tree-kill';
 import type { TestBlock, TestBlockResult } from './types.js';
 import type { TryscriptConfig, Fixture } from './config.js';
+import { findPackageJson, findGitRoot } from './package-bin.js';
+import { createEnvExpander } from './env-vars.js';
 
 /** Default timeout in milliseconds */
 const DEFAULT_TIMEOUT = 30_000;
@@ -111,6 +114,52 @@ export async function createExecutionContext(
     await setupFixtures(config.fixtures, testDir, tempDir);
   }
 
+  // Find package root for TRYSCRIPT_PACKAGE_ROOT (always available)
+  const pkgPath = findPackageJson(testDir);
+  const packageRoot = pkgPath ? dirname(pkgPath) : undefined;
+
+  // Find git root for TRYSCRIPT_GIT_ROOT
+  const gitRoot = findGitRoot(testDir) ?? undefined;
+
+  // TRYSCRIPT_PROJECT_ROOT is the most specific (deepest) of package or git root
+  // Deeper path = longer string = more specific project boundary
+  const projectRoot =
+    packageRoot && gitRoot
+      ? packageRoot.length >= gitRoot.length
+        ? packageRoot
+        : gitRoot
+      : (packageRoot ?? gitRoot);
+
+  // TRYSCRIPT_PACKAGE_BIN points to node_modules/.bin if it exists
+  const packageBinPath = packageRoot ? join(packageRoot, 'node_modules', '.bin') : undefined;
+  const packageBin = packageBinPath && existsSync(packageBinPath) ? packageBinPath : undefined;
+
+  // Build env vars map for path expansion (before building PATH)
+  const tryscriptEnvVars: Record<string, string> = {
+    ...(packageRoot && { TRYSCRIPT_PACKAGE_ROOT: packageRoot }),
+    ...(gitRoot && { TRYSCRIPT_GIT_ROOT: gitRoot }),
+    ...(projectRoot && { TRYSCRIPT_PROJECT_ROOT: projectRoot }),
+    ...(packageBin && { TRYSCRIPT_PACKAGE_BIN: packageBin }),
+    TRYSCRIPT_TEST_DIR: testDir,
+  };
+
+  // Create expander with tryscript env vars taking precedence
+  const expandEnvVars = createEnvExpander(tryscriptEnvVars);
+
+  // Build PATH: config paths > system PATH
+  const pathParts: string[] = [];
+  if (config.path && config.path.length > 0) {
+    // Expand env vars in path entries, then resolve relative to testDir
+    pathParts.push(
+      ...config.path.map((p) => {
+        const expanded = expandEnvVars(p);
+        // If already absolute (after expansion), use as-is; otherwise resolve relative to testDir
+        return expanded.startsWith('/') ? expanded : resolve(testDir, expanded);
+      }),
+    );
+  }
+  pathParts.push(process.env.PATH ?? '');
+
   const ctx: ExecutionContext = {
     tempDir,
     testDir,
@@ -125,6 +174,10 @@ export async function createExecutionContext(
       FORCE_COLOR: '0',
       // Provide test directory for portable test commands
       TRYSCRIPT_TEST_DIR: testDir,
+      // Provide project roots for manual path construction
+      ...tryscriptEnvVars,
+      // Custom PATH with config paths
+      PATH: pathParts.join(delimiter),
     } as Record<string, string>,
     timeout: config.timeout ?? DEFAULT_TIMEOUT,
     before: config.before,

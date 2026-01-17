@@ -1,0 +1,2 @@
+#!/bin/sh
+echo "test-cli v1.0.0"
