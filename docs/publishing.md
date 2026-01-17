@@ -161,7 +161,7 @@ git push --tags
 ### Step 7: Push and Tag (Option B - Via PR and API)
 
 For restricted environments like Claude Code Web, use GitHub CLI. See
-[GitHub CLI Setup](general/agent-setup/github-cli-setup.md) for installation.
+[GitHub CLI Setup](general/agent-setup/shortcut:setup-github-cli.md) for installation.
 
 ```bash
 # 1. Push to feature branch
