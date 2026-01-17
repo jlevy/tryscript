@@ -287,7 +287,11 @@ $ my-cli --version
 - Multiple paths are prepended in order (first has highest priority)
 - Works with or without sandbox mode
 - Frontmatter and config file paths are merged (frontmatter first)
-- **Environment variable expansion:** Path entries support `$VAR` syntax for any `TRYSCRIPT_*` variable or process env var
+- **Environment variable expansion:** Path entries support standard shell variable syntax:
+  - `$VAR` - expands any environment variable (lowercase or uppercase)
+  - `${VAR}` - braced syntax also supported
+  - Tryscript env vars (`TRYSCRIPT_*`) are checked first, then process env vars
+  - Undefined variables expand to empty string
 
 ### Using node_modules/.bin
 

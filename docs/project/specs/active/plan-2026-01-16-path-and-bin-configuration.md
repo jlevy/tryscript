@@ -842,18 +842,21 @@ Points to `{TRYSCRIPT_PACKAGE_ROOT}/node_modules/.bin` if it exists. This replac
 
 ### Environment Variable Expansion in `path:`
 
-Path entries support `$VAR` syntax to reference any `TRYSCRIPT_*` variable or process env var.
+Path entries support standard shell variable syntax (`$VAR` or `${VAR}`) to reference any environment variable.
 
 **Example:**
 ```yaml
 path:
   - $TRYSCRIPT_PACKAGE_BIN   # Expands to node_modules/.bin
   - $TRYSCRIPT_GIT_ROOT/bin  # Expands to git root + /bin
+  - $HOME/bin                # Lowercase vars supported
+  - ${MY_CUSTOM_PATH}        # Braced syntax supported
 ```
 
 **Acceptance Criteria:**
-- [x] `$TRYSCRIPT_*` vars expanded in path entries
-- [x] Process env vars also expanded as fallback
+- [x] `$VAR` syntax expands any env var (lowercase or uppercase)
+- [x] `${VAR}` braced syntax also supported
+- [x] Tryscript env vars checked first, then process env vars
 - [x] Undefined vars expand to empty string
 - [x] Absolute paths (after expansion) used as-is
 - [x] Relative paths resolved from test directory

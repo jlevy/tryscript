@@ -142,11 +142,16 @@ export async function createExecutionContext(
     TRYSCRIPT_TEST_DIR: testDir,
   };
 
-  // Helper to expand $VAR references in a string using tryscript env vars
+  // Helper to expand $VAR and ${VAR} references in a string
+  // Uses standard shell variable syntax (lowercase and uppercase supported)
   const expandEnvVars = (str: string): string => {
-    return str.replace(/\$([A-Z_][A-Z0-9_]*)/g, (_, varName: string) => {
-      return tryscriptEnvVars[varName] ?? process.env[varName] ?? '';
-    });
+    return str
+      .replace(/\$\{([A-Za-z_][A-Za-z0-9_]*)\}/g, (_, varName: string) => {
+        return tryscriptEnvVars[varName] ?? process.env[varName] ?? '';
+      })
+      .replace(/\$([A-Za-z_][A-Za-z0-9_]*)/g, (_, varName: string) => {
+        return tryscriptEnvVars[varName] ?? process.env[varName] ?? '';
+      });
   };
 
   // Set up package bin wrappers (packageBin option - DEPRECATED, use path: [$TRYSCRIPT_PACKAGE_BIN])
