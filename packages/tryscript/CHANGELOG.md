@@ -4,13 +4,21 @@
 
 ### Patch Changes
 
-- 1d0e004: Add path configuration, environment variables (TRYSCRIPT_GIT_ROOT, TRYSCRIPT_PROJECT_ROOT, TRYSCRIPT_PACKAGE_BIN), and LCOV merging for complete coverage
+- 1d0e004: Add path configuration, environment variables (TRYSCRIPT_GIT_ROOT,
+  TRYSCRIPT_PROJECT_ROOT, TRYSCRIPT_PACKAGE_BIN), and LCOV merging for complete coverage
+
+## 0.1.4
+
+### Patch Changes
+
+- 04c78ac: Add LCOV merging for complete coverage with --merge-lcov flag
 
 ## 0.1.3
 
 ### Patch Changes
 
-- 26ea6fb: Add coverage debugging output and --verbose flag for troubleshooting coverage collection
+- 26ea6fb: Add coverage debugging output and --verbose flag for troubleshooting coverage
+  collection
 
 ## 0.1.2
 
@@ -28,4 +36,6 @@
 
 ### Minor Changes
 
-- Initial release - Golden testing framework for CLI applications. Features: markdown-based test files, configurable command execution, flexible output matching with elision patterns, colorized diff output, coverage support via c8.
+- Initial release - Golden testing framework for CLI applications.
+  Features: markdown-based test files, configurable command execution, flexible output
+  matching with elision patterns, colorized diff output, coverage support via c8.
