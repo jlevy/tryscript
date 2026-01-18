@@ -1,5 +1,11 @@
 # tryscript
 
+## 0.1.6
+
+### Patch Changes
+
+- 74329a3: Fix regression: restore --merge-lcov flag and coverage command functionality
+
 ## 0.1.5
 
 ### Patch Changes
