@@ -1,5 +1,5 @@
 display:
-  id_prefix: tryscript
+  id_prefix: try
 settings:
   auto_sync: false
   index_enabled: true
