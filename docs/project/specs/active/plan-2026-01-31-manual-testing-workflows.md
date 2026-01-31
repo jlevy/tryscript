@@ -109,7 +109,7 @@ operations.
 - Fully automatable in CI
 
 **Example**:
-```yaml
+````yaml
 ---
 sandbox: true
 path: [$TRYSCRIPT_PACKAGE_BIN]
@@ -119,23 +119,10 @@ path: [$TRYSCRIPT_PACKAGE_BIN]
 
 ```console
 $ my-cli --version
-my-cli v1.0.0
+my-cli v[..]
 ? 0
 ```
-
-# Test: Help output
-
-```console
-$ my-cli --help
-Usage: my-cli [command] [options]
-
-Commands:
-  init    Initialize a new project
-  build   Build the project
-...
-? 0
-```
-```
+````
 
 **Elision patterns for variability**:
 ```console
@@ -146,143 +133,60 @@ Build completed in [..]ms
 ? 0
 ```
 
-### 2. LLM/AI Response Testing
+### 2. Manual Review Testing
 
-**Best for**: Testing CLI wrappers around LLMs, AI assistants, chat interfaces.
+**Best for**: Any output that varies and requires human judgment—LLM responses,
+generated content, complex formatting, or quality-sensitive output.
 
 **Characteristics**:
 - Outputs vary between runs
-- "Correct" is subjective (tone, completeness, accuracy)
-- Human review needed for quality assessment
+- "Correct" is subjective (quality, tone, completeness)
+- Human review needed to assess acceptability
 
 **Workflow**:
 ```bash
 # Capture current behavior
-tryscript run tests/llm.tryscript.md --update
+pnpm test:cli:update
 
 # Review the outputs manually
-git diff tests/llm.tryscript.md
+git diff tests/
 
 # If acceptable, commit as new baseline
-git add tests/llm.tryscript.md
-git commit -m "Update LLM response baselines"
+git add tests/ && git commit -m "Update test baselines"
 ```
 
-**Example with review annotations**:
-```yaml
+**Example**: Test file captures output for human review. The reviewer checks
+that the summary is 2-3 sentences and captures the main points.
+
+````yaml
 ---
 validation: manual
 ---
 
 # Test: Summarization quality
 
-<!-- REVIEW: Output should be 2-3 sentences, capture main points -->
-
 ```console
-$ ai-cli summarize article.txt
-[.. summary text varies ..]
-? 0
-```
-```
-
-### 3. Web Scraping / Search Results
-
-**Best for**: CLIs that fetch web content, search APIs, live data.
-
-**Characteristics**:
-- Content changes over time
-- Structure may be stable even if content varies
-- May need to verify "something reasonable" returned
-
-**Pattern - Structure validation**:
-```console
-$ web-cli search "nodejs tutorials"
-Results for "nodejs tutorials":
+$ summarize-cli article.txt
 ...
-Found [..] results
 ? 0
 ```
+````
 
-**Pattern - Snapshot for reference**:
-```yaml
----
-validation: manual
----
+**Other manual review examples**: Web scraping results, visual/UX formatting,
+interactive wizards—any output where human judgment determines correctness.
 
-# Test: Search returns results
+### 3. Quality Evaluation Testing
 
-<!-- REVIEW: Should return 5+ relevant results with titles and URLs -->
+**Best for**: Search engines, recommendation systems, ranking algorithms, or any
+system where outputs vary but quality should remain consistent.
 
-```console
-$ web-cli search "rust programming"
-[.. search results vary ..]
-? 0
-```
-```
+**Key insight**: The comparison isn't a diff—it's an evaluation. Previous and
+current results might both be "correct" but differ. The goal is ensuring quality
+hasn't regressed.
 
-### 4. Visual/UX Output Testing
+**Example**: Search results may change order, but should maintain relevance.
 
-**Best for**: CLIs with formatted output, progress bars, tables, colors.
-
-**Characteristics**:
-- Visual correctness hard to assert automatically
-- Screenshots or terminal recordings may supplement
-- Alignment, formatting, color choices need human eye
-
-**Pattern**:
-```yaml
----
-validation: manual
-env:
-  FORCE_COLOR: "1"  # Enable colors for review
----
-
-# Test: Table formatting
-
-<!-- REVIEW: Columns should be aligned, headers bold -->
-
-```console
-$ report-cli show --format table
-[.. formatted table output ..]
-? 0
-```
-```
-
-### 5. Interactive/Multi-step Workflows
-
-**Best for**: CLIs with prompts, wizards, complex state.
-
-**Characteristics**:
-- Output depends on timing, user choices
-- May need fixture setup
-- Often better tested with unit tests + limited E2E
-
-**Pattern - Scripted input**:
-```console
-$ echo -e "project-name\ny\n" | wizard-cli init
-? Project name: project-name
-? Confirm? (y/n): y
-Created project-name/
-? 0
-```
-
-### 6. Quality Evaluation Testing
-
-**Best for**: Search engines, recommendation systems, ranking algorithms, ML model
-outputs, content generation systems.
-
-**Characteristics**:
-- Outputs vary between runs but should maintain similar quality
-- "Correct" isn't about exact matching but quality metrics
-- Evaluation requires comparing quality, not just content
-- May need scoring (precision, recall, relevance) rather than pass/fail
-
-**Key insight**: The comparison isn't a diff—it's an evaluation. Previous results
-and current results might both be "correct" but differ. The goal is to ensure
-quality hasn't regressed.
-
-**Pattern - Search quality evaluation**:
-```yaml
+````yaml
 ---
 validation: evaluation
 comparison: side-by-side
@@ -290,95 +194,17 @@ comparison: side-by-side
 
 # Test: Search relevance
 
-<!--
-EVALUATE:
-- Results should be relevant to query
-- Top 3 results should contain query terms
-- No spam or low-quality results
-- Compare: Are new results as good or better than baseline?
--->
-
 ```console
 $ search-cli query "rust async programming"
-[.. search results vary ..]
+...
 ? 0
 ```
-```
-
-**Pattern - Recommendation quality**:
-```yaml
----
-validation: evaluation
----
-
-# Test: Product recommendations
-
-<!--
-EVALUATE:
-- Recommendations should match user preferences
-- Diversity: not all same category
-- Relevance score should be >= baseline average
--->
-
-```console
-$ recommend-cli --user test-user-123
-[.. recommendations vary ..]
-? 0
-```
-```
-
-**Pattern - LLM response quality**:
-```yaml
----
-validation: evaluation
-evaluator: llm  # or: script, human
----
-
-# Test: Summary quality maintains standards
-
-<!--
-EVALUATE:
-- Summary captures main points (precision)
-- No critical information omitted (recall)
-- Factual accuracy maintained
-- Tone and style appropriate
-
-COMPARISON: Both old and new outputs may be valid. Evaluate whether
-new output is at least as good as previous baseline.
--->
-
-```console
-$ summarize-cli article.txt
-[.. summary varies ..]
-? 0
-```
-```
+````
 
 **Evaluation strategies**:
-
-1. **Side-by-side comparison**: Display previous and current output together
-   for human review, rather than a diff.
-
-2. **Script-based scoring**: Run an evaluation script that produces metrics:
-   ```yaml
-   evaluator:
-     type: script
-     command: ./scripts/eval-search-quality.sh
-     threshold: 0.85  # Minimum score to pass
-   ```
-
-3. **LLM-based evaluation**: Use an LLM to assess quality:
-   ```yaml
-   evaluator:
-     type: llm
-     criteria:
-       - relevance
-       - accuracy
-       - completeness
-   ```
-
-4. **Human judgment with criteria**: Structured review with explicit criteria
-   (as shown in EVALUATE comments above).
+- **Human review**: Side-by-side comparison of previous vs current output
+- **Script-based**: External script returns a quality score
+- **LLM-based** (future): LLM evaluates against criteria
 
 **When to use evaluation vs manual vs binary**:
 
@@ -467,50 +293,14 @@ tests/
 
 ### DO: Document Review Criteria
 
-```yaml
----
-validation: manual
----
-
-# Test: Error message quality
-
-<!--
-REVIEW CRITERIA:
-- Error should mention the invalid flag name
-- Should suggest valid alternatives
-- Tone should be helpful, not accusatory
--->
-
-```console
-$ my-cli --invlaid-flag
-[.. error message ..]
-? 1
-```
-```
+For manual tests, describe what the reviewer should check (in comments, test
+title, or documentation). Example: "Error should mention the invalid flag and
+suggest alternatives."
 
 ### DON'T: Use Manual Tests for Deterministic Behavior
 
-If output can be matched with patterns, use automated testing:
-
-```yaml
-# Bad: Marked manual but could be automated
----
-validation: manual
----
-
-```console
-$ cli --version
-v1.2.3
-? 0
-```
-
-# Good: Automated test with pattern
-```console
-$ cli --version
-v[..]
-? 0
-```
-```
+If output can be matched with elision patterns, use automated testing instead
+of `validation: manual`.
 
 ### DON'T: Ignore Failing Manual Tests
 
@@ -797,71 +587,31 @@ interface TestRunSummary {
 
 ---
 
-## Phase IV: Review Annotations
+## Phase IV: Review Guidance
 
 ### Overview
 
-Support HTML comments in test files that provide review guidance. These are
-informational only - they help reviewers understand what to look for.
+Test files can include guidance for reviewers using standard markdown—headings,
+comments, or descriptions above test blocks. No special syntax needed.
 
-### Syntax
+**Example**: Use the test title or markdown comments to describe what to verify.
 
-```yaml
----
-validation: manual
----
+````md
+# Test: Error message quality
 
-# Test: AI Response Quality
-
-<!-- REVIEW: Response should be helpful and accurate -->
-<!-- REVIEW: Tone should be professional -->
-<!-- REVIEW: Should not hallucinate facts -->
+Verify the error mentions the invalid flag and suggests alternatives.
 
 ```console
-$ ai-cli ask "What is the capital of France?"
-[.. AI response ..]
-? 0
+$ my-cli --invalid-flag
+...
+? 1
 ```
-```
-
-### Display in Review Mode
-
-```
-$ tryscript run tests/ai.tryscript.md --review
-
-tests/ai.tryscript.md (manual validation)
-  ● Test: AI Response Quality
-    Review criteria:
-    - Response should be helpful and accurate
-    - Tone should be professional
-    - Should not hallucinate facts
-
-    Diff:
-    - Paris is the capital of France, known for...
-    + Paris is the capital and largest city of France...
-```
-
-### Implementation
-
-**Parser changes** (`parser.ts`):
-
-```typescript
-interface TestBlock {
-  // ... existing fields ...
-  reviewCriteria?: string[];  // Extracted from <!-- REVIEW: ... --> comments
-}
-
-// In parseTestFile:
-const reviewPattern = /<!--\s*REVIEW:\s*(.+?)\s*-->/g;
-```
+````
 
 ### Acceptance Criteria
 
-- [ ] `<!-- REVIEW: text -->` comments are parsed
-- [ ] Multiple REVIEW comments become array
-- [ ] Displayed in `--review` mode output
-- [ ] Ignored in normal binary run
-- [ ] Works with or without `validation: manual`
+- [ ] Documentation recommends patterns for review guidance
+- [ ] No special syntax required—standard markdown works
 
 ---
 
@@ -1104,48 +854,26 @@ tryscript run tests/search.tryscript.md --evaluate
 tryscript run --filter-validation evaluation --review
 ```
 
-### Example Workflow: Search Engine Testing
+### Example: Search Engine Testing
 
-```yaml
+````yaml
 ---
-sandbox: true
 validation: evaluation
 comparison: side-by-side
 evaluator:
   type: script
   command: ./scripts/search-quality-eval.py
   threshold: 0.75
-  pass_baseline: true
 ---
 
-# Test: Search relevance for programming queries
-
-<!--
-EVALUATE:
-- Results should be relevant to query
-- Top 3 results should contain query terms or synonyms
-- Result diversity: not all from same source
-- No broken links or error responses
-
-COMPARISON NOTES:
-Result ordering may differ. Evaluate based on overall quality
-of the result set, not exact match of positions.
--->
+# Test: Search relevance
 
 ```console
-$ search-cli "rust async programming tutorial"
-[.. results ..]
+$ search-cli "rust async programming"
+...
 ? 0
 ```
-
-# Test: Search handles edge cases
-
-```console
-$ search-cli ""
-No query provided. Please enter a search term.
-? 1
-```
-```
+````
 
 ### Acceptance Criteria
 
