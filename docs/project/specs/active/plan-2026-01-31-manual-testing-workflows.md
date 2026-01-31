@@ -392,81 +392,45 @@ $ summarize-cli article.txt
 
 ## Workflows
 
-### Automated Testing (CI)
+### Package.json Test Scripts
 
-Standard tryscript in CI pipelines:
+Configure tryscript in your package.json for consistent test execution:
 
-```yaml
-# .github/workflows/test.yml
-jobs:
-  test:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - run: npm ci
-      - run: npm run build
-      - run: npx tryscript run
+```json
+{
+  "scripts": {
+    "test": "pnpm test:unit && pnpm test:cli",
+    "test:unit": "vitest run",
+    "test:cli": "tryscript run",
+    "test:cli:update": "tryscript run --update",
+    "test:review": "tryscript run tests/manual/ --review"
+  }
+}
 ```
 
-### Manual Review Testing
-
-For tests requiring human judgment:
-
-```yaml
-# .github/workflows/manual-review.yml
-jobs:
-  update-baselines:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - run: npm ci
-      - run: npm run build
-
-      # Update baselines and create PR for review
-      - run: npx tryscript run tests/manual/*.tryscript.md --update
-
-      - name: Check for changes
-        id: changes
-        run: |
-          if git diff --quiet tests/manual/; then
-            echo "changed=false" >> $GITHUB_OUTPUT
-          else
-            echo "changed=true" >> $GITHUB_OUTPUT
-          fi
-
-      - name: Create review PR
-        if: steps.changes.outputs.changed == 'true'
-        run: |
-          git checkout -b update-baselines-$(date +%Y%m%d)
-          git add tests/manual/
-          git commit -m "chore: update manual test baselines for review"
-          gh pr create --title "Review: Updated test baselines" \
-            --body "These test outputs have changed. Please review."
-```
-
-### Development/Exploratory Testing
-
-When building new features:
+**Usage**:
 
 ```bash
-# Create a scratch test file
-cat > tests/scratch.tryscript.md << 'EOF'
----
-sandbox: true
----
-
-# Exploring new feature
-
-```console
-$ my-cli new-command --help
+pnpm test:cli              # Run all tryscript tests
+pnpm test:cli:update       # Update baselines after intentional changes
+pnpm test:review           # Review manual tests with diffs
 ```
-EOF
 
-# Run and capture output
-tryscript run tests/scratch.tryscript.md --update
+CI systems simply call these scripts—no CI-specific test logic needed.
 
-# Iterate until output looks right
-# Then move to permanent test file
+### Development Workflow
+
+```bash
+# Run tests during development
+pnpm test:cli
+
+# After intentional output changes, update baselines
+pnpm test:cli:update
+git diff                   # Review what changed
+git add tests/ && git commit -m "update test baselines"
+
+# For manual/evaluation tests
+pnpm test:review           # Shows diffs for human review
 ```
 
 ## Best Practices
@@ -905,86 +869,42 @@ const reviewPattern = /<!--\s*REVIEW:\s*(.+?)\s*-->/g;
 
 ### Overview
 
-Document and provide examples for integrating manual tests into CI/CD workflows.
+Document patterns for running tryscript tests in CI. The key principle: **test
+logic lives in package.json scripts, not CI configuration**. CI simply invokes
+the same scripts developers use locally.
 
-### GitHub Actions Workflow
+### Package.json Scripts
 
-**`.github/workflows/manual-tests.yml`**:
-
-```yaml
-name: Manual Test Review
-
-on:
-  schedule:
-    - cron: '0 6 * * 1'  # Weekly on Monday
-  workflow_dispatch:
-
-jobs:
-  update-manual-tests:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: '22'
-
-      - run: npm ci
-      - run: npm run build
-
-      - name: Run manual tests in review mode
-        run: npx tryscript run 'tests/manual/**/*.tryscript.md' --review
-        continue-on-error: true
-
-      - name: Check for changes
-        id: changes
-        run: |
-          if git diff --quiet tests/manual/; then
-            echo "changed=false" >> $GITHUB_OUTPUT
-          else
-            echo "changed=true" >> $GITHUB_OUTPUT
-            git diff tests/manual/ > /tmp/changes.diff
-          fi
-
-      - name: Create Pull Request
-        if: steps.changes.outputs.changed == 'true'
-        uses: peter-evans/create-pull-request@v5
-        with:
-          branch: update-manual-tests
-          title: 'chore: Update manual test baselines'
-          body: |
-            ## Manual Test Baseline Updates
-
-            The following manual tests have updated outputs that require review:
-
-            ```diff
-            $(cat /tmp/changes.diff)
-            ```
-
-            Please review the changes to ensure they are acceptable.
-          commit-message: 'chore: update manual test baselines'
-          labels: |
-            needs-review
-            tests
+```json
+{
+  "scripts": {
+    "test": "pnpm test:unit && pnpm test:cli",
+    "test:cli": "tryscript run",
+    "test:cli:binary": "tryscript run --filter-validation binary",
+    "test:cli:review": "tryscript run --filter-validation manual,evaluation --review"
+  }
+}
 ```
 
-### Filtering Manual vs Binary Tests
+### CI Configuration
+
+CI calls the package.json scripts:
 
 ```yaml
-# Run only binary tests (default CI)
-- run: npx tryscript run --filter-validation binary
-
-# Run only manual tests for review
-- run: npx tryscript run --filter-validation manual --review
+# Any CI system (GitHub Actions, GitLab, CircleCI, etc.)
+- run: pnpm install
+- run: pnpm build
+- run: pnpm test:cli:binary   # Automated tests only
 ```
+
+For manual/evaluation tests, run review locally or as a scheduled job that
+opens PRs for human review.
 
 ### Acceptance Criteria
 
-- [ ] GitHub Actions example is complete and tested
-- [ ] Example creates PR with diff
-- [ ] Documentation covers common CI platforms
-- [ ] Filter by validation mode works
+- [ ] Package.json script examples documented
+- [ ] `--filter-validation` flag works with multiple values
+- [ ] CI-agnostic examples provided
 
 ---
 
