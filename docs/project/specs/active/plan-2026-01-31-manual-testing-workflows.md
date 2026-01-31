@@ -66,15 +66,17 @@ Implement and document features for manual/review-based testing:
 | III | `validation` frontmatter option | Per-file binary vs manual designation | Low |
 | IV | Review annotations in test files | Document expected behavior for reviewers | Low |
 | V | CI integration patterns | GitHub Actions examples for manual review | Low |
+| VI | Comparison and evaluation modes | Quality evals, side-by-side, script/LLM evaluators | Medium |
 
 ## Backward Compatibility
 
 | Area | Compatibility Level | Notes |
 |------|---------------------|-------|
-| CLI behavior | Additive | New `--review` flag, existing flags unchanged |
-| Config schema | Additive | New optional `validation` field |
-| Test file syntax | Additive | New optional annotations |
+| CLI behavior | Additive | New `--review`, `--evaluate` flags, existing unchanged |
+| Config schema | Additive | New optional `validation`, `comparison`, `evaluator` fields |
+| Test file syntax | Additive | New optional annotations (`REVIEW`, `EVALUATE`) |
 | Exit codes | Unchanged | Default behavior preserved |
+| Validation modes | Backward compatible | `binary` remains default, new modes opt-in |
 
 ---
 
@@ -263,6 +265,130 @@ $ echo -e "project-name\ny\n" | wizard-cli init
 Created project-name/
 ? 0
 ```
+
+### 6. Quality Evaluation Testing
+
+**Best for**: Search engines, recommendation systems, ranking algorithms, ML model
+outputs, content generation systems.
+
+**Characteristics**:
+- Outputs vary between runs but should maintain similar quality
+- "Correct" isn't about exact matching but quality metrics
+- Evaluation requires comparing quality, not just content
+- May need scoring (precision, recall, relevance) rather than pass/fail
+
+**Key insight**: The comparison isn't a diff—it's an evaluation. Previous results
+and current results might both be "correct" but differ. The goal is to ensure
+quality hasn't regressed.
+
+**Pattern - Search quality evaluation**:
+```yaml
+---
+validation: evaluation
+comparison: side-by-side
+---
+
+# Test: Search relevance
+
+<!--
+EVALUATE:
+- Results should be relevant to query
+- Top 3 results should contain query terms
+- No spam or low-quality results
+- Compare: Are new results as good or better than baseline?
+-->
+
+```console
+$ search-cli query "rust async programming"
+[.. search results vary ..]
+? 0
+```
+```
+
+**Pattern - Recommendation quality**:
+```yaml
+---
+validation: evaluation
+---
+
+# Test: Product recommendations
+
+<!--
+EVALUATE:
+- Recommendations should match user preferences
+- Diversity: not all same category
+- Relevance score should be >= baseline average
+-->
+
+```console
+$ recommend-cli --user test-user-123
+[.. recommendations vary ..]
+? 0
+```
+```
+
+**Pattern - LLM response quality**:
+```yaml
+---
+validation: evaluation
+evaluator: llm  # or: script, human
+---
+
+# Test: Summary quality maintains standards
+
+<!--
+EVALUATE:
+- Summary captures main points (precision)
+- No critical information omitted (recall)
+- Factual accuracy maintained
+- Tone and style appropriate
+
+COMPARISON: Both old and new outputs may be valid. Evaluate whether
+new output is at least as good as previous baseline.
+-->
+
+```console
+$ summarize-cli article.txt
+[.. summary varies ..]
+? 0
+```
+```
+
+**Evaluation strategies**:
+
+1. **Side-by-side comparison**: Display previous and current output together
+   for human review, rather than a diff.
+
+2. **Script-based scoring**: Run an evaluation script that produces metrics:
+   ```yaml
+   evaluator:
+     type: script
+     command: ./scripts/eval-search-quality.sh
+     threshold: 0.85  # Minimum score to pass
+   ```
+
+3. **LLM-based evaluation**: Use an LLM to assess quality:
+   ```yaml
+   evaluator:
+     type: llm
+     criteria:
+       - relevance
+       - accuracy
+       - completeness
+   ```
+
+4. **Human judgment with criteria**: Structured review with explicit criteria
+   (as shown in EVALUATE comments above).
+
+**When to use evaluation vs manual vs binary**:
+
+| Scenario | Mode | Reasoning |
+|----------|------|-----------|
+| CLI version output | binary | Exact match expected |
+| LLM chat response | manual | Varies, human review |
+| Search results quality | evaluation | Quality comparison, not diff |
+| Recommendation relevance | evaluation | Metrics-based comparison |
+| Generated code | evaluation | Functional equivalence, not textual |
 
 ## Workflows
 
@@ -631,11 +757,15 @@ should be treated as binary (automated pass/fail) or manual (requires review).
 
 ```yaml
 ---
-validation: binary   # Default: standard pass/fail (omitting is same as binary)
+validation: binary      # Default: standard pass/fail (omitting is same as binary)
 ---
 
 ---
-validation: manual   # Outputs are expected to vary; review needed
+validation: manual      # Outputs are expected to vary; review needed
+---
+
+---
+validation: evaluation  # Outputs vary; quality comparison needed (see Phase VI)
 ---
 ```
 
@@ -645,6 +775,7 @@ validation: manual   # Outputs are expected to vary; review needed
 |------|-------------|----------------|-------------|
 | `binary` | Pass/fail | Pass/fail | Block on failure |
 | `manual` | Warn if changed | Update + show diff | Create review PR |
+| `evaluation` | Run evaluator | Show comparison | Check score threshold |
 
 **Default run with manual files**:
 
@@ -857,6 +988,258 @@ jobs:
 
 ---
 
+## Phase VI: Comparison and Evaluation Modes
+
+### Overview
+
+Extend the comparison system beyond simple diffs to support quality evaluation
+workflows where outputs may legitimately differ but should maintain comparable
+quality. This addresses use cases like search engines, recommendation systems,
+and any scenario where "different but equally good" is a valid outcome.
+
+### Motivation
+
+The current diff-based approach assumes there's one correct output. But for many
+systems:
+
+- **Search engines**: Different result orderings may be equally valid
+- **Recommendations**: Various items could be appropriate recommendations
+- **ML/AI outputs**: Responses vary but quality should be consistent
+- **Generated content**: Multiple valid outputs exist for the same input
+
+The question isn't "Did the output change?" but "Is the output still good?"
+
+### Comparison Modes
+
+Add a `comparison` option to control how outputs are presented for review:
+
+```yaml
+---
+validation: evaluation
+comparison: diff        # Default: unified diff view
+comparison: side-by-side  # Show previous and current together
+comparison: baseline    # Show current with baseline metadata
+---
+```
+
+**`diff` (default)**: Standard unified diff format.
+
+**`side-by-side`**: Display previous and current output in parallel:
+
+```
+$ tryscript run tests/search.tryscript.md --review
+
+Test: Search relevance
+┌─────────────────────────────┬─────────────────────────────┐
+│ Previous (baseline)         │ Current                     │
+├─────────────────────────────┼─────────────────────────────┤
+│ 1. Rust async/await guide   │ 1. Async Rust programming   │
+│ 2. Tokio runtime tutorial   │ 2. Rust async/await guide   │
+│ 3. Async Rust patterns      │ 3. Tokio runtime tutorial   │
+│ 4. ...                      │ 4. ...                      │
+└─────────────────────────────┴─────────────────────────────┘
+Evaluate: Are these results comparable quality?
+```
+
+**`baseline`**: Show current output with metadata about the baseline:
+
+```
+$ tryscript run tests/recommendations.tryscript.md --review
+
+Test: Product recommendations
+Baseline captured: 2026-01-15 (12 items, avg relevance 0.87)
+
+Current output:
+1. Blue Widget (relevance: 0.92)
+2. Premium Gadget (relevance: 0.88)
+...
+
+Compare against baseline to verify quality maintained.
+```
+
+### Evaluator Types
+
+Add an `evaluator` option to specify how quality should be assessed:
+
+```yaml
+---
+validation: evaluation
+evaluator: human        # Default: human reviews the comparison
+evaluator: script       # Run evaluation script
+evaluator: llm          # Use LLM to evaluate quality
+---
+```
+
+#### Human Evaluation (default)
+
+The current review workflow with enhanced comparison display.
+
+#### Script Evaluation
+
+Run an external script that scores the output:
+
+```yaml
+---
+validation: evaluation
+evaluator:
+  type: script
+  command: ./scripts/evaluate-search.py
+  threshold: 0.80
+  pass_baseline: true  # Pass baseline file path as second arg
+---
+```
+
+Script receives:
+- `$1`: Path to file containing current output
+- `$2`: Path to file containing baseline output (if `pass_baseline: true`)
+
+Script outputs JSON with score and optional details:
+
+```json
+{
+  "score": 0.85,
+  "passed": true,
+  "details": {
+    "precision": 0.90,
+    "recall": 0.80,
+    "relevance": 0.85
+  },
+  "notes": "Quality maintained despite result ordering changes"
+}
+```
+
+#### LLM Evaluation (Future)
+
+Use an LLM to evaluate quality against criteria:
+
+```yaml
+---
+validation: evaluation
+evaluator:
+  type: llm
+  model: gpt-4  # or claude, etc.
+  criteria:
+    - Results are relevant to the query
+    - Top results contain query terms
+    - No obvious spam or low-quality items
+  threshold: 0.80
+---
+```
+
+**Note**: LLM evaluation is a future feature. Initial implementation focuses
+on human and script evaluators.
+
+### Schema Changes
+
+**Updated `validation` enum**:
+
+```typescript
+export const TestConfigSchema = z.object({
+  // ... existing fields ...
+  validation: z.enum(['binary', 'manual', 'evaluation']).optional().default('binary'),
+  comparison: z.enum(['diff', 'side-by-side', 'baseline']).optional().default('diff'),
+  evaluator: z.union([
+    z.literal('human'),
+    z.object({
+      type: z.literal('script'),
+      command: z.string(),
+      threshold: z.number().optional(),
+      pass_baseline: z.boolean().optional(),
+    }),
+    z.object({
+      type: z.literal('llm'),
+      model: z.string().optional(),
+      criteria: z.array(z.string()),
+      threshold: z.number().optional(),
+    }),
+  ]).optional().default('human'),
+});
+```
+
+### Behavior Summary
+
+| Validation | Comparison | Evaluator | Behavior |
+|------------|------------|-----------|----------|
+| binary | diff | - | Exact match required |
+| manual | diff | human | Show diff, human reviews |
+| evaluation | diff | human | Show diff, human evaluates quality |
+| evaluation | side-by-side | human | Show side-by-side, human evaluates |
+| evaluation | diff | script | Run script, check threshold |
+| evaluation | diff | llm | Run LLM eval, check threshold |
+
+### CLI Integration
+
+```bash
+# Run with evaluation mode
+tryscript run tests/search.tryscript.md --review
+
+# Override comparison mode
+tryscript run tests/search.tryscript.md --review --comparison side-by-side
+
+# Run script evaluator and get results
+tryscript run tests/search.tryscript.md --evaluate
+# Outputs: PASS (score: 0.87) or FAIL (score: 0.65, threshold: 0.80)
+
+# Filter by validation type
+tryscript run --filter-validation evaluation --review
+```
+
+### Example Workflow: Search Engine Testing
+
+```yaml
+---
+sandbox: true
+validation: evaluation
+comparison: side-by-side
+evaluator:
+  type: script
+  command: ./scripts/search-quality-eval.py
+  threshold: 0.75
+  pass_baseline: true
+---
+
+# Test: Search relevance for programming queries
+
+<!--
+EVALUATE:
+- Results should be relevant to query
+- Top 3 results should contain query terms or synonyms
+- Result diversity: not all from same source
+- No broken links or error responses
+
+COMPARISON NOTES:
+Result ordering may differ. Evaluate based on overall quality
+of the result set, not exact match of positions.
+-->
+
+```console
+$ search-cli "rust async programming tutorial"
+[.. results ..]
+? 0
+```
+
+# Test: Search handles edge cases
+
+```console
+$ search-cli ""
+No query provided. Please enter a search term.
+? 1
+```
+```
+
+### Acceptance Criteria
+
+- [ ] `validation: evaluation` mode implemented
+- [ ] `comparison: side-by-side` displays previous/current together
+- [ ] `comparison: baseline` shows current with baseline metadata
+- [ ] Script evaluator runs external command
+- [ ] Script evaluator respects threshold
+- [ ] Evaluation scores reported in summary
+- [ ] `--filter-validation evaluation` works
+- [ ] Documentation updated with evaluation examples
+
+---
+
 ## Implementation Order
 
 | Phase | Feature | Dependencies | Priority |
@@ -866,9 +1249,12 @@ jobs:
 | III | `validation` option | Playbook for context | Medium |
 | IV | Review annotations | III | Low |
 | V | CI patterns | I, II | Medium |
+| VI | Comparison/evaluation modes | III | Medium |
 
 **Recommended approach**: Implement Phase I first to establish patterns, then II
-for the core workflow improvement, then III-V as refinements.
+for the core workflow improvement, then III-V as refinements. Phase VI extends
+the validation system and can be implemented after the core manual testing
+workflow is established.
 
 ---
 
@@ -890,4 +1276,24 @@ for the core workflow improvement, then III-V as refinements.
    - **Recommendation**: `--fail-fast` only applies to binary tests.
 
 5. **Filter syntax**: `--filter-validation` or `--validation-filter`?
-   - **Recommendation**: `--filter-validation manual|binary` for consistency.
+   - **Recommendation**: `--filter-validation manual|binary|evaluation` for consistency.
+
+6. **Evaluation score persistence**: Should evaluation scores be stored anywhere?
+   - **Recommendation**: Include in test output file as comment or metadata.
+     Could add `<!-- LAST_SCORE: 0.87, 2026-01-31 -->` to track trends.
+
+7. **Baseline storage for evaluation mode**: Where should baselines live?
+   - **Recommendation**: Same as current - in the test file itself. The
+     "expected output" block serves as the baseline for comparison.
+
+8. **Side-by-side terminal width**: How to handle wide outputs?
+   - **Recommendation**: Truncate with `...`, offer `--full` flag for complete
+     output, or write to temp files and show paths.
+
+9. **LLM evaluator cost/latency**: Running LLM for every test could be expensive.
+   - **Recommendation**: LLM evaluation is opt-in and likely for subset of tests.
+     Consider caching, batching, or CI-only evaluation modes.
+
+10. **Evaluation threshold semantics**: What does the threshold mean?
+    - **Recommendation**: Score >= threshold means pass. For script evaluators,
+      exit code 0 = pass, non-zero = fail. Threshold is for score-based checks.
