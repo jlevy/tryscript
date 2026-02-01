@@ -67,8 +67,18 @@ tryscript run tests/manual/ --review
 Behavior:
 1. Run all tests
 2. Update expected outputs with actual
-3. Show unified diff of all changes
+3. List files that changed
 4. Exit 0 (review mode is informational, not a gate)
+
+Review the changes using Git:
+```bash
+git diff tests/manual/           # Standard diff
+git diff --word-diff tests/      # Word-level changes
+```
+
+Git provides all diff/comparison functionality—no need to duplicate it. Users can
+configure Git with tools like `delta` or `diff-so-fancy` for enhanced display,
+or review diffs in their IDE or GitHub PR interface.
 
 ### `validation` Frontmatter
 
@@ -143,67 +153,38 @@ instead of failing. Summary shows "X needs review" count.
 
 ---
 
-## Phase II: Quality Evaluation Mode
+## Phase II: Quality Evaluation Mode (Future)
 
 ### Overview
 
-Extend manual testing to support quality evaluation workflows where outputs may
-differ but quality should remain consistent. The comparison isn't a diff—it's
-an evaluation.
+For quality evaluation workflows (search engines, recommendations), the comparison
+isn't just "did it change?" but "is the quality still good?"
 
-**Use cases**: Search engines, recommendation systems, generated content quality.
+**Approach**: Use Git for viewing changes, but add optional **evaluator scripts**
+that can score outputs programmatically.
 
-### `validation: evaluation`
-
-```yaml
----
-validation: evaluation
-comparison: side-by-side   # or: diff, baseline
----
-```
-
-### Comparison Modes
-
-- **`diff`** (default): Standard unified diff
-- **`side-by-side`**: Display previous and current output in parallel
-- **`baseline`**: Show current with baseline metadata
-
-### Evaluators
+### Script Evaluators
 
 ```yaml
----
-validation: evaluation
-evaluator: human           # Default: human reviews comparison
----
-
 ---
 validation: evaluation
 evaluator:
-  type: script
-  command: ./scripts/eval-quality.py
+  command: ./scripts/eval-search-quality.py
   threshold: 0.80
 ---
 ```
 
-**Script evaluator**: Runs external script, receives current and baseline output
-paths, expects JSON response with score.
+The script receives paths to current and baseline output files, returns a JSON
+score. If score < threshold, the test fails.
 
-**LLM evaluator** (future): Use LLM to evaluate against criteria.
-
-### CLI
-
-```bash
-tryscript run tests/search.tryscript.md --review
-tryscript run tests/search.tryscript.md --review --comparison side-by-side
-tryscript run --filter-validation evaluation --review
-```
+This allows automated quality gates while still using Git for human review of
+the actual changes.
 
 ### Acceptance Criteria
 
 - [ ] `validation: evaluation` mode implemented
-- [ ] `comparison: side-by-side` displays previous/current together
-- [ ] Script evaluator runs external command and checks threshold
-- [ ] `--filter-validation` works with multiple values
+- [ ] Script evaluator runs command and checks threshold
+- [ ] Git diff remains the primary review mechanism
 
 ---
 
@@ -212,7 +193,3 @@ tryscript run --filter-validation evaluation --review
 1. **Exit code in review mode**: Exit 0 (recommendation: yes, informational only)
 
 2. **Mixing binary and manual in one file**: Per-file validation only (split files)
-
-3. **Side-by-side terminal width**: Truncate with `...`, or write to temp files
-
-4. **LLM evaluator cost**: Opt-in, likely for subset of tests only
