@@ -112,7 +112,8 @@ Create `packages/tryscript/docs/playbook.md` covering:
 - Quality evaluation testing (see Phase II)
 
 **Best practices**:
-- Use elision patterns liberally (`[..]`, `...`)
+- Use elision only for irrelevant noise (timestamps, paths, perf metrics)
+- Capture full output for content you're evaluating—elision hides what you need to review
 - Separate deterministic and manual tests into directories
 - Document review criteria in test titles or markdown
 
