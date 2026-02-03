@@ -24,8 +24,22 @@ This works well for deterministic CLIs but breaks down for:
 
 - **Variable outputs**: LLM/AI responses, web scraping, search results, timestamps
 - **Subjective evaluation**: Visual appearance, UX flows, formatting quality
+- **Quality evaluation (evals)**: Search relevance, ranking quality, precision/recall metrics
 - **Exploratory testing**: New feature development, debugging sessions
 - **Documentation verification**: Ensuring examples still run correctly
+
+### Beyond Simple Diffs
+
+The current model assumes comparison via text diff, but many evaluation scenarios
+need richer comparison methods:
+
+- **Side-by-side comparison**: View previous and current outputs together
+- **Metric-based evaluation**: Precision, recall, relevance scores
+- **LLM-assisted evaluation**: Use another model to judge quality/similarity
+- **Custom evaluators**: Scripts that produce comparison reports
+
+These scenarios require a generalization beyond "diff the outputs" to "evaluate
+the outputs" with configurable comparison strategies.
 
 ### The "Update and Review" Workflow
 
@@ -66,6 +80,7 @@ Implement and document features for manual/review-based testing:
 | III | `validation` frontmatter option | Per-file binary vs manual designation | Low |
 | IV | Review annotations in test files | Document expected behavior for reviewers | Low |
 | V | CI integration patterns | GitHub Actions examples for manual review | Low |
+| VI | Comparison modes | Side-by-side, evaluators, LLM-assisted (future) | Medium |
 
 ## Backward Compatibility
 
@@ -218,7 +233,93 @@ $ web-cli search "rust programming"
 ```
 ```
 
-### 4. Visual/UX Output Testing
+### 4. Quality Evaluation (Evals)
+
+**Best for**: Search engines, recommendation systems, ranking algorithms, any system
+where you need to evaluate quality rather than exact correctness.
+
+**Characteristics**:
+- Results may differ but both be "correct"
+- Comparison is about quality levels, not exact matches
+- May need precision/recall or relevance metrics
+- Diff isn't meaningful; side-by-side or scored comparison is better
+
+**Use cases**:
+- Search engine result quality over time
+- Recommendation relevance evaluation
+- Content ranking regression testing
+- A/B comparison of algorithm changes
+
+**Pattern - Search quality eval**:
+```yaml
+---
+validation: manual
+compare: side-by-side  # Future: show previous vs current
+---
+
+# Eval: Product search relevance
+
+<!--
+EVAL CRITERIA:
+- Top 5 results should be relevant to query
+- No obviously wrong results in top 10
+- Compare precision@10 with previous baseline
+-->
+
+```console
+$ search-cli query "wireless headphones under $100"
+[.. search results ..]
+? 0
+```
+```
+
+**Pattern - With evaluation script** (future):
+```yaml
+---
+validation: manual
+evaluator: ./scripts/eval-search-quality.sh  # Runs comparison
+---
+
+# Eval: Search ranking quality
+
+```console
+$ search-cli query "best programming languages 2024"
+[.. results ..]
+? 0
+```
+```
+
+**Workflow for evals**:
+```bash
+# Run evals and capture new baselines
+tryscript run tests/evals/*.tryscript.md --update
+
+# Review shows side-by-side comparison (future)
+tryscript run tests/evals/*.tryscript.md --review --compare side-by-side
+
+# Or run custom evaluator
+tryscript run tests/evals/*.tryscript.md --review --evaluator ./eval.sh
+```
+
+**What the reviewer sees**:
+```
+Eval: Product search relevance
+
+Previous results:           Current results:
+─────────────────           ─────────────────
+1. Sony WH-1000XM4          1. Sony WH-1000XM5
+2. Bose QC45                2. Bose QC45
+3. Apple AirPods Pro        3. JBL Tune 760NC
+4. JBL Tune 760NC           4. Apple AirPods Pro
+5. Anker Soundcore          5. Anker Soundcore Q20
+
+Observations:
+- Top result changed (XM4 → XM5) - expected, newer model
+- Positions 3-4 swapped - acceptable
+- Overall relevance maintained ✓
+```
+
+### 5. Visual/UX Output Testing
 
 **Best for**: CLIs with formatted output, progress bars, tables, colors.
 
@@ -246,7 +347,7 @@ $ report-cli show --format table
 ```
 ```
 
-### 5. Interactive/Multi-step Workflows
+### 6. Interactive/Multi-step Workflows
 
 **Best for**: CLIs with prompts, wizards, complex state.
 
@@ -857,6 +958,141 @@ jobs:
 
 ---
 
+## Phase VI: Comparison Modes (Future)
+
+### Overview
+
+Generalize comparison beyond unified diffs to support quality evaluation workflows.
+This is a more advanced phase that enables rich comparison strategies for evals.
+
+### Comparison Strategies
+
+| Strategy | Description | Use Case |
+|----------|-------------|----------|
+| `diff` | Unified diff (default) | Code, text, deterministic output |
+| `side-by-side` | Two-column view of previous vs current | Search results, rankings |
+| `evaluator` | Custom script that produces comparison report | Complex quality metrics |
+| `llm` | LLM-assisted comparison (future) | Subjective quality evaluation |
+
+### Configuration
+
+**Frontmatter**:
+```yaml
+---
+validation: manual
+compare: side-by-side   # Comparison strategy
+---
+```
+
+**With custom evaluator**:
+```yaml
+---
+validation: manual
+compare: evaluator
+evaluator: ./scripts/eval-search-quality.sh
+---
+```
+
+**With LLM evaluator** (future):
+```yaml
+---
+validation: manual
+compare: llm
+llm-prompt: |
+  Compare these two search result sets for relevance and quality.
+  Rate each on a scale of 1-10 and explain any significant differences.
+---
+```
+
+### Side-by-Side Output Format
+
+```
+$ tryscript run tests/search.tryscript.md --review
+
+Eval: Product search quality
+
+┌─ Previous ─────────────────┬─ Current ──────────────────┐
+│ 1. Sony WH-1000XM4 ($299)  │ 1. Sony WH-1000XM5 ($349)  │
+│ 2. Bose QC45 ($279)        │ 2. Bose QC45 ($279)        │
+│ 3. Apple AirPods Pro ($249)│ 3. JBL Tune 760NC ($79)    │
+│ 4. JBL Tune 760NC ($79)    │ 4. Apple AirPods Pro ($249)│
+│ 5. Anker Soundcore ($59)   │ 5. Anker Soundcore Q20 ($59│
+└────────────────────────────┴────────────────────────────┘
+
+Changes detected: positions 3-4 swapped, top result updated
+```
+
+### Custom Evaluator Interface
+
+Evaluators receive previous and current outputs and produce a comparison report:
+
+```bash
+#!/bin/bash
+# scripts/eval-search-quality.sh
+# Receives: $1 = previous output file, $2 = current output file
+# Outputs: comparison report to stdout
+
+previous="$1"
+current="$2"
+
+# Calculate metrics
+prev_count=$(wc -l < "$previous")
+curr_count=$(wc -l < "$current")
+
+# Check overlap
+overlap=$(comm -12 <(sort "$previous") <(sort "$current") | wc -l)
+
+echo "=== Search Quality Comparison ==="
+echo "Previous results: $prev_count"
+echo "Current results: $curr_count"
+echo "Overlap: $overlap ($(( overlap * 100 / prev_count ))%)"
+echo ""
+echo "Assessment: $([ $overlap -gt 7 ] && echo "✓ Acceptable" || echo "⚠ Review needed")"
+```
+
+### LLM Evaluator (Future)
+
+For subjective quality evaluation, an LLM can compare outputs:
+
+```typescript
+// Future implementation concept
+interface LLMEvaluatorConfig {
+  model: string;  // e.g., "claude-3-haiku"
+  prompt: string;
+  outputFormat: 'text' | 'json' | 'score';
+}
+
+// Example LLM evaluation output
+{
+  "previousScore": 8,
+  "currentScore": 7,
+  "summary": "Both result sets are relevant. Current results show slight preference for newer products.",
+  "recommendation": "acceptable",
+  "details": [
+    "Top result change reflects product lifecycle (XM4 → XM5)",
+    "Price range coverage maintained",
+    "One result moved out of top 5 (AirPods Pro: 3→4)"
+  ]
+}
+```
+
+### Acceptance Criteria
+
+- [ ] `compare: side-by-side` shows two-column view
+- [ ] `compare: evaluator` runs custom script with previous/current files
+- [ ] Evaluator output displayed in review mode
+- [ ] Default remains `compare: diff` for backward compatibility
+- [ ] Documentation covers evaluator interface
+
+### Future: LLM Evaluator
+
+- [ ] `compare: llm` sends outputs to configured LLM
+- [ ] `llm-prompt` customizes evaluation criteria
+- [ ] Structured output (scores, recommendations)
+- [ ] Cost/rate limiting considerations
+
+---
+
 ## Implementation Order
 
 | Phase | Feature | Dependencies | Priority |
@@ -866,9 +1102,11 @@ jobs:
 | III | `validation` option | Playbook for context | Medium |
 | IV | Review annotations | III | Low |
 | V | CI patterns | I, II | Medium |
+| VI | Comparison modes | II, III | Low (future) |
 
 **Recommended approach**: Implement Phase I first to establish patterns, then II
-for the core workflow improvement, then III-V as refinements.
+for the core workflow improvement, then III-V as refinements. Phase VI is more
+advanced and can be implemented later as evaluation use cases mature.
 
 ---
 
@@ -891,3 +1129,16 @@ for the core workflow improvement, then III-V as refinements.
 
 5. **Filter syntax**: `--filter-validation` or `--validation-filter`?
    - **Recommendation**: `--filter-validation manual|binary` for consistency.
+
+6. **Comparison mode defaults**: Should `validation: manual` imply a different
+   default comparison mode?
+   - **Recommendation**: Default remains `diff`. Users opt into `side-by-side`
+     or `evaluator` explicitly.
+
+7. **LLM evaluator costs**: How to handle API costs for LLM-assisted evaluation?
+   - **Recommendation**: Require explicit opt-in, consider caching, document
+     cost implications.
+
+8. **Evaluator sandboxing**: Should custom evaluator scripts be sandboxed?
+   - **Recommendation**: Run in same context as tests (trust user scripts),
+     document security considerations.
