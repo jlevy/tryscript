@@ -69,6 +69,58 @@ The user wants to:
 3. Create a playbook documenting best practices and anti-patterns
 4. Streamline the update-and-review workflow
 
+## Design Philosophy
+
+### Tryscript as "Jupyter Notebooks for CLI Testing"
+
+A useful mental model: tryscript files are like Jupyter notebooks for CLI testing.
+
+| Jupyter Notebooks | Tryscript Files |
+|-------------------|-----------------|
+| Run code cells, capture outputs | Run commands, capture outputs |
+| Outputs stored in `.ipynb` | Outputs stored in `.tryscript.md` |
+| Rerun to update outputs | `--update` to refresh outputs |
+| Visual inspection of results | `git diff` to review changes |
+| Share notebooks for collaboration | Commit files to git for review |
+
+Both provide **structured, reproducible, reviewable** execution with captured outputs.
+
+### Principles
+
+1. **Build on existing tools**: `tryscript run --update` + `git diff` already works.
+   Minimize new features; maximize reuse.
+
+2. **Everything is a file diff**: All comparison ultimately reduces to diffing the
+   tryscript markdown file before and after. Even "side-by-side" is just showing
+   the old and new outputs.
+
+3. **Non-interactive, agent-friendly**: All workflows must work from command line
+   without interactive prompts. Agents should be able to run, inspect, and review.
+
+4. **Prose is documentation**: Review criteria are just regular markdown text in
+   the test file. No special syntax needed.
+
+5. **Simple format, flexible workflows**: Keep the tryscript format unchanged.
+   Different workflows are achieved through CLI options and shell composition.
+
+### The Core Workflow (Already Works Today)
+
+```bash
+# 1. Run tests with update mode
+tryscript run tests/evals/*.tryscript.md --update
+
+# 2. Review changes with standard git diff
+git diff tests/evals/
+
+# 3. Accept or reject
+git add tests/evals/ && git commit -m "Update baselines"
+# or
+git checkout -- tests/evals/  # Reject changes
+```
+
+This workflow is already sufficient for most manual testing needs. The question
+is: what minimal enhancements would make it more streamlined?
+
 ## Summary of Task
 
 Implement and document features for manual/review-based testing:
@@ -181,7 +233,7 @@ git add tests/llm.tryscript.md
 git commit -m "Update LLM response baselines"
 ```
 
-**Example with review annotations**:
+**Example with review guidance**:
 ```yaml
 ---
 validation: manual
@@ -189,7 +241,7 @@ validation: manual
 
 # Test: Summarization quality
 
-<!-- REVIEW: Output should be 2-3 sentences, capture main points -->
+The summary should be 2-3 sentences and capture the main points of the article.
 
 ```console
 $ ai-cli summarize article.txt
@@ -224,7 +276,7 @@ validation: manual
 
 # Test: Search returns results
 
-<!-- REVIEW: Should return 5+ relevant results with titles and URLs -->
+Should return 5+ relevant results with titles and URLs.
 
 ```console
 $ web-cli search "rust programming"
@@ -254,17 +306,12 @@ where you need to evaluate quality rather than exact correctness.
 ```yaml
 ---
 validation: manual
-compare: side-by-side  # Future: show previous vs current
 ---
 
 # Eval: Product search relevance
 
-<!--
-EVAL CRITERIA:
-- Top 5 results should be relevant to query
-- No obviously wrong results in top 10
-- Compare precision@10 with previous baseline
--->
+Top 5 results should be relevant to query. No obviously wrong results in top 10.
+Compare precision@10 with previous baseline.
 
 ```console
 $ search-cli query "wireless headphones under $100"
@@ -273,32 +320,16 @@ $ search-cli query "wireless headphones under $100"
 ```
 ```
 
-**Pattern - With evaluation script** (future):
-```yaml
----
-validation: manual
-evaluator: ./scripts/eval-search-quality.sh  # Runs comparison
----
-
-# Eval: Search ranking quality
-
-```console
-$ search-cli query "best programming languages 2024"
-[.. results ..]
-? 0
-```
-```
-
-**Workflow for evals**:
+**Workflow for evals** (using existing tools):
 ```bash
 # Run evals and capture new baselines
 tryscript run tests/evals/*.tryscript.md --update
 
-# Review shows side-by-side comparison (future)
-tryscript run tests/evals/*.tryscript.md --review --compare side-by-side
+# Review changes with git diff
+git diff tests/evals/
 
-# Or run custom evaluator
-tryscript run tests/evals/*.tryscript.md --review --evaluator ./eval.sh
+# If acceptable, commit as new baseline
+git add tests/evals/ && git commit -m "Update eval baselines"
 ```
 
 **What the reviewer sees**:
@@ -338,7 +369,7 @@ env:
 
 # Test: Table formatting
 
-<!-- REVIEW: Columns should be aligned, headers bold -->
+Columns should be aligned and headers should be bold.
 
 ```console
 $ report-cli show --format table
@@ -803,14 +834,15 @@ interface TestRunSummary {
 
 ---
 
-## Phase IV: Review Annotations
+## Phase IV: Review Guidance in Markdown
 
 ### Overview
 
-Support HTML comments in test files that provide review guidance. These are
-informational only - they help reviewers understand what to look for.
+Review criteria are simply written as regular markdown prose in the test file.
+No special syntax needed - the markdown description before each test block
+naturally serves as documentation for what to look for.
 
-### Syntax
+### Example
 
 ```yaml
 ---
@@ -819,9 +851,8 @@ validation: manual
 
 # Test: AI Response Quality
 
-<!-- REVIEW: Response should be helpful and accurate -->
-<!-- REVIEW: Tone should be professional -->
-<!-- REVIEW: Should not hallucinate facts -->
+The response should be helpful and accurate. The tone should be professional,
+and the model should not hallucinate facts.
 
 ```console
 $ ai-cli ask "What is the capital of France?"
@@ -830,44 +861,17 @@ $ ai-cli ask "What is the capital of France?"
 ```
 ```
 
-### Display in Review Mode
+### Why Plain Markdown
 
-```
-$ tryscript run tests/ai.tryscript.md --review
-
-tests/ai.tryscript.md (manual validation)
-  ● Test: AI Response Quality
-    Review criteria:
-    - Response should be helpful and accurate
-    - Tone should be professional
-    - Should not hallucinate facts
-
-    Diff:
-    - Paris is the capital of France, known for...
-    + Paris is the capital and largest city of France...
-```
-
-### Implementation
-
-**Parser changes** (`parser.ts`):
-
-```typescript
-interface TestBlock {
-  // ... existing fields ...
-  reviewCriteria?: string[];  // Extracted from <!-- REVIEW: ... --> comments
-}
-
-// In parseTestFile:
-const reviewPattern = /<!--\s*REVIEW:\s*(.+?)\s*-->/g;
-```
+- **Already supported**: Tryscript files are markdown, prose is natural
+- **No parsing needed**: No special syntax to implement
+- **Readable in any context**: Works in GitHub, editors, `cat`, etc.
+- **Self-documenting**: The test file explains itself
 
 ### Acceptance Criteria
 
-- [ ] `<!-- REVIEW: text -->` comments are parsed
-- [ ] Multiple REVIEW comments become array
-- [ ] Displayed in `--review` mode output
-- [ ] Ignored in normal binary run
-- [ ] Works with or without `validation: manual`
+- [ ] Documentation updated to show prose-based review guidance
+- [ ] Examples use plain markdown, not special annotations
 
 ---
 
@@ -958,138 +962,45 @@ jobs:
 
 ---
 
-## Phase VI: Comparison Modes (Future)
+## Phase VI: Advanced Comparison (Future, If Needed)
 
 ### Overview
 
-Generalize comparison beyond unified diffs to support quality evaluation workflows.
-This is a more advanced phase that enables rich comparison strategies for evals.
+Most comparison needs are met by `git diff`. This phase documents potential
+extensions that could be added if simple diffs prove insufficient.
 
-### Comparison Strategies
+### Use Standard Tools First
 
-| Strategy | Description | Use Case |
-|----------|-------------|----------|
-| `diff` | Unified diff (default) | Code, text, deterministic output |
-| `side-by-side` | Two-column view of previous vs current | Search results, rankings |
-| `evaluator` | Custom script that produces comparison report | Complex quality metrics |
-| `llm` | LLM-assisted comparison (future) | Subjective quality evaluation |
-
-### Configuration
-
-**Frontmatter**:
-```yaml
----
-validation: manual
-compare: side-by-side   # Comparison strategy
----
-```
-
-**With custom evaluator**:
-```yaml
----
-validation: manual
-compare: evaluator
-evaluator: ./scripts/eval-search-quality.sh
----
-```
-
-**With LLM evaluator** (future):
-```yaml
----
-validation: manual
-compare: llm
-llm-prompt: |
-  Compare these two search result sets for relevance and quality.
-  Rate each on a scale of 1-10 and explain any significant differences.
----
-```
-
-### Side-by-Side Output Format
-
-```
-$ tryscript run tests/search.tryscript.md --review
-
-Eval: Product search quality
-
-┌─ Previous ─────────────────┬─ Current ──────────────────┐
-│ 1. Sony WH-1000XM4 ($299)  │ 1. Sony WH-1000XM5 ($349)  │
-│ 2. Bose QC45 ($279)        │ 2. Bose QC45 ($279)        │
-│ 3. Apple AirPods Pro ($249)│ 3. JBL Tune 760NC ($79)    │
-│ 4. JBL Tune 760NC ($79)    │ 4. Apple AirPods Pro ($249)│
-│ 5. Anker Soundcore ($59)   │ 5. Anker Soundcore Q20 ($59│
-└────────────────────────────┴────────────────────────────┘
-
-Changes detected: positions 3-4 swapped, top result updated
-```
-
-### Custom Evaluator Interface
-
-Evaluators receive previous and current outputs and produce a comparison report:
+Before adding custom comparison modes, consider:
 
 ```bash
-#!/bin/bash
-# scripts/eval-search-quality.sh
-# Receives: $1 = previous output file, $2 = current output file
-# Outputs: comparison report to stdout
+# Side-by-side diff (already available)
+git diff --word-diff tests/evals/
+diff -y old.txt new.txt
 
-previous="$1"
-current="$2"
+# Custom comparison with shell scripts
+./scripts/compare-outputs.sh tests/evals/search.tryscript.md
 
-# Calculate metrics
-prev_count=$(wc -l < "$previous")
-curr_count=$(wc -l < "$current")
-
-# Check overlap
-overlap=$(comm -12 <(sort "$previous") <(sort "$current") | wc -l)
-
-echo "=== Search Quality Comparison ==="
-echo "Previous results: $prev_count"
-echo "Current results: $curr_count"
-echo "Overlap: $overlap ($(( overlap * 100 / prev_count ))%)"
-echo ""
-echo "Assessment: $([ $overlap -gt 7 ] && echo "✓ Acceptable" || echo "⚠ Review needed")"
+# LLM-assisted review (pipe to Claude, etc.)
+git diff tests/evals/ | claude "Review these changes for quality regressions"
 ```
 
-### LLM Evaluator (Future)
+### Potential Future Extensions
 
-For subjective quality evaluation, an LLM can compare outputs:
+If standard tools prove insufficient, consider:
 
-```typescript
-// Future implementation concept
-interface LLMEvaluatorConfig {
-  model: string;  // e.g., "claude-3-haiku"
-  prompt: string;
-  outputFormat: 'text' | 'json' | 'score';
-}
+| Feature | When Needed | Complexity |
+|---------|-------------|------------|
+| `--diff-format side-by-side` | If git diff isn't readable enough | Low |
+| `--post-update-hook ./script.sh` | Run custom script after update | Low |
+| Built-in LLM comparison | If manual review is too slow | High |
 
-// Example LLM evaluation output
-{
-  "previousScore": 8,
-  "currentScore": 7,
-  "summary": "Both result sets are relevant. Current results show slight preference for newer products.",
-  "recommendation": "acceptable",
-  "details": [
-    "Top result change reflects product lifecycle (XM4 → XM5)",
-    "Price range coverage maintained",
-    "One result moved out of top 5 (AirPods Pro: 3→4)"
-  ]
-}
-```
+### Philosophy
 
-### Acceptance Criteria
+> "The simplest thing that could possibly work" - Ward Cunningham
 
-- [ ] `compare: side-by-side` shows two-column view
-- [ ] `compare: evaluator` runs custom script with previous/current files
-- [ ] Evaluator output displayed in review mode
-- [ ] Default remains `compare: diff` for backward compatibility
-- [ ] Documentation covers evaluator interface
-
-### Future: LLM Evaluator
-
-- [ ] `compare: llm` sends outputs to configured LLM
-- [ ] `llm-prompt` customizes evaluation criteria
-- [ ] Structured output (scores, recommendations)
-- [ ] Cost/rate limiting considerations
+Start with `tryscript run --update && git diff`. Add features only when the
+simple approach proves inadequate for real use cases.
 
 ---
 
@@ -1100,13 +1011,13 @@ interface LLMEvaluatorConfig {
 | I | Playbook documentation | None | High |
 | II | `--review` mode | None | High |
 | III | `validation` option | Playbook for context | Medium |
-| IV | Review annotations | III | Low |
+| IV | Review guidance (prose) | None | Low (just documentation) |
 | V | CI patterns | I, II | Medium |
-| VI | Comparison modes | II, III | Low (future) |
+| VI | Advanced comparison | Proven need | Low (future, maybe never) |
 
 **Recommended approach**: Implement Phase I first to establish patterns, then II
-for the core workflow improvement, then III-V as refinements. Phase VI is more
-advanced and can be implemented later as evaluation use cases mature.
+for the core workflow improvement. Validate that the simple approach works before
+adding complexity. Phase VI may never be needed.
 
 ---
 
@@ -1130,15 +1041,6 @@ advanced and can be implemented later as evaluation use cases mature.
 5. **Filter syntax**: `--filter-validation` or `--validation-filter`?
    - **Recommendation**: `--filter-validation manual|binary` for consistency.
 
-6. **Comparison mode defaults**: Should `validation: manual` imply a different
-   default comparison mode?
-   - **Recommendation**: Default remains `diff`. Users opt into `side-by-side`
-     or `evaluator` explicitly.
-
-7. **LLM evaluator costs**: How to handle API costs for LLM-assisted evaluation?
-   - **Recommendation**: Require explicit opt-in, consider caching, document
-     cost implications.
-
-8. **Evaluator sandboxing**: Should custom evaluator scripts be sandboxed?
-   - **Recommendation**: Run in same context as tests (trust user scripts),
-     document security considerations.
+6. **Is `validation: manual` even needed?**: Could we just use file organization
+   (e.g., `tests/evals/` vs `tests/`) instead of frontmatter?
+   - **Recommendation**: Start with file organization, add frontmatter only if needed.
