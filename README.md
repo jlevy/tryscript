@@ -26,9 +26,10 @@ Write CLI tests as Markdown. tryscript runs commands, captures output, and compa
 - Things are quick to implement or test using arbitrary shell commands
 
 This began as a TypeScript port of [trycmd](https://github.com/assert-rs/trycmd) but I (well, Claude and friends)
-have since enhanced it to be more angent-friendly and self-documenting as a CLI.
+have since enhanced it to be more agent-friendly and self-documenting as a CLI.
 
-For a bit more philosophy on why golden tests are so useful, you (or your friendly agent) should read tbd’s guidelines doc:
+For a bit more philosophy on why golden tests are so useful, you (or your friendly agent)
+should read [tbd](https://github.com/jlevy/tbd)’s guidelines doc:
 
 ```bash
 npx --yes get-tbd@latest guidelines golden-testing-guidelines
