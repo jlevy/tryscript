@@ -17,12 +17,25 @@
 > You can review the architecture doc and all of the specs all of the specs in [docs/project](docs/project).
 > The general research, guideline, and rules docs I use are in [docs/general](docs/general).
 
-## What It Does
+## Why?
 
-Write CLI tests as Markdown. tryscript runs commands, captures output, and compares against expected results. Tests become documentation; documentation becomes tests.
+Write CLI tests as Markdown. tryscript runs commands, captures output, and compares against expected results:
+
+- Tests are clear and maintainable for agents and humans: tests become documentation; documentation becomes tests
+- Inner state and working can be exposed for greater test coverage at no extra cost
+- Things are quick to implement or test using arbitrary shell commands
 
 This began as a TypeScript port of [trycmd](https://github.com/assert-rs/trycmd) but I (well, Claude and friends)
 have since enhanced it to be more angent-friendly and self-documenting as a CLI.
+
+For a bit more philosophy on why golden tests are so useful, see tbd’s guidelines doc:
+```bash
+npx --yes get-tbd@latest guidelines golden-testing-guidelines
+```
+
+## What It Does
+
+An example test:
 
 ````markdown
 ---
