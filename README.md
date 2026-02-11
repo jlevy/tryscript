@@ -21,7 +21,8 @@
 
 Write CLI tests as Markdown. tryscript runs commands, captures output, and compares against expected results. Tests become documentation; documentation becomes tests.
 
-This began as a TypeScript port of [trycmd](https://github.com/assert-rs/trycmd) but I (well, Claude and friends)  I have since enhanced it to be more angent-friendly and self-documenting as a CLI.
+This began as a TypeScript port of [trycmd](https://github.com/assert-rs/trycmd) but I (well, Claude and friends)
+have since enhanced it to be more angent-friendly and self-documenting as a CLI.
 
 ````markdown
 ---
