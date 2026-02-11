@@ -5,7 +5,7 @@
 [![npm version](https://img.shields.io/npm/v/tryscript)](https://www.npmjs.com/package/tryscript)
 [![X Follow](https://img.shields.io/twitter/follow/ojoshe)](https://x.com/ojoshe)
 
-Golden testing for CLI applications - a TypeScript port of [trycmd](https://github.com/assert-rs/trycmd).
+**Powerful, agent-friendly testing of CLI applications via golden tests**
 
 > [!NOTE]
 > 100% of the code and specs in this repository were written by Claude Code.
@@ -20,6 +20,8 @@ Golden testing for CLI applications - a TypeScript port of [trycmd](https://gith
 ## What It Does
 
 Write CLI tests as Markdown. tryscript runs commands, captures output, and compares against expected results. Tests become documentation; documentation becomes tests.
+
+This began as a TypeScript port of [trycmd](https://github.com/assert-rs/trycmd) but I (well, Claude and friends)  I have since enhanced it to be more angent-friendly and self-documenting as a CLI.
 
 ````markdown
 ---
