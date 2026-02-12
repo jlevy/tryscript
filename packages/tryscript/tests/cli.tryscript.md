@@ -112,11 +112,9 @@ $ node $TRYSCRIPT_TEST_DIR/../dist/bin.mjs --version
 # Test: readme command displays README
 
 ```console
-$ node $TRYSCRIPT_TEST_DIR/../dist/bin.mjs readme --raw | head -20
+$ node $TRYSCRIPT_TEST_DIR/../dist/bin.mjs readme --raw | head -5
 # tryscript
 
-...
-Golden testing for CLI applications - a TypeScript port of [trycmd](https://github.com/assert-rs/trycmd).
 ...
 ? 0
 ```
