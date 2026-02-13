@@ -6,4 +6,4 @@ settings:
 sync:
   branch: tbd-sync
   remote: origin
-tbd_version: 0.1.3
+tbd_version: 0.1.12
