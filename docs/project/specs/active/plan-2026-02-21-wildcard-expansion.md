@@ -784,60 +784,382 @@ This test structure validates:
 
 ### Phase 1: Unknown Wildcard Syntax
 
-Add `???` and `[??]` as recognized patterns.
+Add `???` and `[??]` as recognized patterns in `matcher.ts` and new types in
+`types.ts`.
 
-- [ ] Add `???` handling to `patternToRegex()` in `matcher.ts` (same regex as `...`)
-- [ ] Add `[??]` handling to `patternToRegex()` in `matcher.ts` (same regex as `[..]`)
-- [ ] Add `ExpandLevel` and `WildcardCategory` types to `types.ts`
-- [ ] Write unit tests verifying `???` and `[??]` match correctly
-- [ ] Write a golden self-test for `???` and `[??]` patterns
-- [ ] Update elision pattern documentation table
+#### 1a. `src/lib/types.ts` — new types
+
+Add after the existing `CoverageContext` interface (end of file, ~line 165):
+
+```typescript
+type WildcardCategory = 'unknown' | 'generic' | 'named';
+type ExpandLevel = 'unknown' | 'generic' | 'all';
+
+interface WildcardCapture {
+  category: WildcardCategory;
+  name?: string;       // for named patterns, e.g. 'HASH'
+  multiline: boolean;  // true for .../???, false for [..]/[??]
+  captured: string;    // the actual text matched
+}
+
+interface ExpansionResult {
+  expandedOutput: string;
+  captures: WildcardCapture[];
+  expandedCount: number;
+}
+```
+
+- [ ] Add the types above to `types.ts`
+
+#### 1b. `src/lib/matcher.ts` — recognize `???` and `[??]`
+
+In `patternToRegex()`, add two new marker replacements. Insert after the `...`
+marker (after line 50, before the `[EXE]` marker at line 53):
+
+```typescript
+// [??] — unknown single-line wildcard (same regex as [..])
+const unknownDotdotMarker = getMarker();
+replacements.set(unknownDotdotMarker, '[^\\n]*');
+processed = processed.replaceAll('[??]', unknownDotdotMarker);
+
+// ??? — unknown multi-line wildcard (same regex as ...)
+const unknownEllipsisMarker = getMarker();
+replacements.set(unknownEllipsisMarker, '(?:[^\\n]*\\n)*');
+processed = processed.replace(/\?\?\?\n/g, unknownEllipsisMarker);
+```
+
+**Important ordering note:** `[??]` replacement must happen before custom pattern
+processing (which uses `[NAME]` syntax), so that `[??]` is not mistakenly treated
+as a custom pattern named `??`. Place it right after the existing `[..]` replacement.
+Similarly, `???` replacement should go right after `...` replacement.
+
+- [ ] Add `[??]` marker replacement after `[..]` (after line 45)
+- [ ] Add `???` marker replacement after `...` (after line 50)
+- [ ] Verify ordering: `[..]`, `[??]`, `...`, `???`, then `[EXE]`, then custom patterns
+
+#### 1c. Tests for unknown wildcard matching
+
+- [ ] Add unit test in `tests/matcher.test.ts` (or create if absent): verify `???`
+  matches the same inputs as `...`, and `[??]` matches the same as `[..]`
+- [ ] Add golden self-test `tests/elisions-unknown.tryscript.md` with blocks using
+  `???` and `[??]` (modeled on existing `tests/elisions.tryscript.md`)
 
 ### Phase 2: Expansion Infrastructure
 
-Core expansion algorithm and expansion flags.
+Core expansion algorithm, CLI flags, and file rewriting.
 
-- [ ] Add `matchAndCapture()` to `matcher.ts` — capturing-group variant that annotates
-  captures by wildcard category
-- [ ] Create `src/lib/expander.ts` with expansion logic (`expandExpectedOutput()`,
-  `expandTestFile()`)
-- [ ] Handle all three expand levels: `unknown`, `generic`, `all`
-- [ ] Add `--expand`, `--expand-generic`, `--expand-all` boolean flags to run command in
-  `commands/run.ts`
-- [ ] Validate mutual exclusivity (error if more than one expand flag specified)
-- [ ] Validate mutual exclusivity with `--update`
-- [ ] Integrate expansion with test execution (run, match, expand, rewrite)
-- [ ] Handle edge cases: multiple wildcards, wildcards at start/end, failed commands
-- [ ] Add expansion summary output ("Expanded N wildcards across M files")
-- [ ] Write unit tests for expansion algorithm at each level
-- [ ] Create fixture files for expansion testing:
-  - `cli-fixtures/expand-source.md` (all wildcard types)
-  - `cli-fixtures/expand-expected-after-unknown.md`
-  - `cli-fixtures/expand-expected-after-generic.md`
-  - `cli-fixtures/expand-expected-after-all.md`
-- [ ] Write `tests/expand.tryscript.md` golden session test:
-  - Copy fixture, run `--expand`, diff to verify only unknown wildcards expanded
-  - Restore, run `--expand-generic`, diff to verify generic + unknown expanded
-  - Restore, run `--expand-all`, diff to verify all wildcards expanded
-  - Verify expansion summary counts at each level
-- [ ] Write `tests/expand-mutual-exclusion.tryscript.md` — verify flag conflicts error
-- [ ] Write `tests/expand-no-change.tryscript.md` — verify `--expand` is a no-op when
-  no unknown wildcards present
+#### 2a. `src/lib/matcher.ts` — `matchAndCapture()`
 
-### Phase 3: Warning and Capture Log
+Add a new exported function after `matchOutput()` (~line 123). This function builds
+a variant of `patternToRegex()` that uses capturing groups for each wildcard, tagged
+by category.
 
-Unknown wildcard warning and execution detail logging.
+Implementation approach:
+- Same marker-based strategy as `patternToRegex()`, but each marker's regex is wrapped
+  in a capturing group: `([^\\n]*)` instead of `[^\\n]*`, `((?:[^\\n]*\\n)*)` instead
+  of `(?:[^\\n]*\\n)*`
+- Build a parallel array of `WildcardCapture` metadata (category, name, multiline) in
+  the same order as the capturing groups
+- Execute the regex against actual output; if it matches, zip the capture groups with
+  the metadata array to produce `WildcardCapture[]` with `captured` filled in
+- Return `null` if the regex doesn't match
 
-- [ ] Implement unknown wildcard counting (scan `expectedOutput` for `???` and `[??]`)
-- [ ] Print warning after run if unknown wildcards present
-- [ ] Write `tests/expand-warning.tryscript.md` — verify warning appears when `???`
-  present in normal run
-- [ ] Create `src/lib/capture-log.ts` with YAML generation
-- [ ] Add `--capture-log <path>` option to run command
-- [ ] Capture command, actual/expected output, exit codes, wildcard captures per block
-- [ ] Include all wildcard categories (unknown, generic, named) in captures
-- [ ] Write to YAML file atomically (using `atomically` library)
-- [ ] Write tests for capture log output format
+```typescript
+export function matchAndCapture(
+  actual: string,
+  expected: string,
+  context: { root: string; cwd: string },
+  customPatterns?: Record<string, string | RegExp>,
+): WildcardCapture[] | null;
+```
+
+- [ ] Implement `matchAndCapture()` in `matcher.ts`
+- [ ] Export `WildcardCapture` from types, import in `matcher.ts`
+- [ ] Unit test: verify capture metadata (category, name, multiline) is correct for
+  each wildcard type
+- [ ] Unit test: verify captured text is correct for mixed wildcard patterns
+
+#### 2b. `src/lib/expander.ts` — NEW file
+
+Create `src/lib/expander.ts` with two main functions:
+
+**`expandExpectedOutput()`** — Given expected output (with wildcards), actual output,
+and an expand level, returns the expected output with targeted wildcards replaced by
+their captured text.
+
+Algorithm:
+1. Call `matchAndCapture()` to get captures for all wildcards
+2. If match fails, return null (can't expand)
+3. Walk the expected output string, finding each wildcard token in order
+4. For each wildcard: if its category is targeted by the expand level, replace the
+   token with the captured text; otherwise leave it
+5. Return the modified expected output and expansion count
+
+```typescript
+export function expandExpectedOutput(
+  expected: string,
+  actual: string,
+  context: { root: string; cwd: string },
+  level: ExpandLevel,
+  customPatterns?: Record<string, string | RegExp>,
+): ExpansionResult | null;
+```
+
+**`expandTestFile()`** — Given a `TestFile`, its `TestBlockResult[]`, and an expand
+level, rewrites the file in place (like `updater.ts`'s `updateTestFile()`).
+
+Algorithm:
+1. For each block with results: call `expandExpectedOutput()` on the block's expected
+   output using the result's actual output
+2. If expansion produced changes, rebuild the block's raw content by replacing the old
+   expected output region with the expanded output
+3. Use the same reverse-order string replacement strategy as `updater.ts` (process
+   blocks in reverse to maintain correct string offsets)
+4. Write the file atomically using `atomically`'s `writeFile`
+
+```typescript
+export async function expandTestFile(
+  file: TestFile,
+  results: TestBlockResult[],
+  level: ExpandLevel,
+  context: { root: string; cwd: string },
+  customPatterns?: Record<string, string | RegExp>,
+): Promise<{ expanded: boolean; expandedCount: number; changes: string[] }>;
+```
+
+**Helper: `shouldExpandCategory()`** — Maps expand level to which categories to
+target:
+
+```typescript
+function shouldExpandCategory(category: WildcardCategory, level: ExpandLevel): boolean {
+  switch (level) {
+    case 'unknown': return category === 'unknown';
+    case 'generic': return category === 'unknown' || category === 'generic';
+    case 'all':     return true;
+  }
+}
+```
+
+- [ ] Create `src/lib/expander.ts` with `expandExpectedOutput()` and `expandTestFile()`
+- [ ] Implement `shouldExpandCategory()` helper
+- [ ] Handle edge case: multiple wildcards with no literal anchors between them
+  (rely on same lazy matching as `patternToRegex()`)
+- [ ] Handle edge case: `???` at start/end of expected output
+- [ ] Handle edge case: command failed (still expand — error output matters)
+
+#### 2c. `src/cli/commands/run.ts` — CLI flags and integration
+
+**`RunOptions` interface** (line 39): Add four new fields:
+
+```typescript
+expand?: boolean;
+expandGeneric?: boolean;
+expandAll?: boolean;
+captureLog?: string;
+```
+
+**`registerRunCommand()`** (after `--quiet` option, ~line 76): Add four new options:
+
+```typescript
+.option('--expand', 'Expand unknown wildcards (??? and [??]) with actual output')
+.option('--expand-generic', 'Expand unknown and generic wildcards with actual output')
+.option('--expand-all', 'Expand all wildcards (including named patterns) with actual output')
+.option('--capture-log <path>', 'Write wildcard capture log to YAML file')
+```
+
+**`runCommand()`** — validation (after `opts` initialization, ~line 122): Add mutual
+exclusivity check:
+
+```typescript
+const expandFlags = [options.expand, options.expandGeneric, options.expandAll].filter(Boolean);
+if (expandFlags.length > 1) {
+  logError('--expand, --expand-generic, and --expand-all are mutually exclusive');
+  process.exit(1);
+}
+if ((expandFlags.length > 0) && opts.update) {
+  logError('--expand/--expand-generic/--expand-all and --update are mutually exclusive');
+  process.exit(1);
+}
+const expandLevel: ExpandLevel | undefined = options.expandAll ? 'all'
+  : options.expandGeneric ? 'generic'
+  : options.expand ? 'unknown'
+  : undefined;
+```
+
+**`runCommand()`** — after update mode block (~line 274): Add expansion logic,
+parallel to how `--update` works:
+
+```typescript
+if (expandLevel && fileResult.results.some(r => !r.error)) {
+  const { expanded, expandedCount, changes } = await expandTestFile(
+    testFile, results, expandLevel,
+    { root: ctx.testDir, cwd: ctx.cwd },
+    config.patterns ?? {},
+  );
+  if (expanded) {
+    totalExpandedCount += expandedCount;
+    totalExpandedFiles++;
+    console.error(colors.warn(
+      `  ${statusIndicators.update} Expanded ${expandedCount} wildcards: ${changes.join(', ')}`
+    ));
+  }
+}
+```
+
+**`runCommand()`** — after `reportSummary()` call (~line 287): Add expansion summary
+and unknown wildcard warning:
+
+```typescript
+// Expansion summary
+if (expandLevel && totalExpandedCount > 0) {
+  console.error(
+    `\nExpanded ${totalExpandedCount} wildcards across ${totalExpandedFiles} files`
+  );
+}
+
+// Unknown wildcard warning (unconditional — on every run)
+const unknownCount = countUnknownWildcards(fileResults);
+if (unknownCount.blocks > 0) {
+  logWarn(
+    `${unknownCount.blocks} blocks across ${unknownCount.files} files contain ` +
+    `unknown wildcards (???/[??]). Run --expand to fill them.`
+  );
+}
+```
+
+**Helper: `countUnknownWildcards()`** — Scan all blocks' `expectedOutput` for `???`
+and `[??]`:
+
+```typescript
+function countUnknownWildcards(fileResults: TestFileResult[]): { blocks: number; files: number } {
+  let blocks = 0;
+  let filesWithUnknown = 0;
+  for (const fr of fileResults) {
+    let fileHasUnknown = false;
+    for (const r of fr.results) {
+      if (/\?\?\?/.test(r.block.expectedOutput) || /\[\?\?\]/.test(r.block.expectedOutput)) {
+        blocks++;
+        fileHasUnknown = true;
+      }
+    }
+    if (fileHasUnknown) filesWithUnknown++;
+  }
+  return { blocks, files: filesWithUnknown };
+}
+```
+
+Note: This helper can live at the bottom of `run.ts` or be extracted to `reporter.ts`.
+
+- [ ] Add expand/captureLog fields to `RunOptions` interface (~line 39)
+- [ ] Add `--expand`, `--expand-generic`, `--expand-all` options to commander (~line 76)
+- [ ] Add `--capture-log <path>` option to commander
+- [ ] Add mutual exclusivity validation (expand flags with each other and with `--update`)
+- [ ] Derive `expandLevel` from flags
+- [ ] Add expansion integration after the update mode block (~line 274)
+- [ ] Add `totalExpandedCount` and `totalExpandedFiles` counters (initialize before the
+  file loop)
+- [ ] Add expansion summary output after `reportSummary()`
+- [ ] Add `countUnknownWildcards()` helper
+- [ ] Add unconditional unknown wildcard warning after `reportSummary()`
+- [ ] Import `expandTestFile` from `expander.ts` and `ExpandLevel` from `types.ts`
+
+#### 2d. Tests for expansion
+
+- [ ] Unit tests in `tests/expander.test.ts`:
+  - `expandExpectedOutput()` at level `unknown`: only `???`/`[??]` replaced
+  - `expandExpectedOutput()` at level `generic`: `???`/`[??]` + `...`/`[..]` replaced
+  - `expandExpectedOutput()` at level `all`: everything including named patterns replaced
+  - Multiple wildcards in one block
+  - `???` at start/end of expected output
+  - Mixed wildcards in a single line (e.g., `id: [HASH] status: [??]`)
+  - Returns null when actual output doesn't match expected pattern
+- [ ] Create fixture files in `tests/cli-fixtures/`:
+  - `expand-source.md` — test file with all wildcard types (from spec)
+  - `expand-expected-after-unknown.md` — expected state after `--expand`
+  - `expand-expected-after-generic.md` — expected state after `--expand-generic`
+  - `expand-expected-after-all.md` — expected state after `--expand-all`
+- [ ] Golden self-tests:
+  - `tests/expand.tryscript.md` — full expansion workflow:
+    1. Copy `expand-source.md` to sandbox
+    2. Run `tryscript run --expand` on it
+    3. Diff against `expand-expected-after-unknown.md`
+    4. Restore original, run `--expand-generic`, diff
+    5. Restore original, run `--expand-all`, diff
+    6. Verify expansion summary counts at each level
+  - `tests/expand-mutual-exclusion.tryscript.md` — verify flag conflict errors
+  - `tests/expand-no-change.tryscript.md` — `--expand` on file with only generic/named
+    wildcards produces no changes
+  - `tests/expand-warning.tryscript.md` — run without `--expand` on file with `???`,
+    verify warning appears in stderr
+
+### Phase 3: Capture Log
+
+YAML sidecar file recording wildcard captures and execution metadata.
+
+#### 3a. `src/lib/capture-log.ts` — NEW file
+
+Create `src/lib/capture-log.ts`:
+
+```typescript
+import { writeFile } from 'atomically';
+import { stringify } from 'yaml';
+
+interface CaptureLogEntry {
+  name?: string;
+  command: string;
+  expected_exit_code: number;
+  actual_exit_code: number;
+  expected_output: string;
+  actual_output: string;
+  captures: WildcardCapture[];
+  passed: boolean;
+}
+
+interface CaptureLogFile {
+  path: string;
+  blocks: CaptureLogEntry[];
+}
+
+export async function writeCaptureLog(
+  path: string,
+  fileResults: TestFileResult[],
+  matchContext: (file: TestFile) => { root: string; cwd: string },
+  customPatterns?: Record<string, string | RegExp>,
+): Promise<void>;
+```
+
+Implementation:
+1. For each file result, for each block result: call `matchAndCapture()` to get captures
+2. Build the YAML structure per the spec's capture log format
+3. Write atomically using `writeFile` from `atomically`
+4. Add YAML header comment with generation timestamp
+
+- [ ] Create `src/lib/capture-log.ts`
+- [ ] Implement `writeCaptureLog()` function
+- [ ] Use `yaml` package's `stringify()` for YAML output
+- [ ] Write atomically using `atomically`'s `writeFile`
+
+#### 3b. `src/cli/commands/run.ts` — capture log integration
+
+After the expansion summary / warning block (end of `runCommand()`), before
+`process.exit()`:
+
+```typescript
+if (options.captureLog) {
+  await writeCaptureLog(options.captureLog, fileResults, ...);
+  console.error(`Capture log written to ${options.captureLog}`);
+}
+```
+
+- [ ] Add capture log invocation in `runCommand()` before `process.exit()`
+- [ ] Import `writeCaptureLog` from `capture-log.ts`
+
+#### 3c. Tests for capture log
+
+- [ ] Unit test in `tests/capture-log.test.ts`: verify YAML output structure and content
+  for a fixture with all three wildcard categories
+- [ ] Golden self-test: run `tryscript run --capture-log captures.yaml tests/...` and
+  verify the YAML file contains expected structure (grep for key fields)
 
 ### Phase 4: Documentation
 
