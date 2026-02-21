@@ -3,9 +3,9 @@ type: is
 id: is-01kj134g45s7c5tfxsz46g5te8
 title: Wildcard expansion and capture log
 kind: epic
-status: open
+status: closed
 priority: 1
-version: 13
+version: 14
 spec_path: docs/project/specs/active/plan-2026-02-21-wildcard-expansion.md
 labels: []
 dependencies: []
@@ -23,5 +23,7 @@ child_order_hints:
   - is-01kj135yfc63f9ka2wvztd0z58
   - is-01kj1367h27n0as4scg6pnd7tj
 created_at: 2026-02-21T21:54:17.348Z
-updated_at: 2026-02-21T21:55:14.081Z
+updated_at: 2026-02-21T22:30:46.648Z
+closed_at: 2026-02-21T22:30:46.647Z
+close_reason: All phases implemented end-to-end
 ---

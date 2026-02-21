@@ -3,9 +3,9 @@ type: is
 id: is-01kj134v6q2tcj3jjep003wqqz
 title: Add ???/[??] pattern recognition to patternToRegex() in matcher.ts
 kind: task
-status: open
+status: closed
 priority: 1
-version: 3
+version: 5
 spec_path: docs/project/specs/active/plan-2026-02-21-wildcard-expansion.md
 labels: []
 dependencies:
@@ -15,5 +15,7 @@ dependencies:
     target: is-01kj1359s6a78c55gb3pfesdvb
 parent_id: is-01kj134g45s7c5tfxsz46g5te8
 created_at: 2026-02-21T21:54:28.691Z
-updated_at: 2026-02-21T21:54:57.006Z
+updated_at: 2026-02-21T22:09:47.789Z
+closed_at: 2026-02-21T22:09:47.788Z
+close_reason: null
 ---
