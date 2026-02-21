@@ -53,14 +53,14 @@ export function captureLogSortMapEntries(
     return TOP_LEVEL_ORDER(a, b);
   }
   if (aKey === 'blocks' || bKey === 'blocks') {
-return FILE_ORDER(a, b);
-}
+    return FILE_ORDER(a, b);
+  }
   if (BLOCK_KEYS.has(aKey) && BLOCK_KEYS.has(bKey)) {
-return BLOCK_ORDER(a, b);
-}
+    return BLOCK_ORDER(a, b);
+  }
   if (CAPTURE_KEYS.has(aKey) && CAPTURE_KEYS.has(bKey)) {
-return CAPTURE_ORDER(a, b);
-}
+    return CAPTURE_ORDER(a, b);
+  }
 
   return aKey.localeCompare(bKey);
 }

@@ -79,8 +79,8 @@ export function expandExpectedOutput(
       while (true) {
         const pos = output.indexOf(wt.token, searchFrom);
         if (pos === -1) {
-break;
-}
+          break;
+        }
         replacements.push({
           pos,
           length: wt.token.length,
@@ -111,8 +111,8 @@ break;
       while (true) {
         const pos = output.indexOf(placeholder, searchFrom);
         if (pos === -1) {
-break;
-}
+          break;
+        }
         replacements.push({
           pos,
           length: placeholder.length,

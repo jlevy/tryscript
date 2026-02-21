@@ -16,11 +16,11 @@ export function manualKeyOrder(order: readonly string[]) {
       return a.key.value.localeCompare(b.key.value);
     }
     if (indexA === undefined) {
-return 1;
-}
+      return 1;
+    }
     if (indexB === undefined) {
-return -1;
-}
+      return -1;
+    }
     return indexA - indexB;
   };
 }
