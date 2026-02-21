@@ -21,6 +21,7 @@ import { matchOutput } from '../../lib/matcher.js';
 import { createDiff, reportFile, reportSummary } from '../../lib/reporter.js';
 import { updateTestFile } from '../../lib/updater.js';
 import { expandTestFile } from '../../lib/expander.js';
+import { writeCaptureLog } from '../../lib/capture-log.js';
 import {
   isC8Available,
   createCoverageContext,
@@ -218,6 +219,8 @@ async function runCommand(files: string[], options: RunOptions): Promise<void> {
 
   // Run tests
   const fileResults: TestFileResult[] = [];
+  const fileContexts = new Map<string, { root: string; cwd: string }>();
+  const filePatterns = new Map<string, Record<string, string | RegExp>>();
   let shouldStop = false;
 
   for (const filePath of testFiles) {
@@ -306,8 +309,10 @@ async function runCommand(files: string[], options: RunOptions): Promise<void> {
       // Run after hook if configured
       await runAfterHook(ctx);
 
-      // Save context paths before cleanup for expansion
+      // Save context paths before cleanup for expansion and capture log
       fileContext = { root: ctx.testDir, cwd: ctx.cwd };
+      fileContexts.set(filePath, fileContext);
+      filePatterns.set(filePath, config.patterns ?? {});
     } finally {
       await cleanupExecutionContext(ctx);
     }
@@ -373,6 +378,23 @@ async function runCommand(files: string[], options: RunOptions): Promise<void> {
   };
 
   reportSummary(summary, opts);
+
+  // Write capture log if requested
+  if (options.captureLog) {
+    try {
+      await writeCaptureLog(
+        options.captureLog,
+        fileResults,
+        (file) => fileContexts.get(file.path) ?? { root: process.cwd(), cwd: process.cwd() },
+        // Use patterns from the first file that has them (simplified approach)
+        filePatterns.values().next().value,
+      );
+      console.error(colors.info(`Capture log written to ${options.captureLog}`));
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      logError(`Failed to write capture log: ${message}`);
+    }
+  }
 
   // Generate coverage report if enabled
   if (coverageCtx) {
