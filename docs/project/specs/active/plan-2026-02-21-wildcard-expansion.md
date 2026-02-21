@@ -47,8 +47,8 @@ introduce a new syntax that makes the author's intent explicit:
 | **Named patterns** | — | `[HASH]`, `[CWD]`, etc. | Typed dynamic values — "this is a specific kind of varying value" |
 
 This resolves the ambiguity at the syntax level. Generic wildcards are legitimate test
-constructs. Unknown wildcards are temporary placeholders that should never appear in
-committed tests. Named patterns are the gold standard.
+constructs. Unknown wildcards are temporary placeholders, intended to be expanded
+before finalizing. Named patterns are the gold standard.
 
 ### The `--update` Limitation
 
