@@ -40,10 +40,20 @@ function patternToRegex(
   replacements.set(dotdotMarker, '[^\\n]*');
   processed = processed.replaceAll('[..]', dotdotMarker);
 
+  // Replace [??] with marker (unknown single-line, same regex as [..])
+  const unknownDotdotMarker = getMarker();
+  replacements.set(unknownDotdotMarker, '[^\\n]*');
+  processed = processed.replaceAll('[??]', unknownDotdotMarker);
+
   // Replace ... (followed by newline) with marker
   const ellipsisMarker = getMarker();
   replacements.set(ellipsisMarker, '(?:[^\\n]*\\n)*');
   processed = processed.replace(/\.\.\.\n/g, ellipsisMarker);
+
+  // Replace ??? (followed by newline) with marker (unknown multi-line, same regex as ...)
+  const unknownEllipsisMarker = getMarker();
+  replacements.set(unknownEllipsisMarker, '(?:[^\\n]*\\n)*');
+  processed = processed.replace(/\?\?\?\n/g, unknownEllipsisMarker);
 
   // Replace [EXE] with marker
   const exeMarker = getMarker();

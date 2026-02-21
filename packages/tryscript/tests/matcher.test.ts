@@ -105,6 +105,41 @@ describe('matchOutput', () => {
     });
   });
 
+  describe('[??] pattern (unknown single-line wildcard)', () => {
+    it('matches any content on the line (same as [..])', () => {
+      expect(matchOutput('Done in 1234ms\n', 'Done in [??]ms\n', context)).toBe(true);
+      expect(matchOutput('Done in ms\n', 'Done in [??]ms\n', context)).toBe(true);
+    });
+
+    it('does not match across newlines', () => {
+      expect(matchOutput('line1\nline2\n', '[??]\n', context)).toBe(false);
+    });
+  });
+
+  describe('??? pattern (unknown multi-line wildcard)', () => {
+    it('matches zero lines', () => {
+      expect(matchOutput('header\nfooter\n', 'header\n???\nfooter\n', context)).toBe(true);
+    });
+
+    it('matches one line', () => {
+      expect(matchOutput('header\nmiddle\nfooter\n', 'header\n???\nfooter\n', context)).toBe(true);
+    });
+
+    it('matches multiple lines', () => {
+      expect(
+        matchOutput('header\nline1\nline2\nline3\nfooter\n', 'header\n???\nfooter\n', context),
+      ).toBe(true);
+    });
+
+    it('matches at start of output', () => {
+      expect(matchOutput('line1\nline2\nfooter\n', '???\nfooter\n', context)).toBe(true);
+    });
+
+    it('matches entire output', () => {
+      expect(matchOutput('line1\nline2\n', '???\n', context)).toBe(true);
+    });
+  });
+
   describe('combined patterns', () => {
     it('handles multiple patterns in one output', () => {
       expect(
