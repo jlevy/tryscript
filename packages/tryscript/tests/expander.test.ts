@@ -187,6 +187,47 @@ describe('expandTestFile', () => {
     expect(changes).toHaveLength(1);
   });
 
+  it('aligns results by block identity when only a subset of blocks ran', async () => {
+    const firstBlock = makeBlock({
+      name: 'first block',
+      lineNumber: 5,
+      command: 'echo first',
+      expectedOutput: 'value: [??]\n',
+      rawContent: '```console\n$ echo first\nvalue: [??]\n? 0\n```',
+    });
+    const secondBlock = makeBlock({
+      name: 'second block',
+      lineNumber: 11,
+      command: 'echo second',
+      expectedOutput: 'value: [??]\n',
+      rawContent: '```console\n$ echo second\nvalue: [??]\n? 0\n```',
+    });
+
+    const rawContent =
+      '# Test\n\n```console\n$ echo first\nvalue: [??]\n? 0\n```\n\n' +
+      '```console\n$ echo second\nvalue: [??]\n? 0\n```\n';
+
+    const file: TestFile = {
+      path: '/tmp/test-subset.tryscript.md',
+      blocks: [firstBlock, secondBlock],
+      rawContent,
+      config: {},
+    };
+
+    // Simulate --filter/<!-- only -->: only the second block produced a result.
+    const secondResult = makeResult(secondBlock, { actualOutput: 'value: second\n' });
+    const { expanded, expandedCount, changes } = await expandTestFile(
+      file,
+      [secondResult],
+      'unknown',
+      context,
+    );
+
+    expect(expanded).toBe(true);
+    expect(expandedCount).toBe(1);
+    expect(changes).toEqual(['second block']);
+  });
+
   it('does not write file when nothing to expand', async () => {
     const block = makeBlock({
       expectedOutput: 'hello\n',

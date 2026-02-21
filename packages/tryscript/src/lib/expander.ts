@@ -147,9 +147,12 @@ export async function expandTestFile(
   const changes: string[] = [];
   let totalExpanded = 0;
 
+  // Map by block identity so expansion works correctly with --filter/<!-- only -->
+  // where `results` can be a strict subset of `file.blocks`.
+  const resultByBlock = new Map(results.map((result) => [result.block, result]));
   // Process blocks in reverse order to maintain correct offsets
-  const blocksWithResults = file.blocks
-    .map((block, i) => ({ block, result: results[i] }))
+  const blocksWithResults = [...file.blocks]
+    .map((block) => ({ block, result: resultByBlock.get(block) }))
     .reverse();
 
   for (const { block, result } of blocksWithResults) {
