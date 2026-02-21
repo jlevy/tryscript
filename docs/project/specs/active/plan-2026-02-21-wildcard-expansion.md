@@ -636,6 +636,7 @@ files:
 | `src/lib/types.ts` | Add `WildcardCapture`, `ExpansionResult`, `ExpandLevel` types |
 | `src/cli/commands/run.ts` | Add `--expand`, `--expand-generic`, `--expand-all`, `--capture-log` flags; integrate expansion, warning, capture log |
 | `src/lib/reporter.ts` | Add unknown wildcard warning output |
+| `src/lib/yaml-utils.ts` | NEW: Centralized YAML stringify options, `manualKeyOrder()` comparator |
 | `README.md` | Add wildcard categories summary, preference order, expand flags, best practices |
 | `packages/tryscript/README.md` | Mirror root README wildcard/expand documentation updates |
 | `docs/development.md` | Add `???`/`[??]` to Elision Patterns table, expand flags to CLI Options, wildcard best practices |
@@ -652,7 +653,9 @@ existing `yaml` package (already a dependency for frontmatter parsing).
 2. **Unit tests** for expansion algorithm: multiple wildcards, mixed types, levels
 3. **Unit tests** for `matchAndCapture()`: correct type annotations on captures
 4. **Golden self-tests** (`.tryscript.md`): comprehensive expansion session test
-5. **Capture log tests**: verify YAML output format and content
+5. **Capture log tests**: unit tests for YAML structure and field ordering; golden
+   self-test that `cat`s the YAML output and verifies content accuracy and key ordering
+   against expected output using elision patterns
 
 ### Golden Self-Test Design: Expansion Session
 
@@ -1096,50 +1099,182 @@ Note: This helper can live at the bottom of `run.ts` or be extracted to `reporte
 
 YAML sidecar file recording wildcard captures and execution metadata.
 
-#### 3a. `src/lib/capture-log.ts` — NEW file
+#### 3a. `src/lib/yaml-utils.ts` — NEW file (shared YAML serialization)
 
-Create `src/lib/capture-log.ts`:
+Following the tbd YAML handling guidelines, centralize YAML serialization options
+rather than scattering `stringify()` calls with ad-hoc options. This file will also
+house the `ordering.manual()` utility from the tbd sorting patterns guidelines.
+
+Neither utility exists in the codebase yet (`parser.ts` only uses `parse`, never
+`stringify`).
+
+```typescript
+import { stringify } from 'yaml';
+
+/**
+ * Manual order comparator for YAML `sortMapEntries`.
+ * Keys listed in `order` appear first (in that order); unlisted keys sort
+ * to the end alphabetically.
+ *
+ * From tbd sorting patterns (`ordering.manual`).
+ */
+function manualKeyOrder(order: readonly string[]) {
+  const orderMap = new Map(order.map((key, index) => [key, index]));
+  return (a: { key: { value: string } }, b: { key: { value: string } }): number => {
+    const indexA = orderMap.get(a.key.value);
+    const indexB = orderMap.get(b.key.value);
+    if (indexA === undefined && indexB === undefined) {
+      return a.key.value.localeCompare(b.key.value);
+    }
+    if (indexA === undefined) return 1;
+    if (indexB === undefined) return -1;
+    return indexA - indexB;
+  };
+}
+
+const DEFAULT_YAML_LINE_WIDTH = 88;
+
+export const YAML_STRINGIFY_OPTIONS = {
+  lineWidth: DEFAULT_YAML_LINE_WIDTH,
+  defaultStringType: 'PLAIN' as const,
+  defaultKeyType: 'PLAIN' as const,
+};
+
+export function stringifyYaml(data: unknown, options?: object): string {
+  return stringify(data, { ...YAML_STRINGIFY_OPTIONS, ...options });
+}
+
+export { manualKeyOrder };
+```
+
+- [ ] Create `src/lib/yaml-utils.ts` with centralized YAML stringify options
+- [ ] Implement `manualKeyOrder()` comparator (adapted from tbd's `ordering.manual`)
+
+#### 3b. `src/lib/capture-log.ts` — NEW file
+
+Create `src/lib/capture-log.ts`. Uses `stringifyYaml()` and `manualKeyOrder()` from
+`yaml-utils.ts` to produce YAML with fields in a logical reading order.
+
+**Field orderings** — Define explicit key orderings for each nesting level of the
+capture log. This ensures the YAML is readable in a natural top-to-bottom flow
+(identification first, then expected vs actual, then captures, then result):
 
 ```typescript
 import { writeFile } from 'atomically';
-import { stringify } from 'yaml';
+import { stringifyYaml, manualKeyOrder } from './yaml-utils.js';
+import type { WildcardCapture, TestFileResult, TestFile } from './types.js';
+import { matchAndCapture } from './matcher.js';
 
-interface CaptureLogEntry {
-  name?: string;
-  command: string;
-  expected_exit_code: number;
-  actual_exit_code: number;
-  expected_output: string;
-  actual_output: string;
-  captures: WildcardCapture[];
-  passed: boolean;
-}
+// Field orderings for each level of the capture log YAML.
+// Keys appear in this order; unlisted keys sort alphabetically at the end.
 
-interface CaptureLogFile {
-  path: string;
-  blocks: CaptureLogEntry[];
-}
+const TOP_LEVEL_ORDER = manualKeyOrder([
+  'generated',
+  'files',
+]);
 
+const FILE_ORDER = manualKeyOrder([
+  'path',
+  'blocks',
+]);
+
+const BLOCK_ORDER = manualKeyOrder([
+  'name',
+  'command',
+  'expected_exit_code',
+  'actual_exit_code',
+  'expected_output',
+  'actual_output',
+  'captures',
+  'passed',
+]);
+
+const CAPTURE_ORDER = manualKeyOrder([
+  'category',
+  'name',
+  'multiline',
+  'matched',
+]);
+```
+
+**`writeCaptureLog()` implementation:**
+
+```typescript
 export async function writeCaptureLog(
   path: string,
   fileResults: TestFileResult[],
   matchContext: (file: TestFile) => { root: string; cwd: string },
   customPatterns?: Record<string, string | RegExp>,
-): Promise<void>;
+): Promise<void> {
+  const files = fileResults.map(fr => {
+    const ctx = matchContext(fr.file);
+    const blocks = fr.results.map(r => {
+      const captures = matchAndCapture(
+        r.actualOutput, r.block.expectedOutput, ctx, customPatterns,
+      ) ?? [];
+      return {
+        name: r.block.name,
+        command: r.block.command,
+        expected_exit_code: r.block.expectedExitCode,
+        actual_exit_code: r.actualExitCode,
+        expected_output: r.block.expectedOutput,
+        actual_output: r.actualOutput,
+        captures,
+        passed: r.passed,
+      };
+    });
+    return { path: fr.file.path, blocks };
+  });
+
+  const doc = {
+    generated: new Date().toISOString(),
+    files,
+  };
+
+  // Use nested sortMapEntries to apply the correct field ordering at each
+  // level. The yaml package's sortMapEntries receives Pair nodes; we pick
+  // the right comparator based on nesting depth or we pre-sort the objects.
+  //
+  // Simplest approach: pre-sort each object's keys before serialization
+  // by constructing them as Map instances in the desired order, or use
+  // a single sortMapEntries function that dispatches based on key membership.
+  const header = '# tryscript capture log\n';
+  const yaml = stringifyYaml(doc, { sortMapEntries: captureLogSortMapEntries });
+  await writeFile(path, header + yaml);
+}
 ```
 
-Implementation:
-1. For each file result, for each block result: call `matchAndCapture()` to get captures
-2. Build the YAML structure per the spec's capture log format
-3. Write atomically using `writeFile` from `atomically`
-4. Add YAML header comment with generation timestamp
+**`captureLogSortMapEntries`** — A single comparator that dispatches to the right
+ordering based on which keys are present. The `yaml` package calls `sortMapEntries`
+for every map node in the document. We detect the nesting level by checking for
+signature keys:
+
+```typescript
+function captureLogSortMapEntries(
+  a: { key: { value: string } },
+  b: { key: { value: string } },
+): number {
+  // Detect which level we're at by checking for distinctive keys.
+  const keys = new Set([a.key.value, b.key.value]);
+
+  if (keys.has('generated') || keys.has('files')) return TOP_LEVEL_ORDER(a, b);
+  if (keys.has('blocks')) return FILE_ORDER(a, b);
+  if (keys.has('command') || keys.has('expected_output')) return BLOCK_ORDER(a, b);
+  if (keys.has('category') || keys.has('matched')) return CAPTURE_ORDER(a, b);
+
+  // Fallback: alphabetical
+  return a.key.value.localeCompare(b.key.value);
+}
+```
 
 - [ ] Create `src/lib/capture-log.ts`
-- [ ] Implement `writeCaptureLog()` function
-- [ ] Use `yaml` package's `stringify()` for YAML output
+- [ ] Define field orderings: `TOP_LEVEL_ORDER`, `FILE_ORDER`, `BLOCK_ORDER`,
+  `CAPTURE_ORDER`
+- [ ] Implement `captureLogSortMapEntries()` dispatch function
+- [ ] Implement `writeCaptureLog()` using `stringifyYaml()` with custom sort
 - [ ] Write atomically using `atomically`'s `writeFile`
 
-#### 3b. `src/cli/commands/run.ts` — capture log integration
+#### 3c. `src/cli/commands/run.ts` — capture log integration
 
 After the expansion summary / warning block (end of `runCommand()`), before
 `process.exit()`:
@@ -1154,12 +1289,91 @@ if (options.captureLog) {
 - [ ] Add capture log invocation in `runCommand()` before `process.exit()`
 - [ ] Import `writeCaptureLog` from `capture-log.ts`
 
-#### 3c. Tests for capture log
+#### 3d. Tests for capture log
 
-- [ ] Unit test in `tests/capture-log.test.ts`: verify YAML output structure and content
-  for a fixture with all three wildcard categories
-- [ ] Golden self-test: run `tryscript run --capture-log captures.yaml tests/...` and
-  verify the YAML file contains expected structure (grep for key fields)
+**Unit test** (`tests/capture-log.test.ts`):
+
+- [ ] Verify YAML output structure and content for a fixture with all three wildcard
+  categories
+- [ ] Verify field ordering: parse the raw YAML string and assert key positions match
+  the defined orderings (e.g., `name` before `command`, `command` before
+  `expected_exit_code`, etc.)
+
+**Golden self-test** (`tests/capture-log.tryscript.md`):
+
+Run a fixture file through tryscript with `--capture-log`, then `cat` the resulting
+YAML and verify it line by line. This tests both content correctness and field ordering
+in a single readable session.
+
+The fixture should include blocks with all three wildcard types (unknown, generic,
+named) so the capture log exercises every code path.
+
+Test structure:
+
+```markdown
+# Test: Capture log output
+
+Run a test file with mixed wildcards and capture the log.
+
+` ``console
+$ tryscript run --capture-log captures.yaml cli-fixtures/capture-log-source.md
+[..]
+? 0
+` ``
+
+# Test: Capture log field ordering and content
+
+Verify the YAML has fields in the correct logical order and captures are accurate.
+
+` ``console
+$ cat captures.yaml
+# tryscript capture log
+generated: [..]
+files:
+  - path: [..]
+    blocks:
+      - name: [..]
+        command: echo "hello world"
+        expected_exit_code: 0
+        actual_exit_code: 0
+        expected_output: [..]
+        actual_output: [..]
+        captures:
+          - category: unknown
+            multiline: true
+            matched: [..]
+        passed: true
+      - name: [..]
+        command: [..]
+        expected_exit_code: 0
+        actual_exit_code: 0
+        expected_output: [..]
+        actual_output: [..]
+        captures:
+          - category: named
+            name: [..]
+            multiline: false
+            matched: [..]
+        passed: true
+? 0
+` ``
+```
+
+(Backticks above shown with spaces for spec readability; actual fixture uses proper
+fencing.)
+
+The key assertion here is structural: the `cat` output proves the YAML fields appear
+in the defined logical order (`name`, `command`, `expected_exit_code`,
+`actual_exit_code`, `expected_output`, `actual_output`, `captures`, `passed`) rather
+than alphabetically. And within each capture: `category`, `name`, `multiline`,
+`matched`.
+
+- [ ] Create fixture `tests/cli-fixtures/capture-log-source.md` with blocks using
+  `???`, `...`, `[..]`, and `[HASH]`
+- [ ] Create golden self-test `tests/capture-log.tryscript.md` that:
+  1. Runs tryscript with `--capture-log captures.yaml` on the fixture
+  2. `cat captures.yaml` and asserts the full YAML structure, field ordering,
+     and capture content using elision patterns for dynamic values
 
 ### Phase 4: Documentation
 
