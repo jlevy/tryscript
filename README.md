@@ -86,6 +86,16 @@ $ my-cli process data.json > output.txt && grep "success" output.txt
 
 The `[..]` matches any text on that line. The `...` matches zero or more lines. These "elision patterns" let tests handle dynamic output gracefully. Any shell command works - pipes, redirects, environment variables, etc.
 
+### Wildcard Categories
+
+Tryscript supports three categories of wildcards, in order of preference:
+
+1. **Named patterns** (`[HASH]`, `[VERSION]`, `[CWD]`, etc.) -- Typed dynamic values with specific meaning. Preferred when the output has a known structure.
+2. **Unknown wildcards** (`[??]`, `???`) -- Temporary placeholders for output you haven't filled in yet. Intended to be expanded with `--expand` before finalizing tests.
+3. **Generic wildcards** (`[..]`, `...`) -- Intentional omission of unpredictable or irrelevant output. Use when the exact value doesn't matter for the test.
+
+Use `--expand` to automatically fill in unknown wildcards with actual output after a successful run.
+
 ## Quick Start
 
 ```bash
@@ -108,7 +118,8 @@ npx tryscript run --update tests/
 ## Features
 
 - **Markdown format** - Tests are readable documentation
-- **Elision patterns** - Handle variable output: `[..]`, `...`, `[CWD]`, `[ROOT]`, `[EXE]`
+- **Elision patterns** - Handle variable output: `[..]`, `...`, `[??]`, `???`, `[CWD]`, `[ROOT]`, `[EXE]`
+- **Wildcard expansion** - Fill in `[??]`/`???` placeholders with actual output via `--expand`
 - **Custom patterns** - Define regex patterns for timestamps, versions, UUIDs
 - **Update mode** - Regenerate expected output with `--update`
 - **Sandbox mode** - Isolate tests in temp directories
@@ -131,6 +142,10 @@ For complete syntax reference, run `tryscript docs` or see the [reference docume
 | Option | Description |
 | --- | --- |
 | `--update` | Update test files with actual output |
+| `--expand` | Expand unknown wildcards (`???`/`[??]`) with actual output |
+| `--expand-generic` | Expand unknown + generic wildcards |
+| `--expand-all` | Expand all wildcards (including named patterns) |
+| `--capture-log <path>` | Write wildcard capture log to YAML file |
 | `--fail-fast` | Stop on first failure |
 | `--filter <regex>` | Filter tests by name |
 | `--verbose` | Show detailed output |

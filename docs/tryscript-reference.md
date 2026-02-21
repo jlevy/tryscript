@@ -109,16 +109,40 @@ stdout line
 
 ## Elision Patterns
 
-Patterns in expected output match variable content:
+Patterns in expected output match variable content. There are three categories
+of wildcards, listed in order of preference:
+
+### Named Patterns
+
+Named patterns match typed dynamic values with specific meaning:
+
+| Pattern | Matches | Example |
+|---------|---------|---------|
+| `[CWD]` | Current working directory | `[CWD]/output.txt` |
+| `[ROOT]` | Test file directory | `[ROOT]/fixtures/` |
+| `[EXE]` | `.exe` on Windows, empty otherwise | `my-cli[EXE]` |
+| `[PATTERN]` | Custom pattern from config | User-defined regex |
+
+### Unknown Wildcards
+
+Unknown wildcards are temporary placeholders for output you haven't filled in yet.
+They are intended to be expanded with `--expand` before finalizing tests.
+A warning is always shown when unknown wildcards are present.
+
+| Pattern | Matches | Example |
+|---------|---------|---------|
+| `[??]` | Any text on a single line | `Result: [??]` |
+| `???` | Zero or more complete lines | `???\nDone` |
+
+### Generic Wildcards
+
+Generic wildcards intentionally omit unpredictable or irrelevant output.
+Use these when the exact value doesn't matter for the test.
 
 | Pattern | Matches | Example |
 |---------|---------|---------|
 | `[..]` | Any text on a single line | `Built in [..]ms` |
 | `...` | Zero or more complete lines | `...\nDone` |
-| `[CWD]` | Current working directory | `[CWD]/output.txt` |
-| `[ROOT]` | Test file directory | `[ROOT]/fixtures/` |
-| `[EXE]` | `.exe` on Windows, empty otherwise | `my-cli[EXE]` |
-| `[PATTERN]` | Custom pattern from config | User-defined regex |
 
 ### Pattern Examples
 
@@ -126,6 +150,13 @@ Patterns in expected output match variable content:
 ```console
 $ date
 [..]
+? 0
+```
+
+**Unknown wildcard (to be expanded later):**
+```console
+$ my-cli process data.json
+[??]
 ? 0
 ```
 
@@ -146,6 +177,17 @@ patterns:
 $ my-cli --version
 my-cli version [VERSION]
 ```
+
+### Wildcard Best Practices
+
+1. **Prefer named patterns** when the output has a known structure (e.g., `[VERSION]`,
+   `[HASH]`). This makes tests self-documenting.
+
+2. **Use unknown wildcards** (`[??]`/`???`) as temporary scaffolding when writing new
+   tests. Run with `--expand` to fill them in with actual output.
+
+3. **Use generic wildcards** (`[..]`/`...`) for output that is intentionally variable
+   (timestamps, durations, dynamic content) and should remain elided.
 
 ## Configuration (Frontmatter)
 
@@ -475,6 +517,10 @@ tryscript readme                       # Show README
 | Option | Description |
 |--------|-------------|
 | `--update` | Update test files with actual output |
+| `--expand` | Expand unknown wildcards (`???`/`[??]`) with actual output |
+| `--expand-generic` | Expand unknown + generic wildcards |
+| `--expand-all` | Expand all wildcards (including named patterns) |
+| `--capture-log <path>` | Write wildcard capture log to YAML file |
 | `--diff` / `--no-diff` | Show/hide diff on failure |
 | `--fail-fast` | Stop on first failure |
 | `--filter <pattern>` | Filter tests by name |
@@ -733,6 +779,52 @@ export default defineConfig({
 | `src` | - | Source dir for mapping (config only) |
 | `monocart` | `--coverage-monocart` | AST-aware line counts |
 | `mergeLcov` | `--merge-lcov` | Merge with external LCOV file |
+
+## Wildcard Expansion
+
+The `--expand` flags replace wildcard placeholders in your test files with actual
+output from a test run. This is a surgical operation -- only targeted wildcards are
+replaced; the rest of the file is left intact.
+
+### Expansion Workflow
+
+1. Write a test with unknown wildcards as temporary placeholders:
+
+```console
+$ my-cli status
+[??]
+? 0
+```
+
+2. Run with `--expand` to fill in actual output:
+
+```bash
+tryscript run --expand tests/my-test.tryscript.md
+```
+
+3. Review the expanded output and commit.
+
+### Expansion Flags
+
+The three flags form a hierarchy (each includes the previous):
+
+| Flag | Expands |
+|------|---------|
+| `--expand` | Unknown wildcards only (`???`, `[??]`) |
+| `--expand-generic` | Unknown + generic (`...`, `[..]`) |
+| `--expand-all` | All wildcards including named patterns |
+
+These flags are mutually exclusive with each other and with `--update`.
+
+### Capture Log
+
+Use `--capture-log <path>` to write a YAML sidecar file recording what each wildcard
+matched during a test run. This is useful for debugging pattern matches and reviewing
+captured values.
+
+```bash
+tryscript run --capture-log captures.yaml tests/
+```
 
 ## Best Practices
 
