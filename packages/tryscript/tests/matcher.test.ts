@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { normalizeOutput, matchOutput } from '../src/lib/matcher.js';
+import { normalizeOutput, matchOutput, matchAndCapture } from '../src/lib/matcher.js';
 
 describe('normalizeOutput', () => {
   it('normalizes CRLF to LF', () => {
@@ -105,6 +105,41 @@ describe('matchOutput', () => {
     });
   });
 
+  describe('[??] pattern (unknown single-line wildcard)', () => {
+    it('matches any content on the line (same as [..])', () => {
+      expect(matchOutput('Done in 1234ms\n', 'Done in [??]ms\n', context)).toBe(true);
+      expect(matchOutput('Done in ms\n', 'Done in [??]ms\n', context)).toBe(true);
+    });
+
+    it('does not match across newlines', () => {
+      expect(matchOutput('line1\nline2\n', '[??]\n', context)).toBe(false);
+    });
+  });
+
+  describe('??? pattern (unknown multi-line wildcard)', () => {
+    it('matches zero lines', () => {
+      expect(matchOutput('header\nfooter\n', 'header\n???\nfooter\n', context)).toBe(true);
+    });
+
+    it('matches one line', () => {
+      expect(matchOutput('header\nmiddle\nfooter\n', 'header\n???\nfooter\n', context)).toBe(true);
+    });
+
+    it('matches multiple lines', () => {
+      expect(
+        matchOutput('header\nline1\nline2\nline3\nfooter\n', 'header\n???\nfooter\n', context),
+      ).toBe(true);
+    });
+
+    it('matches at start of output', () => {
+      expect(matchOutput('line1\nline2\nfooter\n', '???\nfooter\n', context)).toBe(true);
+    });
+
+    it('matches entire output', () => {
+      expect(matchOutput('line1\nline2\n', '???\n', context)).toBe(true);
+    });
+  });
+
   describe('combined patterns', () => {
     it('handles multiple patterns in one output', () => {
       expect(
@@ -114,6 +149,145 @@ describe('matchOutput', () => {
           context,
         ),
       ).toBe(true);
+    });
+  });
+});
+
+describe('matchAndCapture', () => {
+  const context = { root: '/test/root', cwd: '/test/cwd' };
+
+  it('returns null on mismatch', () => {
+    expect(matchAndCapture('hello\n', 'goodbye\n', context)).toBeNull();
+  });
+
+  it('returns empty captures for exact match', () => {
+    const result = matchAndCapture('hello\n', 'hello\n', context);
+    expect(result).not.toBeNull();
+    expect(result!.captures).toEqual([]);
+  });
+
+  it('captures [..] single-line wildcard', () => {
+    const result = matchAndCapture('Done in 1234ms\n', 'Done in [..]ms\n', context);
+    expect(result).not.toBeNull();
+    expect(result!.captures).toHaveLength(1);
+    expect(result!.captures[0]).toMatchObject({
+      category: 'generic',
+      multiline: false,
+      captured: '1234',
+    });
+  });
+
+  it('captures [??] unknown single-line wildcard', () => {
+    const result = matchAndCapture('Result: 42\n', 'Result: [??]\n', context);
+    expect(result).not.toBeNull();
+    expect(result!.captures).toHaveLength(1);
+    expect(result!.captures[0]).toMatchObject({
+      category: 'unknown',
+      multiline: false,
+      captured: '42',
+    });
+  });
+
+  it('captures ... multi-line wildcard', () => {
+    const result = matchAndCapture(
+      'header\nline1\nline2\nfooter\n',
+      'header\n...\nfooter\n',
+      context,
+    );
+    expect(result).not.toBeNull();
+    expect(result!.captures).toHaveLength(1);
+    expect(result!.captures[0]).toMatchObject({
+      category: 'generic',
+      multiline: true,
+      captured: 'line1\nline2\n',
+    });
+  });
+
+  it('captures ??? unknown multi-line wildcard', () => {
+    const result = matchAndCapture(
+      'header\nline1\nline2\nfooter\n',
+      'header\n???\nfooter\n',
+      context,
+    );
+    expect(result).not.toBeNull();
+    expect(result!.captures).toHaveLength(1);
+    expect(result!.captures[0]).toMatchObject({
+      category: 'unknown',
+      multiline: true,
+      captured: 'line1\nline2\n',
+    });
+  });
+
+  it('captures named custom patterns', () => {
+    const patterns = { VERSION: '\\d+\\.\\d+\\.\\d+' };
+    const result = matchAndCapture('Version: 1.2.3\n', 'Version: [VERSION]\n', context, patterns);
+    expect(result).not.toBeNull();
+    expect(result!.captures).toHaveLength(1);
+    expect(result!.captures[0]).toMatchObject({
+      category: 'named',
+      name: 'VERSION',
+      captured: '1.2.3',
+    });
+  });
+
+  it('captures multiple wildcards in order with correct metadata', () => {
+    const result = matchAndCapture(
+      'Started at: 12:00\nline1\nline2\nDone in 500ms\n',
+      'Started at: [..]\n...\nDone in [..]ms\n',
+      context,
+    );
+    expect(result).not.toBeNull();
+    expect(result!.captures).toHaveLength(3);
+    expect(result!.captures[0]).toMatchObject({
+      category: 'generic',
+      multiline: false,
+      captured: '12:00',
+    });
+    expect(result!.captures[1]).toMatchObject({
+      category: 'generic',
+      multiline: true,
+      captured: 'line1\nline2\n',
+    });
+    expect(result!.captures[2]).toMatchObject({
+      category: 'generic',
+      multiline: false,
+      captured: '500',
+    });
+  });
+
+  it('captures mixed unknown and generic in position order', () => {
+    const result = matchAndCapture('a: 100\nb\nc: 200\nd\n', 'a: [..]\n???\nd\n', context);
+    expect(result).not.toBeNull();
+    expect(result!.captures).toHaveLength(2);
+    expect(result!.captures[0]).toMatchObject({
+      category: 'generic',
+      multiline: false,
+      captured: '100',
+    });
+    expect(result!.captures[1]).toMatchObject({
+      category: 'unknown',
+      multiline: true,
+      captured: 'b\nc: 200\n',
+    });
+  });
+
+  it('captures interleaved types where unknown precedes generic', () => {
+    const result = matchAndCapture(
+      'line1\nline2\nvalue: 42\nfooter\n',
+      '???\nvalue: [..]\nfooter\n',
+      context,
+    );
+    expect(result).not.toBeNull();
+    expect(result!.captures).toHaveLength(2);
+    expect(result!.captures[0]).toMatchObject({
+      category: 'unknown',
+      multiline: true,
+      captured: 'line1\nline2\n',
+    });
+    expect(result!.captures[1]).toMatchObject({
+      category: 'generic',
+      multiline: false,
+      captured: '42',
     });
   });
 });

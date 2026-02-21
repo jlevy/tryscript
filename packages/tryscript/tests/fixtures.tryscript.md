@@ -20,13 +20,14 @@ $ head -1 basic.tryscript.md
 ## Fixture with renamed destination
 
 ```console
-$ grep "^#" renamed.md | head -1
-# Test: Custom TIMESTAMP pattern
+$ head -1 renamed.md
+---
 ```
 
 ## Multiple fixtures available
 
 ```console
-$ ls *.md | wc -l | tr -d ' '
-2
+$ ls *.md
+basic.tryscript.md
+renamed.md
 ```

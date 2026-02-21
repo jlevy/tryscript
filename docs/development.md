@@ -173,6 +173,10 @@ node packages/tryscript/dist/bin.mjs --help
 | Option | Description |
 | --- | --- |
 | `--update` | Update golden files with actual output |
+| `--expand` | Expand unknown wildcards (`???`/`[??]`) with actual output |
+| `--expand-generic` | Expand unknown + generic wildcards |
+| `--expand-all` | Expand all wildcards (including named patterns) |
+| `--capture-log <path>` | Write wildcard capture log to YAML file |
 | `--diff` | Show diff on failure (default: true) |
 | `--no-diff` | Hide diff on failure |
 | `--fail-fast` | Stop on first failure |
@@ -313,13 +317,30 @@ Usage: my-cli [options]
 
 ### Elision Patterns
 
+There are three categories of wildcards (in order of preference):
+
+**Named patterns** -- typed dynamic values:
+
+| Pattern | Matches | Example |
+| --- | --- | --- |
+| `[CWD]` | Current working directory | `[CWD]/file.txt` |
+| `[ROOT]` | Test root directory path | `[ROOT]/output.txt` |
+| `[EXE]` | `.exe` on Windows, empty else | `my-cli[EXE]` |
+| `[PATTERN]` | Custom regex from config | User-defined |
+
+**Unknown wildcards** -- temporary placeholders (expand with `--expand`):
+
+| Pattern | Matches | Example |
+| --- | --- | --- |
+| `[??]` | Any characters on line | `Result: [??]` |
+| `???` | Zero or more lines | `???\nDone` |
+
+**Generic wildcards** -- intentional omission of variable output:
+
 | Pattern | Matches | Example |
 | --- | --- | --- |
 | `[..]` | Any characters on line | `Done in [..]ms` |
 | `...` | Zero or more lines | `...\nDone` |
-| `[EXE]` | `.exe` on Windows, empty else | `my-cli[EXE]` |
-| `[ROOT]` | Test root directory path | `[ROOT]/output.txt` |
-| `[CWD]` | Current working directory | `[CWD]/file.txt` |
 
 ## Git Hooks
 

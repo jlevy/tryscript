@@ -68,6 +68,13 @@ Options:
                                       test output
   --quiet                             Suppress non-essential output (only show
                                       failures)
+  --expand                            Expand unknown wildcards (??? and [??])
+                                      with actual output
+  --expand-generic                    Expand unknown and generic wildcards with
+                                      actual output
+  --expand-all                        Expand all wildcards (including named
+                                      patterns) with actual output
+  --capture-log <path>                Write wildcard capture log to YAML file
   --coverage                          Enable code coverage collection (requires
                                       c8)
   --coverage-dir <dir>                Coverage output directory (default:
