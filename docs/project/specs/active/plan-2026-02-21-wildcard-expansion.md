@@ -12,8 +12,8 @@ This spec covers three interrelated changes:
 
 1. **Unknown wildcard syntax** (`???` and `[??]`) — new patterns that explicitly mark
    output as "needs to be filled in," distinct from generic wildcards
-2. **`--expand` mode** — a new CLI mode that fills wildcards with actual output, with
-   levels controlling which wildcard types are expanded
+2. **`--expand` / `--expand-generic` / `--expand-all` flags** — three boolean CLI flags
+   that fill wildcards with actual output, each targeting a broader set of wildcard types
 3. **Capture log** — a YAML sidecar file that records wildcard captures, actual output,
    and execution metadata for debugging and review
 
@@ -84,35 +84,34 @@ Implement three features that work together to improve wildcard discipline:
    to `...` and `[..]` for matching purposes, but signal "this is scaffolding, fill it
    in." These should never appear in committed tests.
 
-2. **`--expand` flag with levels**: Run all commands and replace wildcards with actual
-   output. The level controls which wildcards are expanded:
+2. **Three expansion flags** (boolean, mutually exclusive):
 
-   - `--expand` or `--expand=unknown` — expand only `???` and `[??]` (default; the
-     common workflow case)
-   - `--expand=generic` — expand `...`, `[..]`, `???`, and `[??]` (all unnamed
-     wildcards)
-   - `--expand=all` — expand everything, including named patterns like `[HASH]` (a
-     debugging/audit tool, not for committing)
+   - `--expand` — expand only unknown wildcards (`???` and `[??]`). This is the standard
+     workflow flag.
+   - `--expand-generic` — expand all unnamed wildcards: generic (`...`, `[..]`) plus
+     unknown (`???`, `[??]`). Useful for auditing existing tests.
+   - `--expand-all` — expand everything, including named patterns like `[HASH]`. A
+     debugging/audit tool, not for committing.
 
 3. **Capture log**: An optional YAML file (`--capture-log <path>`) that records, for
    every test block execution: the command, actual output, expected output, actual and
    expected exit codes, and the captured values of all wildcard patterns.
 
-### Wildcard Hierarchy
+### Expansion Flag Hierarchy
 
-The expansion levels form a hierarchy:
+Each flag includes everything the previous flag targets:
 
 ```
-unknown  <  generic  <  all
-(???,        (...,       (everything
- [??])       [..],       including
-             ???,        [HASH],
-             [??])       [CWD], etc.)
+--expand         targets: ???, [??]
+--expand-generic targets: ???, [??], ..., [..]
+--expand-all     targets: ???, [??], ..., [..], [HASH], [CWD], all named patterns
 ```
-
-Each level includes all wildcards from the level below it.
 
 ### The Recommended Workflow
+
+**Always use unknown wildcards (`???`, `[??]`) when scaffolding.** Never use generic
+wildcards (`...`, `[..]`) as placeholders. The unknown syntax exists precisely to signal
+"this needs to be filled in."
 
 **Pass 1: Sketch** — Write commands with `???` as scaffolding. Focus on getting
 scenarios right.
@@ -121,40 +120,15 @@ scenarios right.
 $ blobsy push
 ???
 ? 0
-```
 
-**Pass 2: Expand** — Run `tryscript run --expand`. Every `???` is filled with real
-output.
-
-```console
-$ blobsy push
-Pushing 2 files...
-  data/model.bin (13 B) - pushed
-  data/dataset.csv (12 B) - pushed
-Done: 2 pushed.
-? 0
-```
-
-**Pass 3: Review and pattern** — Go through expanded output. Replace genuinely
-unstable values with named patterns (`[HASH]`, `[TIMESTAMP]`, etc.). Values that are
-unpredictable but unimportant can use `...`/`[..]` (generic). Leave everything else
-literal.
-
-**Pass 4: Commit** — Full output coverage. No `???`/`[??]` remaining. Only `...`/`[..]`
-for intentional omissions and `[NAME]` for typed dynamic values.
-
-### Before/After Examples
-
-#### Unknown wildcard expansion (`--expand` / `--expand=unknown`)
-
-Before (scaffold):
-```console
-$ blobsy push
+$ cat data/model.bin.yref
 ???
 ? 0
 ```
 
-After:
+**Pass 2: Expand** — Run `tryscript run --expand`. Every `???` is filled with real
+output. Review the diff.
+
 ```console
 $ blobsy push
 Pushing 2 files...
@@ -162,42 +136,21 @@ Pushing 2 files...
   data/dataset.csv (12 B) - pushed
 Done: 2 pushed.
 ? 0
-```
 
-#### Generic wildcards are NOT expanded at `unknown` level
-
-This block is unchanged by `--expand=unknown`:
-```console
-$ blobsy push data/model.bin
-Pushing 1 file...
-...
-Done: 1 pushed.
+$ cat data/model.bin.yref
+format: blobsy-yref/0.1
+hash: sha256:d02661eabc1f4a7b...
+size: 13
+remote_key: 20260221T153007Z-7a3f0e9b2c1d/data/model.bin
 ? 0
 ```
 
-#### Generic wildcard expansion (`--expand=generic`)
+**Pass 3: Review and pattern** — Go through expanded output. Replace dynamic values
+with named patterns wherever possible (`[HASH]`, `[TIMESTAMP]`, etc.). For values that
+are unpredictable and where defining a named pattern is impractical, use generic
+wildcards (`...`/`[..]`). Prefer named patterns over generic wildcards — they document
+what kind of value varies and why. Leave everything else literal.
 
-Before:
-```console
-$ blobsy push data/model.bin
-Pushing 1 file...
-...
-Done: 1 pushed.
-? 0
-```
-
-After `--expand=generic` (only `...` gap filled, surrounding lines preserved):
-```console
-$ blobsy push data/model.bin
-Pushing 1 file...
-  data/model.bin (13 B) - pushed
-Done: 1 pushed.
-? 0
-```
-
-#### Named patterns untouched at `generic` level
-
-Before and after `--expand=generic` (no change — only named patterns remain):
 ```console
 $ cat data/model.bin.yref
 format: blobsy-yref/0.1
@@ -207,22 +160,32 @@ remote_key: [REMOTE_KEY]
 ? 0
 ```
 
-#### Full expansion (`--expand=all`)
+**Pass 4: Commit** — Full output coverage. No `???`/`[??]` remaining. Only named
+patterns for typed dynamic values and generic wildcards (`...`/`[..]`) as a last
+resort for output that is genuinely difficult to pattern-match.
 
-`--expand=all` also expands named patterns (for debugging/audit):
+### Before/After Examples
+
+#### Unknown wildcard expansion (`--expand`)
+
+Before (scaffold):
 ```console
-$ cat data/model.bin.yref
-format: blobsy-yref/0.1
-hash: sha256:d02661eabc1f...
-size: 13
-remote_key: 20260221T153007Z-7a3f0e9b2c1d/data/model.bin
+$ blobsy push
+???
 ? 0
 ```
 
-This is a debugging tool. The result should be reviewed, not committed, since it
-removes all named patterns.
+After `tryscript run --expand`:
+```console
+$ blobsy push
+Pushing 2 files...
+  data/model.bin (13 B) - pushed
+  data/dataset.csv (12 B) - pushed
+Done: 2 pushed.
+? 0
+```
 
-#### `[??]` expansion
+#### `[??]` expansion (`--expand`)
 
 Before:
 ```console
@@ -237,6 +200,65 @@ $ ls -la data/model.bin
 -rw-r--r--  1 user  staff  13 Feb 21 15:30 data/model.bin
 ? 0
 ```
+
+#### Generic wildcards are NOT expanded by `--expand`
+
+This block is unchanged by `--expand` — it uses `...` (generic), not `???` (unknown):
+```console
+$ blobsy push data/model.bin
+Pushing 1 file...
+...
+Done: 1 pushed.
+? 0
+```
+
+#### Generic wildcard expansion (`--expand-generic`)
+
+Before:
+```console
+$ blobsy push data/model.bin
+Pushing 1 file...
+...
+Done: 1 pushed.
+? 0
+```
+
+After `tryscript run --expand-generic` (only `...` gap filled, surrounding lines
+preserved):
+```console
+$ blobsy push data/model.bin
+Pushing 1 file...
+  data/model.bin (13 B) - pushed
+Done: 1 pushed.
+? 0
+```
+
+#### Named patterns untouched by `--expand-generic`
+
+Before and after `--expand-generic` (no change — only named patterns remain):
+```console
+$ cat data/model.bin.yref
+format: blobsy-yref/0.1
+hash: [HASH]
+size: 13
+remote_key: [REMOTE_KEY]
+? 0
+```
+
+#### Full expansion (`--expand-all`)
+
+`--expand-all` also expands named patterns (for debugging/audit):
+```console
+$ cat data/model.bin.yref
+format: blobsy-yref/0.1
+hash: sha256:d02661eabc1f...
+size: 13
+remote_key: 20260221T153007Z-7a3f0e9b2c1d/data/model.bin
+? 0
+```
+
+This is a debugging tool. The result should be reviewed, not committed, since it
+removes all named patterns.
 
 ## Backward Compatibility
 
@@ -267,30 +289,30 @@ $ ls -la data/model.bin
    execution
 2. `[??]` (single-line unknown wildcard) syntax — matches identically to `[..]` in test
    execution
-3. `--expand` CLI flag (default level: `unknown`) that fills unknown wildcards with
-   actual output
-4. `--expand=generic` level that fills both generic and unknown wildcards
-5. `--expand=all` level that fills all wildcards including named patterns
-6. Expansion algorithm that matches literal lines around wildcards to determine gap
+3. `--expand` boolean flag — fills unknown wildcards (`???`, `[??]`) with actual output
+4. `--expand-generic` boolean flag — fills generic (`...`, `[..]`) and unknown wildcards
+5. `--expand-all` boolean flag — fills all wildcards including named patterns
+6. The three flags are mutually exclusive (error if more than one specified)
+7. Expansion algorithm that matches literal lines around wildcards to determine gap
    boundaries (reuses existing matching logic from `matcher.ts`)
-7. File rewriting that only modifies targeted wildcard gaps, preserving all other content
-8. Works even when command fails (expand the actual error output)
-9. Summary output showing how many wildcards were expanded across how many files
+8. File rewriting that only modifies targeted wildcard gaps, preserving all other content
+9. Works even when command fails (expand the actual error output)
+10. Summary output showing how many wildcards were expanded across how many files
 
 **Should Have:**
 
-10. Warning if `???`/`[??]` are present in test files (always shown, no config needed —
+11. Warning if `???`/`[??]` are present in test files (always shown, no config needed —
     their presence is itself the signal)
-11. `--capture-log <path>` option that writes a YAML file with execution details
-12. Documentation updates: recommended workflow, wildcard category guidance, agent
+12. `--capture-log <path>` option that writes a YAML file with execution details
+13. Documentation updates: recommended workflow, wildcard category guidance, agent
     instructions
 
 **Could Have (Future):**
 
-13. `--auto-pattern` mode that heuristically identifies dynamic values and suggests named
+14. `--auto-pattern` mode that heuristically identifies dynamic values and suggests named
     patterns (explicitly out of scope — mentioned only to clarify the boundary)
-14. Integration with `--update` to prefer expansion behavior when possible
-15. CI check that fails if `???`/`[??]` appear in committed tests
+15. Integration with `--update` to prefer expansion behavior when possible
+16. CI check that fails if `???`/`[??]` appear in committed tests
 
 ### Out of Scope
 
@@ -312,32 +334,38 @@ $ ls -la data/model.bin
    # Tests with ??? or [??] pass if output matches
    ```
 
-2. **`--expand` (unknown level) works:**
+2. **`--expand` works:**
    ```bash
    tryscript run --expand tests/
    # Fills only ??? and [??] with actual output
    # Shows summary: "Expanded 7 unknown wildcards across 3 files"
    ```
 
-3. **`--expand=generic` works:**
+3. **`--expand-generic` works:**
    ```bash
-   tryscript run --expand=generic tests/
+   tryscript run --expand-generic tests/
    # Fills ..., [..], ???, and [??] with actual output
    # Named patterns preserved
    ```
 
-4. **`--expand=all` works:**
+4. **`--expand-all` works:**
    ```bash
-   tryscript run --expand=all tests/
+   tryscript run --expand-all tests/
    # Fills everything including [HASH], [CWD], etc.
    ```
 
-5. **Generic wildcards untouched at unknown level:**
+5. **Generic wildcards untouched by `--expand`:**
    ```bash
    # A block with ... but no ??? is unchanged by --expand
    ```
 
-6. **Warning on unknown wildcards:**
+6. **Flags are mutually exclusive:**
+   ```bash
+   tryscript run --expand --expand-generic tests/
+   # Error: --expand, --expand-generic, and --expand-all are mutually exclusive
+   ```
+
+7. **Warning on unknown wildcards:**
    ```bash
    tryscript run tests/
    # If ??? or [??] present:
@@ -345,26 +373,27 @@ $ ls -la data/model.bin
    #  Run --expand to fill them."
    ```
 
-7. **Capture log written:**
+8. **Capture log written:**
    ```bash
    tryscript run --capture-log captures.yaml tests/
    # Writes YAML with command, output, captures for all wildcard types
    ```
 
-8. **Help shows new options:**
+9. **Help shows new options:**
    ```bash
    tryscript run --help
-   # Shows --expand, --capture-log, documents ???/[??] syntax
+   # Shows --expand, --expand-generic, --expand-all, --capture-log
    ```
 
-### What `--expand` Does NOT Do
+### What the Expand Flags Do NOT Do
 
-- It does not replace `--update`. `--update` replaces the entire expected section.
-  `--expand` surgically fills only targeted wildcard gaps.
-- It does not auto-pattern. After expansion of generic wildcards, nondeterministic output
-  will cause the test to fail on the next run. This is the intended forcing function.
-- At the `unknown` level, it does not touch generic wildcards (`...`, `[..]`).
-- At the `generic` level, it does not touch named patterns.
+- They do not replace `--update`. `--update` replaces the entire expected section.
+  Expand flags surgically fill only targeted wildcard gaps.
+- They do not auto-pattern. After expansion, nondeterministic output will cause the test
+  to fail on the next run. This is the intended forcing function — the author must review
+  and add named patterns.
+- `--expand` does not touch generic wildcards (`...`, `[..]`).
+- `--expand-generic` does not touch named patterns.
 
 ## Stage 2: Architecture Stage
 
@@ -411,17 +440,17 @@ Relevant source files:
 #### Wildcard Type Classification
 
 ```typescript
-/** Categories of wildcards, forming a hierarchy for --expand levels. */
+/** Categories of wildcards, forming a hierarchy for expansion flags. */
 type WildcardCategory = 'unknown' | 'generic' | 'named';
 
-/** Which wildcards each --expand level targets. */
+/** Which wildcards each flag targets. */
 type ExpandLevel = 'unknown' | 'generic' | 'all';
 ```
 
-Mapping:
-- `unknown` level targets: `???`, `[??]`
-- `generic` level targets: `???`, `[??]`, `...`, `[..]`
-- `all` level targets: everything (including `[HASH]`, `[CWD]`, etc.)
+Mapping from flags to expand levels:
+- `--expand` -> level `unknown`: targets `???`, `[??]`
+- `--expand-generic` -> level `generic`: targets `???`, `[??]`, `...`, `[..]`
+- `--expand-all` -> level `all`: targets everything (including `[HASH]`, `[CWD]`, etc.)
 
 #### Changes to `matcher.ts`
 
@@ -502,7 +531,7 @@ function expandExpectedOutput(
   last.
 - Command fails: still expand — error output is often the most important to capture.
 - Nondeterministic output after generic expansion: intended forcing function.
-- `--expand=all` expanding named patterns: replaces `[HASH]` with literal value. This
+- `--expand-all` expanding named patterns: replaces `[HASH]` with literal value. This
   is meant for review, not committing.
 
 #### File Rewriting (Expander)
@@ -599,7 +628,7 @@ files:
 | `src/lib/capture-log.ts` | NEW: Capture log generation (YAML output) |
 | `src/lib/matcher.ts` | Add `???`/`[??]` recognition; add `matchAndCapture()` with capturing groups |
 | `src/lib/types.ts` | Add `WildcardCapture`, `ExpansionResult`, `ExpandLevel` types |
-| `src/cli/commands/run.ts` | Add `--expand[=level]`, `--capture-log` options; integrate expansion, warning, capture log |
+| `src/cli/commands/run.ts` | Add `--expand`, `--expand-generic`, `--expand-all`, `--capture-log` flags; integrate expansion, warning, capture log |
 | `src/lib/reporter.ts` | Add unknown wildcard warning output |
 
 ### Dependencies
@@ -637,11 +666,13 @@ Core expansion algorithm and `--expand` flag.
 - [ ] Create `src/lib/expander.ts` with expansion logic (`expandExpectedOutput()`,
   `expandTestFile()`)
 - [ ] Handle all three expand levels: `unknown`, `generic`, `all`
-- [ ] Add `--expand[=level]` flag to run command in `commands/run.ts` (default: `unknown`)
+- [ ] Add `--expand`, `--expand-generic`, `--expand-all` boolean flags to run command in
+  `commands/run.ts`
+- [ ] Validate mutual exclusivity (error if more than one expand flag specified)
+- [ ] Validate mutual exclusivity with `--update`
 - [ ] Integrate expansion with test execution (run, match, expand, rewrite)
 - [ ] Handle edge cases: multiple wildcards, wildcards at start/end, failed commands
 - [ ] Add expansion summary output ("Expanded N wildcards across M files")
-- [ ] Ensure `--expand` and `--update` are mutually exclusive
 - [ ] Write unit tests for expansion algorithm at each level
 - [ ] Write golden self-tests for `--expand`
 
@@ -660,38 +691,38 @@ Unknown wildcard warning and execution detail logging.
 
 ### Phase 4: Documentation
 
-- [ ] Update `tryscript-reference.md` with `???`/`[??]` syntax, `--expand` levels,
+- [ ] Update `tryscript-reference.md` with `???`/`[??]` syntax, three expand flags,
   `--capture-log`
-- [ ] Add "Recommended Workflow" section emphasizing sketch-expand-pattern with `???`
+- [ ] Add "Recommended Workflow" section emphasizing: always scaffold with `???`, run
+  `--expand`, then replace with named patterns where possible, generic wildcards as
+  last resort
 - [ ] Add wildcard category table (generic, unknown, named) to docs
-- [ ] Add guidance: agents should use `???` for scaffolding, not `...`
+- [ ] Add guidance: agents and humans should *always* use `???` for scaffolding, *never*
+  `...`
 - [ ] Document that `???`/`[??]` should never appear in committed tests
-- [ ] Update `--help` output for new options
+- [ ] Document preference hierarchy: literal text > named patterns > generic wildcards
+- [ ] Update `--help` output for new flags
 - [ ] Ensure all golden self-tests pass
 
 ## Open Questions
 
-1. **Should `--expand` and `--update` be mutually exclusive?**
-   Proposed: Yes. They have different semantics (`--expand` fills gaps, `--update`
-   replaces everything). Running both would be confusing.
+1. **Should expand flags and `--update` be mutually exclusive?**
+   Proposed: Yes. They have different semantics (expand fills gaps, `--update` replaces
+   everything). Running both would be confusing.
 
-2. **Should `--expand` modify files in place or write to a separate location?**
+2. **Should expand flags modify files in place or write to a separate location?**
    Proposed: In place (same as `--update`). The user can use `git diff` to review
    changes, which is the expected workflow.
 
-3. **Default `--expand` level?**
-   Proposed: `unknown`. This is the common case in the sketch-expand-pattern workflow.
-   `--expand` with no value means `--expand=unknown`.
-
-4. **Should we warn or error on `???`/`[??]`?**
+3. **Should we warn or error on `???`/`[??]`?**
    Proposed: Warn (not error). Tests with `???`/`[??]` still pass — they match like
    `...`/`[..]`. But a warning is printed nudging the author to run `--expand`. A
    future CI check could enforce that committed tests have no unknown wildcards.
 
-5. **Capture log: YAML or JSON?**
+4. **Capture log: YAML or JSON?**
    Proposed: YAML. More readable for human review; `yaml` package already a dependency.
 
-6. **How should the expansion algorithm handle ambiguous matches?**
+5. **How should the expansion algorithm handle ambiguous matches?**
    When multiple wildcards exist with no literal anchors between them, the regex engine's
    greedy/lazy matching determines the split. The algorithm should use the same matching
    semantics as the test assertion (lazy matching). This matches the existing behavior in
