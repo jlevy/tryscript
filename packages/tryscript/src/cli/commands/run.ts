@@ -20,6 +20,7 @@ import {
 import { matchOutput } from '../../lib/matcher.js';
 import { createDiff, reportFile, reportSummary } from '../../lib/reporter.js';
 import { updateTestFile } from '../../lib/updater.js';
+import { expandTestFile } from '../../lib/expander.js';
 import {
   isC8Available,
   createCoverageContext,
@@ -33,6 +34,7 @@ import type {
   TestFileResult,
   TestRunSummary,
   CoverageContext,
+  ExpandLevel,
 } from '../../lib/types.js';
 
 interface RunOptions {
@@ -42,6 +44,10 @@ interface RunOptions {
   filter?: string;
   verbose?: boolean;
   quiet?: boolean;
+  expand?: boolean;
+  expandGeneric?: boolean;
+  expandAll?: boolean;
+  captureLog?: string;
   coverage?: boolean;
   coverageDir?: string;
   coverageReporter?: string[];
@@ -69,6 +75,10 @@ export function registerRunCommand(program: Command): void {
     .option('--filter <pattern>', 'Filter tests by name pattern')
     .option('--verbose', 'Show detailed output including passing test output')
     .option('--quiet', 'Suppress non-essential output (only show failures)')
+    .option('--expand', 'Expand unknown wildcards (??? and [??]) with actual output')
+    .option('--expand-generic', 'Expand unknown and generic wildcards with actual output')
+    .option('--expand-all', 'Expand all wildcards (including named patterns) with actual output')
+    .option('--capture-log <path>', 'Write wildcard capture log to YAML file')
     .option('--coverage', 'Enable code coverage collection (requires c8)')
     .option('--coverage-dir <dir>', 'Coverage output directory (default: coverage-tryscript)')
     .option(
@@ -104,8 +114,40 @@ export function registerRunCommand(program: Command): void {
     .action(runCommand);
 }
 
+/**
+ * Count unknown wildcard tokens (`???` and `[??]`) in expected output.
+ */
+function countUnknownWildcards(expectedOutput: string): number {
+  const singleLine = (expectedOutput.match(/\[\?\?]/g) ?? []).length;
+  const multiLine = (expectedOutput.match(/\?\?\?\n/g) ?? []).length;
+  return singleLine + multiLine;
+}
+
 async function runCommand(files: string[], options: RunOptions): Promise<void> {
   const startTime = Date.now();
+
+  // Validate mutual exclusivity of expand flags
+  const expandFlags = [options.expand, options.expandGeneric, options.expandAll].filter(Boolean);
+  if (expandFlags.length > 1) {
+    logError('--expand, --expand-generic, and --expand-all are mutually exclusive');
+    process.exit(1);
+  }
+
+  // Determine expand level
+  let expandLevel: ExpandLevel | undefined;
+  if (options.expand) {
+    expandLevel = 'unknown';
+  } else if (options.expandGeneric) {
+    expandLevel = 'generic';
+  } else if (options.expandAll) {
+    expandLevel = 'all';
+  }
+
+  // Expand and update are mutually exclusive
+  if (expandLevel && options.update) {
+    logError('--expand* flags and --update are mutually exclusive');
+    process.exit(1);
+  }
 
   // Default options
   const opts = {
@@ -206,6 +248,7 @@ async function runCommand(files: string[], options: RunOptions): Promise<void> {
 
     const ctx = await createExecutionContext(config, filePath, coverageEnv);
     const results: TestBlockResult[] = [];
+    let fileContext: { root: string; cwd: string } | undefined;
 
     try {
       for (const block of blocksToRun) {
@@ -262,6 +305,9 @@ async function runCommand(files: string[], options: RunOptions): Promise<void> {
 
       // Run after hook if configured
       await runAfterHook(ctx);
+
+      // Save context paths before cleanup for expansion
+      fileContext = { root: ctx.testDir, cwd: ctx.cwd };
     } finally {
       await cleanupExecutionContext(ctx);
     }
@@ -283,6 +329,38 @@ async function runCommand(files: string[], options: RunOptions): Promise<void> {
         console.error(colors.warn(`  ${statusIndicators.update} Updated: ${changes.join(', ')}`));
       }
     }
+
+    // Expansion mode
+    if (expandLevel && fileContext) {
+      const { expanded, expandedCount, changes } = await expandTestFile(
+        testFile,
+        results,
+        expandLevel,
+        fileContext,
+        config.patterns ?? {},
+      );
+      if (expanded) {
+        console.error(
+          colors.warn(
+            `  ${statusIndicators.update} Expanded ${expandedCount} wildcard(s): ${changes.join(', ')}`,
+          ),
+        );
+      }
+    }
+  }
+
+  // Unknown wildcard warning (unconditional, always shown)
+  let totalUnknownWildcards = 0;
+  for (const fr of fileResults) {
+    for (const block of fr.file.blocks) {
+      totalUnknownWildcards += countUnknownWildcards(block.expectedOutput);
+    }
+  }
+  if (totalUnknownWildcards > 0) {
+    logWarn(
+      `${totalUnknownWildcards} unknown wildcard(s) found (??? or [??]). ` +
+        'These are temporary and should be expanded. Use --expand to fill them in.',
+    );
   }
 
   // Summary
