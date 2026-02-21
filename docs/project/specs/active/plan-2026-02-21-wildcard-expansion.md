@@ -59,11 +59,10 @@ is no way to surgically fill just the wildcard gaps.
 
 ### Impact on Agent-Written Tests
 
-In practice, LLM agents generating golden tests for CLI tools (e.g., blobsy) produce
-files like:
+In practice, LLM agents generating golden tests for CLI tools produce files like:
 
 ```console
-$ blobsy push
+$ my-cli push
 ???
 ? 0
 ```
@@ -74,6 +73,9 @@ scaffolding. This makes the intent explicit and enables targeted expansion.
 ### Related Docs
 
 - [Elision patterns in development.md](../../development.md#elision-patterns)
+- [Elision patterns in tryscript-reference.md](../../tryscript-reference.md#elision-patterns)
+- [Root README — elision pattern mentions](../../../../README.md)
+- [Package README — elision pattern mentions](../../../../packages/tryscript/README.md)
 - [Coverage plan spec](../done/plan-2026-01-04-builtin-coverage-support.md)
 
 ## Summary of Task
@@ -82,7 +84,7 @@ Implement three features that work together to improve wildcard discipline:
 
 1. **Unknown wildcard syntax** (`???` and `[??]`): New patterns that behave identically
    to `...` and `[..]` for matching purposes, but signal "this is scaffolding, fill it
-   in." These should never appear in committed tests.
+   in." These are temporary scaffolding, intended to be expanded before finalizing.
 
 2. **Three expansion flags** (boolean, mutually exclusive):
 
@@ -120,11 +122,11 @@ wildcards (`...`, `[..]`) as placeholders. The unknown syntax exists precisely t
 scenarios right.
 
 ```console
-$ blobsy push
+$ my-cli push
 ???
 ? 0
 
-$ cat data/model.bin.yref
+$ cat output/manifest.json
 ???
 ? 0
 ```
@@ -133,18 +135,15 @@ $ cat data/model.bin.yref
 output. Review the diff.
 
 ```console
-$ blobsy push
+$ my-cli push
 Pushing 2 files...
   data/model.bin (13 B) - pushed
   data/dataset.csv (12 B) - pushed
 Done: 2 pushed.
 ? 0
 
-$ cat data/model.bin.yref
-format: blobsy-yref/0.1
-hash: sha256:d02661eabc1f4a7b...
-size: 13
-remote_key: 20260221T153007Z-7a3f0e9b2c1d/data/model.bin
+$ cat output/manifest.json
+{"version": "1.0", "hash": "sha256:d02661eabc1f4a7b...", "timestamp": "2026-02-21T15:30:07Z"}
 ? 0
 ```
 
@@ -155,11 +154,8 @@ wildcards (`...`/`[..]`). Prefer named patterns over generic wildcards — they 
 what kind of value varies and why. Leave everything else literal.
 
 ```console
-$ cat data/model.bin.yref
-format: blobsy-yref/0.1
-hash: [HASH]
-size: 13
-remote_key: [REMOTE_KEY]
+$ cat output/manifest.json
+{"version": "1.0", "hash": "[HASH]", "timestamp": "[TIMESTAMP]"}
 ? 0
 ```
 
@@ -173,14 +169,14 @@ resort for output that is genuinely difficult to pattern-match.
 
 Before (scaffold):
 ```console
-$ blobsy push
+$ my-cli push
 ???
 ? 0
 ```
 
 After `tryscript run --expand`:
 ```console
-$ blobsy push
+$ my-cli push
 Pushing 2 files...
   data/model.bin (13 B) - pushed
   data/dataset.csv (12 B) - pushed
@@ -208,7 +204,7 @@ $ ls -la data/model.bin
 
 This block is unchanged by `--expand` — it uses `...` (generic), not `???` (unknown):
 ```console
-$ blobsy push data/model.bin
+$ my-cli push data/model.bin
 Pushing 1 file...
 ...
 Done: 1 pushed.
@@ -219,7 +215,7 @@ Done: 1 pushed.
 
 Before:
 ```console
-$ blobsy push data/model.bin
+$ my-cli push data/model.bin
 Pushing 1 file...
 ...
 Done: 1 pushed.
@@ -229,7 +225,7 @@ Done: 1 pushed.
 After `tryscript run --expand-generic` (only `...` gap filled, surrounding lines
 preserved):
 ```console
-$ blobsy push data/model.bin
+$ my-cli push data/model.bin
 Pushing 1 file...
   data/model.bin (13 B) - pushed
 Done: 1 pushed.
@@ -240,11 +236,8 @@ Done: 1 pushed.
 
 Before and after `--expand-generic` (no change — only named patterns remain):
 ```console
-$ cat data/model.bin.yref
-format: blobsy-yref/0.1
-hash: [HASH]
-size: 13
-remote_key: [REMOTE_KEY]
+$ cat output/manifest.json
+{"version": "1.0", "hash": "[HASH]", "timestamp": "[TIMESTAMP]"}
 ? 0
 ```
 
@@ -252,11 +245,8 @@ remote_key: [REMOTE_KEY]
 
 `--expand-all` also expands named patterns:
 ```console
-$ cat data/model.bin.yref
-format: blobsy-yref/0.1
-hash: sha256:d02661eabc1f...
-size: 13
-remote_key: 20260221T153007Z-7a3f0e9b2c1d/data/model.bin
+$ cat output/manifest.json
+{"version": "1.0", "hash": "sha256:d02661eabc1f...", "timestamp": "2026-02-21T15:30:07Z"}
 ? 0
 ```
 
@@ -312,8 +302,8 @@ nondeterministic values, those need named patterns.
 
 **Should Have:**
 
-11. Warning if `???`/`[??]` are present in test files (always shown, no config needed —
-    their presence is itself the signal)
+11. Unconditional warning if `???`/`[??]` are present in test files — always shown on
+    every run, regardless of flags. No warning for generic wildcards (`...`/`[..]`).
 12. `--capture-log <path>` option that writes a YAML file with execution details
 13. Documentation updates: recommended workflow, wildcard category guidance, agent
     instructions
@@ -376,12 +366,13 @@ nondeterministic values, those need named patterns.
    # Error: --expand, --expand-generic, and --expand-all are mutually exclusive
    ```
 
-7. **Warning on unknown wildcards:**
+7. **Warning on unknown wildcards (always, unconditionally):**
    ```bash
    tryscript run tests/
-   # If ??? or [??] present:
+   # If ??? or [??] present (with or without --expand):
    # "Warning: 7 blocks across 3 files contain unknown wildcards (???/[??]).
    #  Run --expand to fill them."
+   # Generic wildcards (..., [..]) do NOT trigger warnings.
    ```
 
 8. **Capture log written:**
@@ -568,16 +559,20 @@ export async function expandTestFile(
 
 #### Unknown Wildcard Warning
 
-When running normally (no `--expand`), if any `???` or `[??]` are present in the test
-files, print a warning after the summary:
+**Always warn when unknown wildcards are present.** Whenever tryscript runs tests and
+any `???` or `[??]` appear in the test files, print a warning after the summary —
+regardless of whether `--expand` was specified. This warning is unconditional: the
+presence of `???`/`[??]` is itself the signal that work remains.
+
+Generic wildcards (`...`/`[..]`) do NOT trigger any warning. They are legitimate test
+constructs representing intentional omission.
 
 ```
 Warning: 7 blocks across 3 files contain unknown wildcards (???/[??]).
 Run --expand to fill them with actual output.
 ```
 
-This requires no config — the presence of `???`/`[??]` is itself the signal. This is
-a simple scan of `expectedOutput` for these patterns.
+This requires no config. It is a simple scan of `expectedOutput` for these patterns.
 
 #### Capture Log
 
@@ -591,7 +586,7 @@ files:
   - path: tests/golden/push.tryscript.md
     blocks:
       - name: "Push files"
-        command: "blobsy push"
+        command: "my-cli push"
         expected_exit_code: 0
         actual_exit_code: 0
         expected_output: |
@@ -611,23 +606,23 @@ files:
                 data/dataset.csv (12 B) - pushed
         passed: true
 
-      - name: "Check yref"
-        command: "cat data/model.bin.yref"
+      - name: "Check manifest"
+        command: "cat output/manifest.json"
         expected_exit_code: 0
         actual_exit_code: 0
         expected_output: |
-          format: blobsy-yref/0.1
-          hash: [HASH]
-          size: 13
+          {"version": "1.0", "hash": "[HASH]", "timestamp": "[TIMESTAMP]"}
         actual_output: |
-          format: blobsy-yref/0.1
-          hash: sha256:d02661ea...
-          size: 13
+          {"version": "1.0", "hash": "sha256:d02661ea...", "timestamp": "2026-02-21T15:30:07Z"}
         captures:
           - category: named
             name: HASH
             multiline: false
             matched: "sha256:d02661ea..."
+          - category: named
+            name: TIMESTAMP
+            multiline: false
+            matched: "2026-02-21T15:30:07Z"
         passed: true
 ```
 
@@ -641,6 +636,10 @@ files:
 | `src/lib/types.ts` | Add `WildcardCapture`, `ExpansionResult`, `ExpandLevel` types |
 | `src/cli/commands/run.ts` | Add `--expand`, `--expand-generic`, `--expand-all`, `--capture-log` flags; integrate expansion, warning, capture log |
 | `src/lib/reporter.ts` | Add unknown wildcard warning output |
+| `README.md` | Add wildcard categories summary, preference order, expand flags, best practices |
+| `packages/tryscript/README.md` | Mirror root README wildcard/expand documentation updates |
+| `docs/development.md` | Add `???`/`[??]` to Elision Patterns table, expand flags to CLI Options, wildcard best practices |
+| `docs/tryscript-reference.md` | Restructure Elision Patterns into three categories, add expansion section, capture log docs |
 
 ### Dependencies
 
@@ -842,16 +841,71 @@ Unknown wildcard warning and execution detail logging.
 
 ### Phase 4: Documentation
 
-- [ ] Update `tryscript-reference.md` with `???`/`[??]` syntax, three expand flags,
-  `--capture-log`
-- [ ] Add "Recommended Workflow" section emphasizing: always scaffold with `???`, run
-  `--expand`, then replace with named patterns where possible, generic wildcards as
-  last resort
-- [ ] Add wildcard category table (generic, unknown, named) to docs
-- [ ] Add guidance: agents and humans should *always* use `???` for scaffolding, *never*
-  `...`
-- [ ] Document that `???`/`[??]` should never appear in committed tests
-- [ ] Document preference hierarchy: literal text > named patterns > generic wildcards
+Every place that documents generic wildcards (`...`/`[..]`) must also document
+unknown wildcards (`???`/`[??]`). The three wildcard categories and their preference
+order must be clearly stated in both the README (brief) and the reference docs
+(detailed).
+
+#### Wildcard Categories and Preference Order
+
+All wildcard documentation should present the three categories in this priority order:
+
+1. **Named patterns** (`[HASH]`, `[CWD]`, etc.) — preferred; self-documenting, typed
+2. **Unknown wildcards** (`???`, `[??]`) — temporary scaffolding, intended to be expanded
+3. **Generic wildcards** (`...`, `[..]`) — last resort for genuinely unpredictable output
+
+Literal text is always preferred over any wildcard.
+
+#### Files to Update
+
+**`README.md` (root) and `packages/tryscript/README.md`:**
+
+These two files have near-identical content. Both need:
+
+- [ ] Add a "Wildcard Patterns" section (replacing/expanding the current brief elision
+  mention around line 87) that summarizes the three wildcard categories with a table and
+  states the preference order (named > unknown > generic). Keep it brief — the README
+  should give the summary, not the full reference.
+- [ ] Update the Features bullet list (around line 111) to mention all three categories:
+  `[HASH]`, `???`, `[??]`, `[..]`, `...`, `[CWD]`, `[ROOT]`, `[EXE]`
+- [ ] Add `--expand`, `--expand-generic`, `--expand-all`, and `--capture-log` to the
+  Common Options table
+- [ ] Add a brief "Best Practice" note: always scaffold with `???`/`[??]`, run
+  `--expand`, then replace dynamic values with named patterns. Generic wildcards are a
+  last resort.
+
+**`docs/development.md`:**
+
+- [ ] Update the Elision Patterns table (lines 314-320) to include `???` and `[??]`
+  alongside `...` and `[..]`, with a note that unknown wildcards are for scaffolding
+  and should not be committed
+- [ ] Add `--expand`, `--expand-generic`, `--expand-all`, `--capture-log` to the CLI
+  Options table (lines 172-183)
+- [ ] Add a brief "Wildcard Best Practices" subsection under "Writing Test Files"
+  stating the preference order and recommended workflow
+
+**`docs/tryscript-reference.md`:**
+
+- [ ] Restructure the Elision Patterns section (lines 110-148) into three subsections:
+  Named Patterns, Unknown Wildcards, and Generic Wildcards — in that preference order
+- [ ] Add `???` and `[??]` to the pattern table with clear descriptions
+- [ ] Add a "Wildcard Preference Order" subsection explaining: literal text > named
+  patterns > generic wildcards, and that unknown wildcards are temporary scaffolding
+- [ ] Add pattern examples for `???` and `[??]` alongside existing `...` and `[..]`
+  examples
+- [ ] Add `--expand`, `--expand-generic`, `--expand-all` to the Run Options table
+  (lines 475-483)
+- [ ] Add `--capture-log` to the Run Options table
+- [ ] Add a "Wildcard Expansion" section covering the three flags, their hierarchy,
+  and the recommended workflow (sketch with `???`, expand, review, pattern, commit)
+- [ ] Add a "Capture Log" subsection documenting `--capture-log <path>` and the YAML
+  format
+- [ ] Update the Best Practices section (lines 737+) with guidance on wildcard choice
+  and the expansion workflow
+- [ ] Document that `???`/`[??]` are temporary scaffolding, intended to be expanded
+
+#### General
+
 - [ ] Update `--help` output for new flags
 - [ ] Ensure all golden self-tests pass
 
