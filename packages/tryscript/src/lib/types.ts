@@ -163,3 +163,43 @@ export interface CoverageContext {
   /** Resolved coverage options with defaults applied */
   options: Omit<Required<CoverageConfig>, 'mergeLcov'> & { mergeLcov?: string };
 }
+
+/**
+ * Categories of wildcards, forming a hierarchy for expansion flags.
+ *
+ * - `unknown`: `???` (multi-line) and `[??]` (single-line) — temporary scaffolding
+ * - `generic`: `...` (multi-line) and `[..]` (single-line) — intentional omission
+ * - `named`: `[HASH]`, `[CWD]`, etc. — typed dynamic values
+ */
+export type WildcardCategory = 'unknown' | 'generic' | 'named';
+
+/**
+ * Which wildcards each `--expand*` flag targets.
+ *
+ * - `unknown`: only `???` and `[??]`
+ * - `generic`: unknown + `...` and `[..]`
+ * - `all`: everything including named patterns
+ */
+export type ExpandLevel = 'unknown' | 'generic' | 'all';
+
+/**
+ * A single wildcard capture from matching actual output against expected pattern.
+ */
+export interface WildcardCapture {
+  category: WildcardCategory;
+  /** For named patterns, the pattern name (e.g., 'HASH') */
+  name?: string;
+  /** True for multi-line wildcards (`...`/`???`), false for single-line (`[..]`/`[??]`) */
+  multiline: boolean;
+  /** The actual text that the wildcard matched */
+  captured: string;
+}
+
+/**
+ * Result of expanding wildcards in expected output.
+ */
+export interface ExpansionResult {
+  expandedOutput: string;
+  captures: WildcardCapture[];
+  expandedCount: number;
+}
