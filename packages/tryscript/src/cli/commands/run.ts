@@ -386,8 +386,7 @@ async function runCommand(files: string[], options: RunOptions): Promise<void> {
         options.captureLog,
         fileResults,
         (file) => fileContexts.get(file.path) ?? { root: process.cwd(), cwd: process.cwd() },
-        // Use patterns from the first file that has them (simplified approach)
-        filePatterns.values().next().value,
+        (file) => filePatterns.get(file.path) ?? {},
       );
       console.error(colors.info(`Capture log written to ${options.captureLog}`));
     } catch (error) {

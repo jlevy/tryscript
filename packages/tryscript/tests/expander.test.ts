@@ -1,5 +1,8 @@
-import { describe, it, expect } from 'vitest';
-import { expandExpectedOutput, shouldExpandCategory } from '../src/lib/expander.js';
+import { describe, it, expect, vi } from 'vitest';
+import { expandExpectedOutput, expandTestFile, shouldExpandCategory } from '../src/lib/expander.js';
+import type { TestBlock, TestBlockResult, TestFile } from '../src/lib/types.js';
+
+vi.mock('atomically', () => ({ writeFile: vi.fn() }));
 
 const context = { root: '/test/root', cwd: '/test/cwd' };
 
@@ -107,9 +110,99 @@ describe('expandExpectedOutput', () => {
     expect(result!.expandedCount).toBe(1);
   });
 
+  it('handles interleaved types where unknown precedes generic', () => {
+    const result = expandExpectedOutput(
+      '???\nvalue: [..]\nfooter\n',
+      'line1\nline2\nvalue: 42\nfooter\n',
+      context,
+      'unknown',
+    );
+    expect(result).not.toBeNull();
+    expect(result!.expandedOutput).toBe('line1\nline2\nvalue: [..]\nfooter\n');
+    expect(result!.expandedCount).toBe(1);
+  });
+
+  it('handles interleaved types at all level with correct values', () => {
+    const result = expandExpectedOutput(
+      '???\nvalue: [..]\nfooter\n',
+      'line1\nline2\nvalue: 42\nfooter\n',
+      context,
+      'all',
+    );
+    expect(result).not.toBeNull();
+    expect(result!.expandedOutput).toBe('line1\nline2\nvalue: 42\nfooter\n');
+    expect(result!.expandedCount).toBe(2);
+  });
+
   it('returns zero expandedCount when nothing to expand', () => {
     const result = expandExpectedOutput('exact\n', 'exact\n', context, 'unknown');
     expect(result).not.toBeNull();
     expect(result!.expandedCount).toBe(0);
+  });
+});
+
+describe('expandTestFile', () => {
+  function makeBlock(overrides: Partial<TestBlock> = {}): TestBlock {
+    return {
+      command: 'echo hello',
+      expectedOutput: '[??]\n',
+      expectedExitCode: 0,
+      lineNumber: 5,
+      rawContent: '```console\n$ echo hello\n[??]\n? 0\n```',
+      ...overrides,
+    };
+  }
+
+  function makeResult(block: TestBlock, overrides: Partial<TestBlockResult> = {}): TestBlockResult {
+    return {
+      block,
+      passed: true,
+      actualOutput: 'hello\n',
+      actualExitCode: 0,
+      duration: 10,
+      ...overrides,
+    };
+  }
+
+  it('expands unknown wildcards and reports changes', async () => {
+    const block = makeBlock();
+    const rawContent = '# Test\n\n```console\n$ echo hello\n[??]\n? 0\n```\n';
+    const file: TestFile = {
+      path: '/tmp/test-expand.tryscript.md',
+      blocks: [block],
+      rawContent,
+      config: {},
+    };
+    const result = makeResult(block);
+
+    const { expanded, expandedCount, changes } = await expandTestFile(
+      file,
+      [result],
+      'unknown',
+      context,
+    );
+
+    expect(expanded).toBe(true);
+    expect(expandedCount).toBe(1);
+    expect(changes).toHaveLength(1);
+  });
+
+  it('does not write file when nothing to expand', async () => {
+    const block = makeBlock({
+      expectedOutput: 'hello\n',
+      rawContent: '```console\n$ echo hello\nhello\n? 0\n```',
+    });
+    const file: TestFile = {
+      path: '/tmp/test-noexpand.tryscript.md',
+      blocks: [block],
+      rawContent: '```console\n$ echo hello\nhello\n? 0\n```\n',
+      config: {},
+    };
+    const result = makeResult(block);
+
+    const { expanded, expandedCount } = await expandTestFile(file, [result], 'unknown', context);
+
+    expect(expanded).toBe(false);
+    expect(expandedCount).toBe(0);
   });
 });

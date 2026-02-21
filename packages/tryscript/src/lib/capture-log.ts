@@ -89,22 +89,22 @@ interface CaptureLogDoc {
 /**
  * Build the capture log document structure from test results.
  *
+ * `customPatterns` can be a static object or a per-file callback.
  * Separated from `writeCaptureLog` for testability.
  */
 export function buildCaptureLogDoc(
   fileResults: TestFileResult[],
   matchContext: (file: TestFile) => { root: string; cwd: string },
-  customPatterns?: Record<string, string | RegExp>,
+  customPatterns?:
+    | Record<string, string | RegExp>
+    | ((file: TestFile) => Record<string, string | RegExp>),
 ): CaptureLogDoc {
   const files = fileResults.map((fr) => {
     const ctx = matchContext(fr.file);
+    const patterns =
+      typeof customPatterns === 'function' ? customPatterns(fr.file) : customPatterns;
     const blocks = fr.results.map((r) => {
-      const captureResult = matchAndCapture(
-        r.actualOutput,
-        r.block.expectedOutput,
-        ctx,
-        customPatterns,
-      );
+      const captureResult = matchAndCapture(r.actualOutput, r.block.expectedOutput, ctx, patterns);
       const captures = (captureResult?.captures ?? []).map((c) => ({
         category: c.category,
         ...(c.name ? { name: c.name } : {}),
@@ -138,7 +138,9 @@ export async function writeCaptureLog(
   path: string,
   fileResults: TestFileResult[],
   matchContext: (file: TestFile) => { root: string; cwd: string },
-  customPatterns?: Record<string, string | RegExp>,
+  customPatterns?:
+    | Record<string, string | RegExp>
+    | ((file: TestFile) => Record<string, string | RegExp>),
 ): Promise<void> {
   const doc = buildCaptureLogDoc(fileResults, matchContext, customPatterns);
   const header = '# tryscript capture log\n';

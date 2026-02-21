@@ -5,7 +5,6 @@ import type {
   ExpansionResult,
   TestFile,
   TestBlockResult,
-  WildcardCapture,
   WildcardCategory,
 } from './types.js';
 
@@ -63,14 +62,12 @@ export function expandExpectedOutput(
     return null;
   }
 
-  // Walk through expected output, replacing each wildcard token in order.
-  // We consume captures left-to-right, matching the order from matchAndCapture().
+  // Find all wildcard token positions, sort by position to match the
+  // left-to-right capture order from matchAndCapture(), then assign captures.
   let output = normalizedExpected;
-  let captureIndex = 0;
   let expandedCount = 0;
 
-  // Build a queue of (position, token, capture) to process.
-  const replacements: { pos: number; length: number; capture: WildcardCapture }[] = [];
+  const tokenPositions: { pos: number; length: number }[] = [];
 
   // Find positions of built-in wildcard tokens.
   for (const wt of WILDCARD_TOKENS) {
@@ -81,24 +78,14 @@ export function expandExpectedOutput(
         if (pos === -1) {
           break;
         }
-        replacements.push({
-          pos,
-          length: wt.token.length,
-          capture: result.captures[captureIndex]!,
-        });
-        captureIndex++;
+        tokenPositions.push({ pos, length: wt.token.length });
         searchFrom = pos + wt.token.length;
       }
     } else {
       const re = new RegExp(wt.token.source, 'g');
       let m: RegExpExecArray | null;
       while ((m = re.exec(output)) !== null) {
-        replacements.push({
-          pos: m.index,
-          length: m[0].length,
-          capture: result.captures[captureIndex]!,
-        });
-        captureIndex++;
+        tokenPositions.push({ pos: m.index, length: m[0].length });
       }
     }
   }
@@ -113,19 +100,20 @@ export function expandExpectedOutput(
         if (pos === -1) {
           break;
         }
-        replacements.push({
-          pos,
-          length: placeholder.length,
-          capture: result.captures[captureIndex]!,
-        });
-        captureIndex++;
+        tokenPositions.push({ pos, length: placeholder.length });
         searchFrom = pos + placeholder.length;
       }
     }
   }
 
-  // Sort by position (left-to-right).
-  replacements.sort((a, b) => a.pos - b.pos);
+  // Sort by position (left-to-right) to match matchAndCapture() capture order.
+  tokenPositions.sort((a, b) => a.pos - b.pos);
+
+  // Assign captures in position order.
+  const replacements = tokenPositions.map((tp, i) => ({
+    ...tp,
+    capture: result.captures[i]!,
+  }));
 
   // Apply replacements in reverse to maintain offsets.
   for (let i = replacements.length - 1; i >= 0; i--) {

@@ -270,4 +270,24 @@ describe('matchAndCapture', () => {
       captured: 'b\nc: 200\n',
     });
   });
+
+  it('captures interleaved types where unknown precedes generic', () => {
+    const result = matchAndCapture(
+      'line1\nline2\nvalue: 42\nfooter\n',
+      '???\nvalue: [..]\nfooter\n',
+      context,
+    );
+    expect(result).not.toBeNull();
+    expect(result!.captures).toHaveLength(2);
+    expect(result!.captures[0]).toMatchObject({
+      category: 'unknown',
+      multiline: true,
+      captured: 'line1\nline2\n',
+    });
+    expect(result!.captures[1]).toMatchObject({
+      category: 'generic',
+      multiline: false,
+      captured: '42',
+    });
+  });
 });
