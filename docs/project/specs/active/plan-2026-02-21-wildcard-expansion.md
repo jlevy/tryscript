@@ -90,8 +90,11 @@ Implement three features that work together to improve wildcard discipline:
      workflow flag.
    - `--expand-generic` — expand all unnamed wildcards: generic (`...`, `[..]`) plus
      unknown (`???`, `[??]`). Useful for auditing existing tests.
-   - `--expand-all` — expand everything, including named patterns like `[HASH]`. A
-     debugging/audit tool, not for committing.
+   - `--expand-all` — expand everything, including named patterns like `[HASH]`.
+     Useful for debugging (to see exactly what every pattern matched) and also for
+     refining tests to be less generic (replacing a `[..]` or `[HASH]` with the actual
+     literal value if it turns out to be stable). Whether to commit the result depends
+     on whether the expanded output is consistent and reliable across runs.
 
 3. **Capture log**: An optional YAML file (`--capture-log <path>`) that records, for
    every test block execution: the command, actual output, expected output, actual and
@@ -247,7 +250,7 @@ remote_key: [REMOTE_KEY]
 
 #### Full expansion (`--expand-all`)
 
-`--expand-all` also expands named patterns (for debugging/audit):
+`--expand-all` also expands named patterns:
 ```console
 $ cat data/model.bin.yref
 format: blobsy-yref/0.1
@@ -257,8 +260,16 @@ remote_key: 20260221T153007Z-7a3f0e9b2c1d/data/model.bin
 ? 0
 ```
 
-This is a debugging tool. The result should be reviewed, not committed, since it
-removes all named patterns.
+This is useful for two purposes:
+- **Debugging**: See exactly what every pattern matched, to understand test behavior.
+- **Refining tests**: If an expanded value turns out to be stable and consistent across
+  runs, you may want to commit the literal value instead of keeping the wildcard. For
+  example, a `[..]` that always matches the same string is a sign the wildcard was
+  unnecessary — replacing it with the literal makes the test more precise.
+
+Whether to commit the result of `--expand-all` depends on whether the expanded output is
+reliable across runs and environments. If it contains timestamps, PIDs, or other
+nondeterministic values, those need named patterns.
 
 ## Backward Compatibility
 
@@ -531,8 +542,8 @@ function expandExpectedOutput(
   last.
 - Command fails: still expand — error output is often the most important to capture.
 - Nondeterministic output after generic expansion: intended forcing function.
-- `--expand-all` expanding named patterns: replaces `[HASH]` with literal value. This
-  is meant for review, not committing.
+- `--expand-all` expanding named patterns: replaces `[HASH]` with literal value. May
+  be committed if the value is stable, or used for debugging and then reverted.
 
 #### File Rewriting (Expander)
 
@@ -641,8 +652,134 @@ existing `yaml` package (already a dependency for frontmatter parsing).
 1. **Unit tests** for `???`/`[??]` matching: verify they match identically to `...`/`[..]`
 2. **Unit tests** for expansion algorithm: multiple wildcards, mixed types, levels
 3. **Unit tests** for `matchAndCapture()`: correct type annotations on captures
-4. **Golden self-tests** (`.tryscript.md`): test `--expand` at each level
+4. **Golden self-tests** (`.tryscript.md`): comprehensive expansion session test
 5. **Capture log tests**: verify YAML output format and content
+
+### Golden Self-Test Design: Expansion Session
+
+The key self-test is a golden session test (`tests/expand.tryscript.md`) that
+demonstrates the full expansion workflow with diffs at each level. This test uses
+fixture files containing a mix of unknown, generic, and named wildcards, runs expansion
+at each level, and verifies via `diff` that the correct wildcards were expanded at each
+step.
+
+#### Fixture Files
+
+**`cli-fixtures/expand-source.md`** — A test file with all three wildcard categories.
+This is the "before" state. The test copies it into the sandbox and runs expand at each
+level.
+
+```markdown
+# Test: Deterministic output with unknown wildcards
+
+` ``console
+$ echo "hello world"
+???
+? 0
+` ``
+
+# Test: Deterministic output with single-line unknown
+
+` ``console
+$ echo "version 1.2.3"
+version [??]
+? 0
+` ``
+
+# Test: Deterministic output with generic wildcard
+
+` ``console
+$ printf "line 1\nline 2\nline 3\n"
+line 1
+...
+line 3
+? 0
+` ``
+
+# Test: Deterministic output with single-line generic
+
+` ``console
+$ echo "time: 42ms"
+time: [..]
+? 0
+` ``
+
+# Test: Deterministic output with named pattern
+
+` ``console
+$ echo "hash: abc123"
+hash: [HASH]
+? 0
+` ``
+
+# Test: Mixed unknown and generic
+
+` ``console
+$ printf "header\nfirst\nsecond\nfooter\n"
+header
+???
+footer
+? 0
+` ``
+
+# Test: Mixed unknown and named
+
+` ``console
+$ echo "id: abc123 status: ok"
+id: [HASH] status: [??]
+? 0
+` ``
+```
+
+(Note: backticks in the fixture above are shown with a space for readability in this
+spec. The actual fixture files use proper markdown fencing.)
+
+**`cli-fixtures/expand-expected-after-unknown.md`** — Expected state after
+`--expand` (only `???` and `[??]` filled).
+
+**`cli-fixtures/expand-expected-after-generic.md`** — Expected state after
+`--expand-generic` (unknown + generic filled, named preserved).
+
+**`cli-fixtures/expand-expected-after-all.md`** — Expected state after
+`--expand-all` (everything filled).
+
+#### The Golden Session Test
+
+The `tests/expand.tryscript.md` test runs the following session:
+
+1. **Copy fixture to sandbox** (via frontmatter fixtures)
+2. **Run `--expand` on the fixture** (unknown wildcards only)
+3. **Diff the file** to verify only `???` and `[??]` were replaced
+4. **Restore the original** and **run `--expand-generic`**
+5. **Diff again** to verify `...` and `[..]` are now also replaced
+6. **Restore** and **run `--expand-all`**
+7. **Diff again** to verify `[HASH]` (named) is now also replaced
+8. **Verify the expansion summary output** at each level
+
+The diffs at each level demonstrate the progressive expansion — each flag targets a
+broader set of wildcards:
+
+- After `--expand`: `???` -> `"first\nsecond"`, `[??]` -> `"1.2.3"`, `"ok"`. Generic
+  and named wildcards unchanged.
+- After `--expand-generic`: additionally `...` -> `"line 2"`, `[..]` -> `"42ms"`.
+  Named wildcards unchanged.
+- After `--expand-all`: additionally `[HASH]` -> `"abc123"`.
+
+This test structure validates:
+- Correct wildcard targeting at each level
+- Surgical replacement (surrounding literal text preserved)
+- Mixed wildcards in the same block handled correctly
+- The expand summary shows correct counts
+- Files are modified in place (same as `--update`)
+
+#### Additional Golden Tests
+
+- **`tests/expand-warning.tryscript.md`**: Run a fixture with `???` without `--expand`,
+  verify the warning message appears in output.
+- **`tests/expand-mutual-exclusion.tryscript.md`**: Verify that combining `--expand`
+  with `--expand-generic`, `--expand-all`, or `--update` produces an error.
+- **`tests/expand-no-change.tryscript.md`**: Run `--expand` on a file with only generic
+  and named wildcards (no `???`/`[??]`), verify no modifications.
 
 ## Stage 3: Implementation Phases
 
@@ -659,7 +796,7 @@ Add `???` and `[??]` as recognized patterns.
 
 ### Phase 2: Expansion Infrastructure
 
-Core expansion algorithm and `--expand` flag.
+Core expansion algorithm and expansion flags.
 
 - [ ] Add `matchAndCapture()` to `matcher.ts` — capturing-group variant that annotates
   captures by wildcard category
@@ -674,7 +811,19 @@ Core expansion algorithm and `--expand` flag.
 - [ ] Handle edge cases: multiple wildcards, wildcards at start/end, failed commands
 - [ ] Add expansion summary output ("Expanded N wildcards across M files")
 - [ ] Write unit tests for expansion algorithm at each level
-- [ ] Write golden self-tests for `--expand`
+- [ ] Create fixture files for expansion testing:
+  - `cli-fixtures/expand-source.md` (all wildcard types)
+  - `cli-fixtures/expand-expected-after-unknown.md`
+  - `cli-fixtures/expand-expected-after-generic.md`
+  - `cli-fixtures/expand-expected-after-all.md`
+- [ ] Write `tests/expand.tryscript.md` golden session test:
+  - Copy fixture, run `--expand`, diff to verify only unknown wildcards expanded
+  - Restore, run `--expand-generic`, diff to verify generic + unknown expanded
+  - Restore, run `--expand-all`, diff to verify all wildcards expanded
+  - Verify expansion summary counts at each level
+- [ ] Write `tests/expand-mutual-exclusion.tryscript.md` — verify flag conflicts error
+- [ ] Write `tests/expand-no-change.tryscript.md` — verify `--expand` is a no-op when
+  no unknown wildcards present
 
 ### Phase 3: Warning and Capture Log
 
@@ -682,12 +831,14 @@ Unknown wildcard warning and execution detail logging.
 
 - [ ] Implement unknown wildcard counting (scan `expectedOutput` for `???` and `[??]`)
 - [ ] Print warning after run if unknown wildcards present
+- [ ] Write `tests/expand-warning.tryscript.md` — verify warning appears when `???`
+  present in normal run
 - [ ] Create `src/lib/capture-log.ts` with YAML generation
 - [ ] Add `--capture-log <path>` option to run command
 - [ ] Capture command, actual/expected output, exit codes, wildcard captures per block
 - [ ] Include all wildcard categories (unknown, generic, named) in captures
 - [ ] Write to YAML file atomically (using `atomically` library)
-- [ ] Write tests for warning and capture log output
+- [ ] Write tests for capture log output format
 
 ### Phase 4: Documentation
 
