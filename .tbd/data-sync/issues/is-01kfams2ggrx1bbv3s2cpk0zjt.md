@@ -1,24 +1,24 @@
 ---
-close_reason: null
-closed_at: null
-created_at: 2026-01-03T20:13:27.568Z
-deferred_until: null
+type: is
+id: is-01kfams2ggrx1bbv3s2cpk0zjt
+title: Parser doesn't support extended fences (4+ backticks) for nesting code blocks
+kind: bug
+status: closed
+priority: 3
+version: 3
+labels: []
 dependencies: []
+parent_id: null
 due_date: null
+deferred_until: null
+created_at: 2026-01-03T20:13:27.568Z
+updated_at: 2026-02-22T00:21:26.055Z
+closed_at: 2026-02-22T00:21:26.053Z
+close_reason: "Fixed in PR #42: parser supports 4+ backtick extended fences"
 extensions:
   beads:
     imported_at: 2026-01-19T08:08:41.799Z
     original_id: tryscript-319
-id: is-01kfams2ggrx1bbv3s2cpk0zjt
-kind: bug
-labels: []
-parent_id: null
-priority: 3
-status: open
-title: Parser doesn't support extended fences (4+ backticks) for nesting code blocks
-type: is
-updated_at: 2026-01-03T20:13:42.253Z
-version: 1
 ---
 The parser regex `/```(console|bash)\r?\n([\s\S]*?)```/g` matches exactly 3 backticks and doesn't support extended fences (4+ backticks like ````console).
 
