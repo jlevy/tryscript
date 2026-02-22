@@ -173,16 +173,17 @@ export async function expandTestFile(
     }
 
     // Rebuild the block with expanded expected output
+    const fence = '`'.repeat(/^(`+)/.exec(block.rawContent)?.[1]?.length ?? 3);
     const commandLines = block.command.split('\n').map((line, i) => {
       return i === 0 ? `$ ${line}` : `> ${line}`;
     });
 
-    const lines: string[] = ['```console', ...commandLines];
+    const lines: string[] = [`${fence}console`, ...commandLines];
     const trimmedOutput = expansion.expandedOutput.trimEnd();
     if (trimmedOutput) {
       lines.push(trimmedOutput);
     }
-    lines.push(`? ${block.expectedExitCode ?? result.actualExitCode}`, '```');
+    lines.push(`? ${block.expectedExitCode ?? result.actualExitCode}`, fence);
 
     const newBlockContent = lines.join('\n');
     const blockStart = content.indexOf(block.rawContent);
