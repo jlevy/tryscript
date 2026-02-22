@@ -1,5 +1,11 @@
 # tryscript
 
+## 0.1.7
+
+### Patch Changes
+
+- 9f93f08: Wildcard expansion, unknown wildcards, capture log, extended fence parsing, and update block alignment fixes
+
 ## 0.1.6
 
 ### Patch Changes
