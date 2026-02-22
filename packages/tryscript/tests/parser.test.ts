@@ -75,6 +75,58 @@ line 2
     expect(result.blocks[0]?.command).toBe('echo "line 1" &&  echo "line 2"');
   });
 
+  it('should parse extended fences (4+ backticks)', () => {
+    const content = `# Test: Extended fences
+
+\`\`\`\`console
+$ echo hello
+hello
+? 0
+\`\`\`\`
+`;
+
+    const result = parseTestFile(content, '/test/file.tryscript.md');
+
+    expect(result.blocks).toHaveLength(1);
+    expect(result.blocks[0]?.command).toBe('echo hello');
+    expect(result.blocks[0]?.expectedOutput).toBe('hello\n');
+    expect(result.blocks[0]?.expectedExitCode).toBe(0);
+  });
+
+  it('should handle nested triple backticks inside extended fences', () => {
+    const content = `# Test: Nested backticks
+
+\`\`\`\`console
+$ echo "\`\`\`"
+\`\`\`
+? 0
+\`\`\`\`
+`;
+
+    const result = parseTestFile(content, '/test/file.tryscript.md');
+
+    expect(result.blocks).toHaveLength(1);
+    expect(result.blocks[0]?.expectedOutput).toBe('```\n');
+  });
+
+  it('should not close extended fence with fewer backticks', () => {
+    const content = `# Test: Extended fence not closed early
+
+\`\`\`\`\`console
+$ echo test
+\`\`\`
+\`\`\`\`
+still output
+? 0
+\`\`\`\`\`
+`;
+
+    const result = parseTestFile(content, '/test/file.tryscript.md');
+
+    expect(result.blocks).toHaveLength(1);
+    expect(result.blocks[0]?.expectedOutput).toBe('```\n````\nstill output\n');
+  });
+
   it('should handle empty expected output', () => {
     const content = `# Test: No output
 

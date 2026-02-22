@@ -200,6 +200,82 @@ wrong2
     expect(newContent).not.toContain('wrong2');
   });
 
+  it('aligns results by block identity when only a subset ran', async () => {
+    const content = `# Test 1
+
+\`\`\`console
+$ echo first
+wrong1
+? 0
+\`\`\`
+
+# Test 2
+
+\`\`\`console
+$ echo second
+wrong2
+? 0
+\`\`\`
+`;
+    const filePath = join(tempDir, 'test.tryscript.md');
+    await writeFile(filePath, content);
+
+    const testFile = parseTestFile(content, filePath);
+
+    // Simulate --filter: only the second block ran and failed
+    const secondBlock = getBlock(testFile.blocks, 1);
+    const results: TestBlockResult[] = [
+      {
+        block: secondBlock,
+        passed: false,
+        actualOutput: 'two\n',
+        actualExitCode: 0,
+        duration: 10,
+      },
+    ];
+
+    const { updated, changes } = await updateTestFile(testFile, results);
+    expect(updated).toBe(true);
+    expect(changes).toEqual(['Test 2']);
+
+    const newContent = await readFile(filePath, 'utf-8');
+    expect(newContent).toContain('wrong1');
+    expect(newContent).toContain('two');
+    expect(newContent).not.toContain('wrong2');
+  });
+
+  it('preserves extended fence length when updating', async () => {
+    const content = `# Test
+
+\`\`\`\`console
+$ echo hello
+wrong
+? 0
+\`\`\`\`
+`;
+    const filePath = join(tempDir, 'test.tryscript.md');
+    await writeFile(filePath, content);
+
+    const testFile = parseTestFile(content, filePath);
+    const results: TestBlockResult[] = [
+      {
+        block: getBlock(testFile.blocks, 0),
+        passed: false,
+        actualOutput: 'hello\n',
+        actualExitCode: 0,
+        duration: 10,
+      },
+    ];
+
+    const { updated } = await updateTestFile(testFile, results);
+    expect(updated).toBe(true);
+
+    const newContent = await readFile(filePath, 'utf-8');
+    expect(newContent).toContain('````console');
+    expect(newContent).toContain('hello');
+    expect(newContent).not.toContain('wrong');
+  });
+
   it('preserves frontmatter', async () => {
     const content = `---
 env:

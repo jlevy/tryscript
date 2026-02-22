@@ -4,9 +4,6 @@ import type { TestConfig, TestBlock, TestFile } from './types.js';
 /** Regex to match YAML frontmatter at the start of a file */
 const FRONTMATTER_REGEX = /^---\r?\n([\s\S]*?)\r?\n---\r?\n/;
 
-/** Regex to match fenced code blocks with console/bash info string */
-const CODE_BLOCK_REGEX = /```(console|bash)\r?\n([\s\S]*?)```/g;
-
 /** Regex to match markdown headings (for test names) */
 const HEADING_REGEX = /^#+\s+(?:Test:\s*)?(.+)$/m;
 
@@ -15,6 +12,72 @@ const SKIP_ANNOTATION_REGEX = /<!--\s*skip\s*-->/i;
 
 /** Regex to match only annotation in heading or nearby HTML comment */
 const ONLY_ANNOTATION_REGEX = /<!--\s*only\s*-->/i;
+
+interface CodeBlockMatch {
+  fullMatch: string;
+  infoString: string;
+  content: string;
+  index: number;
+}
+
+/**
+ * Find console/bash fenced code blocks, supporting extended fences (4+ backticks).
+ *
+ * Extended fences allow embedding triple-backtick blocks in expected output.
+ * A closing fence must have at least as many backticks as the opening fence
+ * (per CommonMark spec).
+ */
+function findConsoleCodeBlocks(text: string): CodeBlockMatch[] {
+  const results: CodeBlockMatch[] = [];
+  const lines = text.split('\n');
+
+  const offsets: number[] = new Array<number>(lines.length);
+  offsets[0] = 0;
+  for (let j = 1; j < lines.length; j++) {
+    offsets[j] = offsets[j - 1]! + lines[j - 1]!.length + 1;
+  }
+
+  let i = 0;
+  while (i < lines.length) {
+    const line = lines[i]!;
+    const trimmed = line.endsWith('\r') ? line.slice(0, -1) : line;
+    const openMatch = /^(`{3,})(console|bash)\s*$/.exec(trimmed);
+
+    if (!openMatch) {
+      i++;
+      continue;
+    }
+
+    const fenceLen = openMatch[1]!.length;
+    const infoString = openMatch[2]!;
+    const openLineIdx = i;
+    const closingRe = new RegExp(`^\`{${fenceLen},}\\s*$`);
+
+    i++;
+    while (i < lines.length) {
+      const cur = lines[i]!;
+      const curTrimmed = cur.endsWith('\r') ? cur.slice(0, -1) : cur;
+      if (closingRe.test(curTrimmed)) {
+        const startOffset = offsets[openLineIdx]!;
+        const endOffset = offsets[i]! + lines[i]!.length;
+        const contentStart = offsets[openLineIdx + 1]!;
+        const contentEnd = offsets[i]!;
+
+        results.push({
+          fullMatch: text.slice(startOffset, endOffset),
+          infoString,
+          content: text.slice(contentStart, contentEnd),
+          index: startOffset,
+        });
+        i++;
+        break;
+      }
+      i++;
+    }
+  }
+
+  return results;
+}
 
 /**
  * Parse a .tryscript.md file into structured test data.
@@ -32,19 +95,16 @@ export function parseTestFile(content: string, filePath: string): TestFile {
     body = content.slice(frontmatterMatch[0].length);
   }
 
-  // Parse all console blocks
+  // Parse all console blocks (supports extended fences with 4+ backticks)
   const blocks: TestBlock[] = [];
+  const codeBlocks = findConsoleCodeBlocks(body);
 
-  // Reset regex lastIndex
-  CODE_BLOCK_REGEX.lastIndex = 0;
-
-  let match: RegExpExecArray | null;
-  while ((match = CODE_BLOCK_REGEX.exec(body)) !== null) {
-    const blockContent = match[2] ?? '';
-    const blockStart = match.index;
+  for (const codeBlock of codeBlocks) {
+    const blockContent = codeBlock.content;
+    const blockStart = codeBlock.index;
 
     // Find the line number (1-indexed)
-    const precedingContent = content.slice(0, content.indexOf(match[0]));
+    const precedingContent = content.slice(0, content.indexOf(codeBlock.fullMatch));
     const lineNumber = precedingContent.split('\n').length;
 
     // Look for a heading before this block (for test name)
@@ -71,7 +131,7 @@ export function parseTestFile(content: string, filePath: string): TestFile {
         expectedStderr: parsed.expectedStderr,
         expectedExitCode: parsed.expectedExitCode,
         lineNumber,
-        rawContent: match[0],
+        rawContent: codeBlock.fullMatch,
         skip,
         only,
       });

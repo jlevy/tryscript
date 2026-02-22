@@ -11,9 +11,12 @@ export async function updateTestFile(
   let content = file.rawContent;
   const changes: string[] = [];
 
+  // Map by block identity so update works correctly with --filter/<!-- only -->
+  // where `results` can be a strict subset of `file.blocks`.
+  const resultByBlock = new Map(results.map((result) => [result.block, result]));
   // Process blocks in reverse order to maintain correct offsets
-  const blocksWithResults = file.blocks
-    .map((block, i) => ({ block, result: results[i] }))
+  const blocksWithResults = [...file.blocks]
+    .map((block) => ({ block, result: resultByBlock.get(block) }))
     .reverse();
 
   for (const { block, result } of blocksWithResults) {
@@ -56,13 +59,15 @@ export async function updateTestFile(
  * Build an updated console block with new expected output.
  */
 function buildUpdatedBlock(block: TestBlock, result: TestBlockResult): string {
+  const fence = '`'.repeat(/^(`+)/.exec(block.rawContent)?.[1]?.length ?? 3);
+
   // Reconstruct the command line(s)
   const commandLines = block.command.split('\n').map((line, i) => {
     return i === 0 ? `$ ${line}` : `> ${line}`;
   });
 
   // Build the block
-  const lines: string[] = ['```console', ...commandLines];
+  const lines: string[] = [`${fence}console`, ...commandLines];
 
   // Add output if present
   const trimmedOutput = result.actualOutput.trimEnd();
@@ -71,7 +76,7 @@ function buildUpdatedBlock(block: TestBlock, result: TestBlockResult): string {
   }
 
   // Add exit code
-  lines.push(`? ${result.actualExitCode}`, '```');
+  lines.push(`? ${result.actualExitCode}`, fence);
 
   return lines.join('\n');
 }
