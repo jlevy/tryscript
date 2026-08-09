@@ -62,12 +62,31 @@ $ date +%Y
 ## Command Block Syntax
 
 ```
-$ command [arguments...]     # Command to execute (required)
+$ command [arguments...]     # Command to execute (required, exactly one per block)
 > continuation line          # Multi-line command continuation
 expected output              # Expected stdout (line by line)
 ! stderr line                # Expected stderr (when separating streams)
+!                            # A bare `!` is an empty expected stderr line
 ? exit_code                  # Expected exit code (default: 0)
 ```
+
+A block holds **one** command. A second `$ ` prompt is a parse error rather than
+being joined onto the first, which would run an invocation nobody wrote; put the
+next command in its own block. `? ` accepts one non-negative integer, and a value
+that is not one is also a parse error.
+
+Write a blank expected stderr line as a bare `!`. The older `! ` spelling still
+works, but it depends on trailing whitespace that editors and formatters strip.
+
+Parse errors name the file and line, and fail the run without executing the file:
+
+```
+path/to/file.tryscript.md:6: a console block may contain only one `$ ` command prompt;
+put the second command in its own console block
+```
+
+Exit codes follow the shell convention: a command terminated by a signal reports
+`128 + signal`, so a process killed by SIGKILL reports 137 rather than passing as 0.
 
 ### Examples
 

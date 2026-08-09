@@ -244,6 +244,100 @@ distinguishes them.
 (`eslint` 9→10, `typescript` 5→7, `@types/node` 22→26) are out of scope for a patch
 release and each needs its own pass.
 
+## Round 2: Findings from Senior Review
+
+A full-diff review at head `1944356` raised six further issues, all confirmed by
+reproduction before being fixed. Two were release blockers.
+
+| ID | Sev | Summary | Site |
+| --- | --- | --- | --- |
+| R1 | S1 | Signal numbers hard-coded to Linux values, so B2 reports wrong codes off-Linux | `runner.ts` |
+| R2 | S1 | Auto-executed `npx get-tbd@0.4.2` bypasses the new cool-off gate | `.claude/`, `.codex/` hooks |
+| R3 | S3 | Validation missed `coverage` and nested keys; warning dropped the path | `parser.ts`, `types.ts` |
+| R4 | S2 | `--expand` could not expand a wildcard living only in stderr | `expander.ts` |
+| R5 | S2 | `TestBlock` gained required fields, breaking the public API in a patch | `types.ts` |
+| R6 | S4 | The validator warned on the project's own golden files (stale `bin` key) | tests, docs |
+
+### R1 — Signal numbers are platform-specific
+
+The `SIGNAL_NUMBERS` table used Linux values. `SIGUSR1` is 10 on Linux but 30 on
+macOS, and `SIGBUS` is 7 and 10 respectively, so the shell-compatible code was wrong
+on every platform except the one the table was written on. Worse, unlisted signals
+mapped to `128 + 0`, so a process killed by SIGUSR1 could satisfy an expectation
+of exactly 128.
+
+**Fix:** read `os.constants.signals[signal]` at runtime. An unresolvable signal now
+returns 1 rather than 128, so it cannot be mistaken for a genuine `128 + 0`. Tests
+assert against `os.constants` rather than literals, so they are meaningful on any
+platform, and an end-to-end spawn test keeps the helper aligned with real
+child-process behavior.
+
+### R2 — The cool-off gate did not cover the highest-impact path
+
+Session hooks ran `npx --yes get-tbd@0.4.2` automatically on session start and after
+a push. That version was published 2026-07-30, inside the 14-day window, and `npx`
+resolves outside the pnpm lockfile and `minimumReleaseAge` entirely. The policy
+therefore did not protect the one path that downloads and executes code
+automatically — and the claim that no exceptions were taken was inaccurate.
+
+**Fix:** pinned to `get-tbd@0.4.1` (published 2026-07-18, eligible), verified to read
+this repository's `.tbd` data and run `prime` successfully. No exception is taken, so
+the "no exceptions" claim now holds.
+
+Note this pin is on generated tooling: a future `tbd setup` will rewrite these hooks
+to whatever version is current, which may reintroduce an ineligible pin. A durable
+fix belongs upstream in tbd's hook generation.
+
+### R3 — Validation had gaps and dropped the path
+
+`coverage` was allowlisted by hand but never validated, and nested objects were
+non-strict, so both `{coverage: "wrong"}` and a `dst`-for-`dest` fixture typo
+returned no warnings. The CLI also discarded `ConfigWarning.path`.
+
+**Fix:** one authoritative `FrontmatterSchema` composed from `TestConfigSchema` and
+`CoverageConfigSchema`, strict at every level, replacing the hand-maintained
+allowlist that could drift from the schema. Warnings now carry and print the full
+path.
+
+### R4 — `--expand` coupled the two streams
+
+The loop skipped a block with empty `expectedOutput` and required a stdout expansion
+before evaluating stderr, so a block whose only wildcard was `! [??]` was never
+expanded, as was one with literal stdout plus a stderr wildcard.
+
+**Fix:** expand each stream independently and write an edit when either expands,
+falling back to the block's existing text for the stream that did not.
+
+### R5 — A patch release must not strengthen an exported type
+
+`startOffset`, `endOffset`, and `infoString` were added as **required** fields to the
+exported `TestBlock`, which is accepted by exported helpers like `runBlock`. Existing
+TypeScript consumers constructing a `TestBlock` would stop compiling — a breaking
+change in a patch, contradicting the changeset.
+
+**Fix:** the three fields are optional on the public `TestBlock`; a new
+`ParsedTestBlock` requires them and is what the rewrite path consumes. `asParsedBlock`
+narrows at the boundary and throws a clear error rather than falling back to locating
+blocks by text, which is the ambiguity B1 removed. A compile-time test pins the
+v0.1.7 consumer shape so a patch cannot silently strengthen it again.
+`buildBlock`/`spliceBlocks`/`fenceOf` are no longer exported.
+
+### R6 — The validator warned on the project's own files
+
+`bin` is not in the schema and is unused by the runtime, but two golden files and
+`docs/development.md` still set it, so the "unchanged 124-block suite" was emitting
+warnings. Removed from both files and the guide, and the reference now documents the
+parse-error and bare-`!` semantics. A regression test asserts `bin` is still flagged
+so it cannot quietly return.
+
+## Tracked Separately
+
+- **CJS build is broken on Node 20** — `require('dist/index.cjs')` throws
+  `ERR_REQUIRE_ESM` at `require("strip-ansi")`, reproducible on `main` as well as this
+  branch, so it predates this work and is not counted here. The package advertises a
+  `require` export and `node >=20`, so this needs packed-artifact ESM/CJS smoke tests
+  on the minimum supported Node before the next release. Tracked as `try-8k80`.
+
 ## Release Plan
 
 1. Fix B1-B12 with a regression test per fix.

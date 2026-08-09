@@ -1,9 +1,10 @@
 import { writeFile } from 'atomically';
-import { buildBlock, spliceBlocks } from './block-writer.js';
+import { asParsedBlock, buildBlock, spliceBlocks } from './block-writer.js';
 import { matchAndCapture, normalizeOutput } from './matcher.js';
 import type {
   ExpandLevel,
   ExpansionResult,
+  ParsedTestBlock,
   TestFile,
   TestBlockResult,
   WildcardCategory,
@@ -145,7 +146,7 @@ export async function expandTestFile(
   customPatterns?: Record<string, string | RegExp>,
 ): Promise<{ expanded: boolean; expandedCount: number; changes: string[] }> {
   const changes: string[] = [];
-  const edits: { block: (typeof file.blocks)[number]; replacement: string }[] = [];
+  const edits: { block: ParsedTestBlock; replacement: string }[] = [];
   let totalExpanded = 0;
 
   // Map by block identity so expansion works correctly with --filter/<!-- only -->
@@ -154,7 +155,7 @@ export async function expandTestFile(
 
   for (const block of file.blocks) {
     const result = resultByBlock.get(block);
-    if (!result || !block.expectedOutput) {
+    if (!result) {
       continue;
     }
 
@@ -163,43 +164,44 @@ export async function expandTestFile(
     const separateStderr = block.expectedStderr !== undefined;
     const actualForOutput = separateStderr ? (result.actualStdout ?? '') : result.actualOutput;
 
-    const expansion = expandExpectedOutput(
-      block.expectedOutput,
-      actualForOutput,
-      context,
-      level,
-      customPatterns,
-    );
+    // Expand each stream independently: a block whose only wildcard lives in its
+    // stderr assertion must still be expanded, and so must one whose stdout is
+    // literal. Coupling them would make either case silently do nothing.
+    const outputExpansion = block.expectedOutput
+      ? expandExpectedOutput(block.expectedOutput, actualForOutput, context, level, customPatterns)
+      : null;
 
-    if (!expansion || expansion.expandedCount === 0) {
+    const stderrExpansion = separateStderr
+      ? expandExpectedOutput(
+          block.expectedStderr ?? '',
+          result.actualStderr ?? '',
+          context,
+          level,
+          customPatterns,
+        )
+      : null;
+
+    const expandedCount =
+      (outputExpansion?.expandedCount ?? 0) + (stderrExpansion?.expandedCount ?? 0);
+    if (expandedCount === 0) {
       continue;
     }
 
-    let expandedStderr: string | undefined;
-    if (separateStderr) {
-      // Keep the block's stderr assertions; expand them too when they match.
-      const stderrExpansion = expandExpectedOutput(
-        block.expectedStderr ?? '',
-        result.actualStderr ?? '',
-        context,
-        level,
-        customPatterns,
-      );
-      expandedStderr = stderrExpansion?.expandedOutput ?? block.expectedStderr;
-      totalExpanded += stderrExpansion?.expandedCount ?? 0;
-    }
-
     edits.push({
-      block,
-      replacement: buildBlock(block, {
-        output: expansion.expandedOutput,
-        stderr: expandedStderr,
+      block: asParsedBlock(block),
+      replacement: buildBlock(asParsedBlock(block), {
+        // Fall back to the block's existing text for a stream that did not expand,
+        // so writing one stream never discards the other.
+        output: outputExpansion?.expandedOutput ?? block.expectedOutput,
+        stderr: separateStderr
+          ? (stderrExpansion?.expandedOutput ?? block.expectedStderr)
+          : undefined,
         exitCode: block.expectedExitCode ?? result.actualExitCode,
       }),
     });
 
     changes.push(block.name ?? `Line ${block.lineNumber}`);
-    totalExpanded += expansion.expandedCount;
+    totalExpanded += expandedCount;
   }
 
   if (edits.length === 0) {

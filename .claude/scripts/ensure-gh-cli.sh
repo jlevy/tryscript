@@ -65,11 +65,11 @@ else
     if [ "$OS" = "darwin" ]; then
         PLATFORM="macOS_${ARCH}.zip"
         ARCHIVE_EXT="zip"
-        EXTRACT_DIR="/tmp/gh_${GH_VERSION}_macOS_${ARCH}"
+        EXTRACT_SUBDIR="gh_${GH_VERSION}_macOS_${ARCH}"
     else
         PLATFORM="${OS}_${ARCH}.tar.gz"
         ARCHIVE_EXT="tar.gz"
-        EXTRACT_DIR="/tmp/gh_${GH_VERSION}_${OS}_${ARCH}"
+        EXTRACT_SUBDIR="gh_${GH_VERSION}_${OS}_${ARCH}"
     fi
 
     echo "[gh] Detected platform: ${PLATFORM}"
@@ -84,45 +84,55 @@ else
     ASSET="gh_${GH_VERSION}_${PLATFORM}"
     DOWNLOAD_URL="https://github.com/cli/cli/releases/download/v${GH_VERSION}/${ASSET}"
 
+    # Private working directory rather than predictable /tmp/gh_* paths: those
+    # collide between concurrent sessions and are open to local symlink attacks.
+    WORKDIR=$(mktemp -d "${TMPDIR:-/tmp}/ensure-gh-cli.XXXXXXXX") || {
+        echo "[gh] ERROR: could not create a temporary directory"
+        exit 1
+    }
+    trap 'rm -rf "$WORKDIR"' EXIT
+    EXTRACT_DIR="${WORKDIR}/${EXTRACT_SUBDIR}"
+
     echo "[gh] Downloading from ${DOWNLOAD_URL}..."
-    if ! curl -fsSL -o "/tmp/${ASSET}" "$DOWNLOAD_URL"; then
+    if ! curl -fsSL -o "${WORKDIR}/${ASSET}" "$DOWNLOAD_URL"; then
         # Proxied remote sessions can intercept GitHub downloads with a proxy 403.
         # Retry once bypassing the proxy for GitHub hosts only; this succeeds when
         # the environment's egress policy allows direct GitHub connections.
         echo "[gh] Download failed (a session proxy may intercept GitHub); retrying with NO_PROXY for GitHub hosts..."
         NP="$(github_no_proxy)"
-        NO_PROXY="$NP" no_proxy="$NP" curl -fsSL --connect-timeout 15 -o "/tmp/${ASSET}" "$DOWNLOAD_URL"
+        NO_PROXY="$NP" no_proxy="$NP" curl -fsSL --connect-timeout 15 -o "${WORKDIR}/${ASSET}" "$DOWNLOAD_URL"
     fi
 
     # Verify the download against the pinned checksum before extracting.
     if command -v sha256sum &> /dev/null; then
-        ACTUAL=$(sha256sum "/tmp/${ASSET}" | awk '{print $1}')
+        ACTUAL=$(sha256sum "${WORKDIR}/${ASSET}" | awk '{print $1}')
     else
-        ACTUAL=$(shasum -a 256 "/tmp/${ASSET}" | awk '{print $1}')
+        ACTUAL=$(shasum -a 256 "${WORKDIR}/${ASSET}" | awk '{print $1}')
     fi
     if [ "$ACTUAL" != "$EXPECTED" ]; then
         echo "[gh] ERROR: checksum mismatch for ${ASSET}"
         echo "[gh]   expected ${EXPECTED}"
         echo "[gh]   actual   ${ACTUAL}"
-        rm -f "/tmp/${ASSET}"
         exit 1
     fi
     echo "[gh] Checksum verified for ${ASSET}"
 
     # Extract based on archive type
     if [ "$ARCHIVE_EXT" = "zip" ]; then
-        unzip -q "/tmp/${ASSET}" -d /tmp
+        unzip -q "${WORKDIR}/${ASSET}" -d "$WORKDIR"
     else
-        tar -xzf "/tmp/${ASSET}" -C /tmp
+        tar -xzf "${WORKDIR}/${ASSET}" -C "$WORKDIR"
     fi
 
     # Install to ~/.local/bin (works in cloud and local)
     mkdir -p ~/.local/bin
-    cp "${EXTRACT_DIR}/bin/gh" ~/.local/bin/gh
-    chmod +x ~/.local/bin/gh
+    # Install atomically via rename, so a concurrent session never observes a
+    # partially copied binary.
+    cp "${EXTRACT_DIR}/bin/gh" ~/.local/bin/.gh.$$
+    chmod +x ~/.local/bin/.gh.$$
+    mv -f ~/.local/bin/.gh.$$ ~/.local/bin/gh
 
-    # Clean up
-    rm -rf "${EXTRACT_DIR}" "/tmp/${ASSET}"
+    # WORKDIR is removed by the EXIT trap.
 
     echo "[gh] Installed to ~/.local/bin/gh"
 fi

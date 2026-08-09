@@ -3,10 +3,14 @@ import { z } from 'zod';
 /** Schema for fixture configuration */
 export const FixtureSchema = z.union([
   z.string().describe('Source path (copied to same name in temp)'),
-  z.object({
-    source: z.string().describe('Source path (relative to test file)'),
-    dest: z.string().optional().describe('Destination path (relative to temp dir)'),
-  }),
+  z
+    .object({
+      source: z.string().describe('Source path (relative to test file)'),
+      dest: z.string().optional().describe('Destination path (relative to temp dir)'),
+    })
+    // Strict: a misspelled nested key (`dst` for `dest`) would otherwise be stripped
+    // silently, leaving the fixture quietly misconfigured.
+    .strict(),
 ]);
 
 export const TestConfigSchema = z.object({
@@ -59,16 +63,33 @@ export interface TestBlock {
    *
    * Rewrites (`--update`, `--expand`) splice by offset rather than searching for
    * `rawContent`, so blocks with byte-identical source are still updated in place.
+   *
+   * Optional on the public type so that existing consumers constructing a
+   * `TestBlock` keep compiling; `parseTestFile` always populates it, and the rewrite
+   * path requires it via {@link ParsedTestBlock}.
    */
-  startOffset: number;
+  startOffset?: number;
   /** Offset just past this block's closing fence in the raw file content */
-  endOffset: number;
+  endOffset?: number;
   /** Fence info string as written (`console` or `bash`), preserved across rewrites */
-  infoString: string;
+  infoString?: string;
   /** Skip this test (from <!-- skip --> annotation) */
   skip?: boolean;
   /** Run only this test (from <!-- only --> annotation) */
   only?: boolean;
+}
+
+/**
+ * A block produced by `parseTestFile`, with source bookkeeping guaranteed present.
+ *
+ * The rewrite path (`--update`, `--expand`) needs the offsets and fence info string
+ * to splice safely. They are required here and optional on {@link TestBlock} so that
+ * strengthening the internal contract does not strengthen the public one.
+ */
+export interface ParsedTestBlock extends TestBlock {
+  startOffset: number;
+  endOffset: number;
+  infoString: string;
 }
 
 /**
@@ -140,35 +161,49 @@ export interface TestRunSummary {
  * Options mirror c8's CLI flags for maximum flexibility.
  * @see https://github.com/bcoe/c8 for c8 documentation
  */
-export const CoverageConfigSchema = z.object({
-  /** Output directory for coverage reports (default: 'coverage-tryscript') */
-  reportsDir: z.string().optional(),
-  /** Coverage reporters to use (default: ['text', 'html']) */
-  reporters: z.array(z.string()).optional(),
-  /** File patterns to include in coverage (default: ['dist/**']) */
-  include: z.array(z.string()).optional(),
-  /** File patterns to exclude from coverage (c8 --exclude) */
-  exclude: z.array(z.string()).optional(),
-  /** Exclude all node_modules folders (c8 --exclude-node-modules, default: true) */
-  excludeNodeModules: z.boolean().optional(),
-  /** Apply exclude logic after sourcemap remapping (c8 --exclude-after-remap) */
-  excludeAfterRemap: z.boolean().optional(),
-  /** Hide files with 100% coverage (c8 --skip-full) */
-  skipFull: z.boolean().optional(),
-  /** Allow files from outside cwd (c8 --allowExternal) */
-  allowExternal: z.boolean().optional(),
-  /** Source directory for sourcemap mapping (default: 'src') */
-  src: z.string().optional(),
-  /** Use monocart for more accurate line counts (c8 --experimental-monocart) */
-  monocart: z.boolean().optional(),
-  /** Path to external LCOV file to merge (e.g., vitest coverage output) */
-  mergeLcov: z.string().optional(),
-});
+export const CoverageConfigSchema = z
+  .object({
+    /** Output directory for coverage reports (default: 'coverage-tryscript') */
+    reportsDir: z.string().optional(),
+    /** Coverage reporters to use (default: ['text', 'html']) */
+    reporters: z.array(z.string()).optional(),
+    /** File patterns to include in coverage (default: ['dist/**']) */
+    include: z.array(z.string()).optional(),
+    /** File patterns to exclude from coverage (c8 --exclude) */
+    exclude: z.array(z.string()).optional(),
+    /** Exclude all node_modules folders (c8 --exclude-node-modules, default: true) */
+    excludeNodeModules: z.boolean().optional(),
+    /** Apply exclude logic after sourcemap remapping (c8 --exclude-after-remap) */
+    excludeAfterRemap: z.boolean().optional(),
+    /** Hide files with 100% coverage (c8 --skip-full) */
+    skipFull: z.boolean().optional(),
+    /** Allow files from outside cwd (c8 --allowExternal) */
+    allowExternal: z.boolean().optional(),
+    /** Source directory for sourcemap mapping (default: 'src') */
+    src: z.string().optional(),
+    /** Use monocart for more accurate line counts (c8 --experimental-monocart) */
+    monocart: z.boolean().optional(),
+    /** Path to external LCOV file to merge (e.g., vitest coverage output) */
+    mergeLcov: z.string().optional(),
+  })
+  .strict();
 
 /**
  * Coverage configuration options.
  */
 export type CoverageConfig = z.infer<typeof CoverageConfigSchema>;
+
+/**
+ * The single authoritative schema for validating frontmatter and config files.
+ *
+ * `TestConfigSchema` stays non-strict because it also describes the merged runtime
+ * config; this composition adds `coverage` and rejects unknown keys, so validation
+ * has one source of truth instead of a hand-maintained allowlist that could drift
+ * from the schema.
+ */
+export const FrontmatterSchema = TestConfigSchema.extend({
+  coverage: CoverageConfigSchema.optional(),
+}).strict();
 
 /**
  * Runtime context for coverage collection during test execution.

@@ -45,6 +45,20 @@ Frontmatter was cast without validation, so a typo like `sandbx: true` was silen
 ignored. Unknown and mistyped keys are now reported as warnings. They are warnings, not
 errors, so existing files keep running.
 
+**Exit codes and platform correctness**
+
+A command terminated by a signal now reports `128 + signal`, with the signal number
+read from `node:os` at runtime rather than a hard-coded table, so the code is correct
+on every platform (`SIGUSR1` is 10 on Linux and 30 on macOS). A signal that cannot be
+resolved reports 1, never a bare 128 that could be mistaken for a real `128 + 0`.
+
+**Public API**
+
+`TestBlock` keeps its v0.1.7 shape: the parser bookkeeping fields added for the
+rewrite fix (`startOffset`, `endOffset`, `infoString`) are optional, so existing
+TypeScript consumers that construct a `TestBlock` still compile. The rewrite path uses
+a new `ParsedTestBlock` that requires them.
+
 **Dependencies**
 
 `diff` 8.0.2 → 8.0.4 (GHSA-73rr-hh4g-fpgx, DoS in `parsePatch`/`applyPatch`, hit on

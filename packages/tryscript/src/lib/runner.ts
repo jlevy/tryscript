@@ -1,7 +1,7 @@
 import { spawn } from 'node:child_process';
 import { existsSync } from 'node:fs';
 import { mkdtemp, realpath, rm, cp } from 'node:fs/promises';
-import { tmpdir } from 'node:os';
+import { constants as osConstants, tmpdir } from 'node:os';
 import { join, dirname, resolve, basename, delimiter } from 'node:path';
 import treeKill from 'tree-kill';
 import type { TestBlock, TestBlockResult } from './types.js';
@@ -273,26 +273,14 @@ interface CommandResult {
 }
 
 /**
- * Signal numbers for the shell's `128 + signal` exit convention.
+ * Exit code reported when a process was signalled but the signal number cannot be
+ * resolved on this platform.
  *
- * Only the signals a command is realistically terminated by are listed; anything
- * else falls back to 128, which still reports failure rather than success.
+ * Deliberately not `128`: that is a real `128 + 0` value, so returning it would be
+ * indistinguishable from a genuine result and could satisfy an expectation of 128.
+ * Any non-zero value is enough to keep a killed process from reading as success.
  */
-const SIGNAL_NUMBERS: Record<string, number> = {
-  SIGHUP: 1,
-  SIGINT: 2,
-  SIGQUIT: 3,
-  SIGILL: 4,
-  SIGTRAP: 5,
-  SIGABRT: 6,
-  SIGBUS: 7,
-  SIGFPE: 8,
-  SIGKILL: 9,
-  SIGSEGV: 11,
-  SIGPIPE: 13,
-  SIGALRM: 14,
-  SIGTERM: 15,
-};
+const UNKNOWN_SIGNAL_EXIT_CODE = 1;
 
 /**
  * Resolve a process exit code, mapping signal termination to `128 + signal`.
@@ -300,13 +288,19 @@ const SIGNAL_NUMBERS: Record<string, number> = {
  * Node reports `code === null` when a process is terminated by a signal. Treating
  * that as 0 makes a killed command look like a clean success, so a crashing CLI can
  * pass its own golden test.
+ *
+ * Signal numbers are platform-specific -- `SIGUSR1` is 10 on Linux and 30 on macOS,
+ * `SIGBUS` is 7 and 10 respectively -- so they are read from `node:os` at runtime
+ * rather than from a hard-coded table, which would report the wrong shell-compatible
+ * code everywhere except the platform it was written on.
  */
 export function exitCodeFor(code: number | null, signal: NodeJS.Signals | null): number {
   if (code !== null) {
     return code;
   }
   if (signal) {
-    return 128 + (SIGNAL_NUMBERS[signal] ?? 0);
+    const number = osConstants.signals[signal];
+    return typeof number === 'number' ? 128 + number : UNKNOWN_SIGNAL_EXIT_CODE;
   }
   return 0;
 }

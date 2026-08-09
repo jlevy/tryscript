@@ -300,7 +300,7 @@ blocks:
 
 ````markdown
 ---
-bin: ./my-cli
+sandbox: true
 env:
   NO_COLOR: "1"
 ---

@@ -1,6 +1,6 @@
 import { parse as parseYaml } from 'yaml';
 import type { TestConfig, TestBlock, TestFile } from './types.js';
-import { TestConfigSchema } from './types.js';
+import { FrontmatterSchema } from './types.js';
 
 /** Regex to match YAML frontmatter at the start of a file */
 const FRONTMATTER_REGEX = /^---\r?\n([\s\S]*?)\r?\n---\r?\n/;
@@ -126,29 +126,26 @@ export function validateConfig(raw: unknown): ConfigWarning[] {
     return [{ path: '', message: 'frontmatter must be a YAML mapping' }];
   }
 
-  const warnings: ConfigWarning[] = [];
-
-  // `coverage` is valid in a config file and harmless in frontmatter, so accept it
-  // here rather than reporting it as unknown.
-  const known = new Set([...Object.keys(TestConfigSchema.shape), 'coverage']);
-  for (const key of Object.keys(raw)) {
-    if (!known.has(key)) {
-      warnings.push({ path: key, message: `unknown config key '${key}'` });
-    }
+  const result = FrontmatterSchema.safeParse(raw);
+  if (result.success) {
+    return [];
   }
 
-  const result = TestConfigSchema.safeParse(raw);
-  if (!result.success) {
-    for (const issue of result.error.issues) {
-      const path = issue.path.join('.');
-      // Unknown keys are already reported above with a clearer message.
-      if (path && known.has(String(issue.path[0]))) {
-        warnings.push({ path, message: issue.message });
-      }
+  // Every warning comes from the schema, so nested objects and unknown keys are
+  // covered by the same rules as top-level ones.
+  return result.error.issues.map((issue) => {
+    const path = issue.path.join('.');
+    if (issue.code === 'unrecognized_keys') {
+      const keys = issue.keys.map((key) => `'${key}'`).join(', ');
+      return {
+        path: path ? `${path}.${issue.keys[0] ?? ''}` : (issue.keys[0] ?? ''),
+        message: path
+          ? `unknown config key(s) under '${path}': ${keys}`
+          : `unknown config key(s): ${keys}`,
+      };
     }
-  }
-
-  return warnings;
+    return { path, message: path ? `${path}: ${issue.message}` : issue.message };
+  });
 }
 
 /**
