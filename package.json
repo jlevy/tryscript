@@ -41,7 +41,7 @@
     "npm-check-updates": "^17.1.18",
     "prettier": "^3.9.6",
     "publint": "^0.3.22",
-    "tsdown": "^0.22.14",
+    "tsdown": "^0.21.10",
     "typescript": "^5.9.3",
     "typescript-eslint": "^8.65.0",
     "vitest": "^4.1.10"

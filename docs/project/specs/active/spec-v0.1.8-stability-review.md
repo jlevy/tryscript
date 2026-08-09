@@ -216,13 +216,29 @@ pnpm's blocking default (`esbuild` and `lefthook` are reported as ignored and ar
 allowlisted) — the build and full test suite pass without them, so there is nothing to
 gain by granting them.
 
-**One upgrade regression, caught and fixed.** tsdown 0.18 → 0.22 changed shebang
-handling: 0.22 preserves the `#!/usr/bin/env node` already in `src/bin.ts`, while the
-config also injected one via `banner`. The result was two `#!` lines in `dist/bin.mjs`,
-which is a syntax error — the built CLI failed to start at all, taking out 6 CLI
-integration tests and the entire golden suite. The redundant `banner` is removed.
-Worth noting that `pnpm build` reported this only as a `[DUPLICATE_SHEBANG]` warning and
-still exited 0; it was the test suite that made it a failure.
+**Two upgrade regressions, both caught and fixed.**
+
+- **Duplicate shebang.** tsdown began preserving the `#!/usr/bin/env node` already in
+  `src/bin.ts`, while the config also injected one via `banner`. Two `#!` lines is a
+  syntax error — the built CLI failed to start at all, taking out 6 CLI integration
+  tests and the entire golden suite. The redundant `banner` is removed. Note that
+  `pnpm build` reported this only as a `[DUPLICATE_SHEBANG]` warning and still exited 0;
+  the test suite is what turned it into a failure.
+- **tsdown 0.22 drops Node 20.** Its engines moved to `^22.18.0 || >=24.11.0`, and it
+  calls `Promise.withResolvers`, which does not exist on Node 20. tryscript declares
+  `engines: {"node": ">=20"}` and builds with `target: node20`, so taking 0.22 would have
+  meant the package could no longer be built on the oldest runtime it claims to support.
+  Pinned to **0.21.10** instead — the newest release still on `>=20.19.0`, published
+  2026-04-22 and cool-off eligible. Verified by running the full CI sequence
+  (`format:check`, `lint:check`, `build`, `publint`, `test:coverage`) under an actual
+  Node 20.20.2, the version CI uses.
+
+This one only surfaced in CI: the local toolchain runs Node 22, where the broken build
+succeeds. Auditing declared `engines` across the installed tree is not sufficient on its
+own either — `ast-kit@3.0.0` and `@babel/*@8` also declare `^22.18.0 || >=24.11.0` yet
+build fine on Node 20, so an `engine-strict` gate would fail the build for packages that
+actually work. Running the real build on the oldest supported Node is the check that
+distinguishes them.
 
 **Not changed.** Runtime majors are deferred (see above). Dev-dependency majors
 (`eslint` 9→10, `typescript` 5→7, `@types/node` 22→26) are out of scope for a patch
