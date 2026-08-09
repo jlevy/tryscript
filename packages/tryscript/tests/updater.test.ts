@@ -191,7 +191,9 @@ wrong2
 
     const { updated, changes } = await updateTestFile(testFile, results);
     expect(updated).toBe(true);
-    expect(changes).toEqual(['Test 2', 'Test 1']); // Reverse order
+    // Document order. Rewrites are spliced by source offset in descending order, so
+    // the reported list is no longer coupled to the order edits are applied in.
+    expect(changes).toEqual(['Test 1', 'Test 2']);
 
     const newContent = await readFile(filePath, 'utf-8');
     expect(newContent).toContain('one');

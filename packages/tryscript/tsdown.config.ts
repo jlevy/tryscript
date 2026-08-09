@@ -51,6 +51,7 @@ export default defineConfig({
   define: {
     __VERSION__: JSON.stringify(getGitVersion()),
   },
-  banner: ({ fileName }: { fileName: string }) =>
-    fileName.startsWith('bin.') ? '#!/usr/bin/env node\n' : '',
+  // No shebang banner: tsdown preserves the one already in `src/bin.ts`. Adding it
+  // here as well emits it twice, and a second `#!` line is a syntax error that breaks
+  // the built CLI outright.
 });

@@ -149,6 +149,9 @@ describe('expandTestFile', () => {
       expectedExitCode: 0,
       lineNumber: 5,
       rawContent: '```console\n$ echo hello\n[??]\n? 0\n```',
+      startOffset: 0,
+      endOffset: 41,
+      infoString: 'console',
       ...overrides,
     };
   }

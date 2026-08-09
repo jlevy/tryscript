@@ -178,7 +178,7 @@ export async function createExecutionContext(
       ...tryscriptEnvVars,
       // Custom PATH with config paths
       PATH: pathParts.join(delimiter),
-    } as Record<string, string>,
+    },
     timeout: config.timeout ?? DEFAULT_TIMEOUT,
     before: config.before,
     after: config.after,
@@ -273,6 +273,45 @@ interface CommandResult {
 }
 
 /**
+ * Signal numbers for the shell's `128 + signal` exit convention.
+ *
+ * Only the signals a command is realistically terminated by are listed; anything
+ * else falls back to 128, which still reports failure rather than success.
+ */
+const SIGNAL_NUMBERS: Record<string, number> = {
+  SIGHUP: 1,
+  SIGINT: 2,
+  SIGQUIT: 3,
+  SIGILL: 4,
+  SIGTRAP: 5,
+  SIGABRT: 6,
+  SIGBUS: 7,
+  SIGFPE: 8,
+  SIGKILL: 9,
+  SIGSEGV: 11,
+  SIGPIPE: 13,
+  SIGALRM: 14,
+  SIGTERM: 15,
+};
+
+/**
+ * Resolve a process exit code, mapping signal termination to `128 + signal`.
+ *
+ * Node reports `code === null` when a process is terminated by a signal. Treating
+ * that as 0 makes a killed command look like a clean success, so a crashing CLI can
+ * pass its own golden test.
+ */
+export function exitCodeFor(code: number | null, signal: NodeJS.Signals | null): number {
+  if (code !== null) {
+    return code;
+  }
+  if (signal) {
+    return 128 + (SIGNAL_NUMBERS[signal] ?? 0);
+  }
+  return 0;
+}
+
+/**
  * Execute a command and capture output.
  */
 async function executeCommand(command: string, ctx: ExecutionContext): Promise<CommandResult> {
@@ -280,7 +319,7 @@ async function executeCommand(command: string, ctx: ExecutionContext): Promise<C
     const proc = spawn(command, {
       shell: true,
       cwd: ctx.cwd,
-      env: ctx.env as NodeJS.ProcessEnv,
+      env: ctx.env,
       // Pipe both to capture
       stdio: ['ignore', 'pipe', 'pipe'],
     });
@@ -306,7 +345,7 @@ async function executeCommand(command: string, ctx: ExecutionContext): Promise<C
       reject(new Error(`Command timed out after ${ctx.timeout}ms`));
     }, ctx.timeout);
 
-    proc.on('close', (code) => {
+    proc.on('close', (code, signal) => {
       clearTimeout(timeoutId);
       const output = Buffer.concat(combinedChunks.map((c) => c.data)).toString('utf-8');
       const stdout = Buffer.concat(stdoutChunks).toString('utf-8');
@@ -315,7 +354,7 @@ async function executeCommand(command: string, ctx: ExecutionContext): Promise<C
         output,
         stdout,
         stderr,
-        exitCode: code ?? 0,
+        exitCode: exitCodeFor(code, signal),
       });
     });
 

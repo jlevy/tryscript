@@ -94,6 +94,12 @@ export function reportFile(result: TestFileResult, options: ReporterOptions): vo
           console.error('');
           console.error(blockResult.diff);
         }
+
+        if (options.diff && blockResult.stderrDiff) {
+          console.error('');
+          console.error(`    ${pc.bold('stderr:')}`);
+          console.error(blockResult.stderrDiff);
+        }
       }
     }
   }
@@ -112,6 +118,13 @@ export function reportSummary(summary: TestRunSummary, _options: ReporterOptions
   }
   if (summary.totalFailed > 0) {
     parts.push(pc.red(`${summary.totalFailed} failed`));
+  }
+  if (summary.parseErrors) {
+    const files = summary.parseErrors === 1 ? 'file' : 'files';
+    parts.push(pc.red(`${summary.parseErrors} unparsable ${files}`));
+  }
+  if (parts.length === 0) {
+    parts.push('no tests run');
   }
 
   const duration = formatDuration(summary.duration);

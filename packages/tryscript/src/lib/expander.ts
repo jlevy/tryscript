@@ -1,4 +1,5 @@
 import { writeFile } from 'atomically';
+import { buildBlock, spliceBlocks } from './block-writer.js';
 import { matchAndCapture, normalizeOutput } from './matcher.js';
 import type {
   ExpandLevel,
@@ -143,26 +144,28 @@ export async function expandTestFile(
   context: { root: string; cwd: string },
   customPatterns?: Record<string, string | RegExp>,
 ): Promise<{ expanded: boolean; expandedCount: number; changes: string[] }> {
-  let content = file.rawContent;
   const changes: string[] = [];
+  const edits: { block: (typeof file.blocks)[number]; replacement: string }[] = [];
   let totalExpanded = 0;
 
   // Map by block identity so expansion works correctly with --filter/<!-- only -->
   // where `results` can be a strict subset of `file.blocks`.
   const resultByBlock = new Map(results.map((result) => [result.block, result]));
-  // Process blocks in reverse order to maintain correct offsets
-  const blocksWithResults = [...file.blocks]
-    .map((block) => ({ block, result: resultByBlock.get(block) }))
-    .reverse();
 
-  for (const { block, result } of blocksWithResults) {
+  for (const block of file.blocks) {
+    const result = resultByBlock.get(block);
     if (!result || !block.expectedOutput) {
       continue;
     }
 
+    // A block asserting stderr separately matches its expected output against
+    // stdout alone, so expand against the same stream it was matched against.
+    const separateStderr = block.expectedStderr !== undefined;
+    const actualForOutput = separateStderr ? (result.actualStdout ?? '') : result.actualOutput;
+
     const expansion = expandExpectedOutput(
       block.expectedOutput,
-      result.actualOutput,
+      actualForOutput,
       context,
       level,
       customPatterns,
@@ -172,34 +175,39 @@ export async function expandTestFile(
       continue;
     }
 
-    // Rebuild the block with expanded expected output
-    const fence = '`'.repeat(/^(`+)/.exec(block.rawContent)?.[1]?.length ?? 3);
-    const commandLines = block.command.split('\n').map((line, i) => {
-      return i === 0 ? `$ ${line}` : `> ${line}`;
+    let expandedStderr: string | undefined;
+    if (separateStderr) {
+      // Keep the block's stderr assertions; expand them too when they match.
+      const stderrExpansion = expandExpectedOutput(
+        block.expectedStderr ?? '',
+        result.actualStderr ?? '',
+        context,
+        level,
+        customPatterns,
+      );
+      expandedStderr = stderrExpansion?.expandedOutput ?? block.expectedStderr;
+      totalExpanded += stderrExpansion?.expandedCount ?? 0;
+    }
+
+    edits.push({
+      block,
+      replacement: buildBlock(block, {
+        output: expansion.expandedOutput,
+        stderr: expandedStderr,
+        exitCode: block.expectedExitCode ?? result.actualExitCode,
+      }),
     });
 
-    const lines: string[] = [`${fence}console`, ...commandLines];
-    const trimmedOutput = expansion.expandedOutput.trimEnd();
-    if (trimmedOutput) {
-      lines.push(trimmedOutput);
-    }
-    lines.push(`? ${block.expectedExitCode ?? result.actualExitCode}`, fence);
-
-    const newBlockContent = lines.join('\n');
-    const blockStart = content.indexOf(block.rawContent);
-    if (blockStart !== -1) {
-      content =
-        content.slice(0, blockStart) +
-        newBlockContent +
-        content.slice(blockStart + block.rawContent.length);
-      changes.push(block.name ?? `Line ${block.lineNumber}`);
-      totalExpanded += expansion.expandedCount;
-    }
+    changes.push(block.name ?? `Line ${block.lineNumber}`);
+    totalExpanded += expansion.expandedCount;
   }
 
-  if (changes.length > 0) {
-    await writeFile(file.path, content);
+  if (edits.length === 0) {
+    return { expanded: false, expandedCount: 0, changes: [] };
   }
 
-  return { expanded: changes.length > 0, expandedCount: totalExpanded, changes };
+  const content = spliceBlocks(file.rawContent, edits);
+  await writeFile(file.path, content);
+
+  return { expanded: true, expandedCount: totalExpanded, changes };
 }

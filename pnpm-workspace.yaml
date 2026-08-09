@@ -1,2 +1,16 @@
 packages:
   - 'packages/*'
+
+# Supply-chain cool-off: refuse to resolve any package version younger than 14 days.
+# 20160 = 14 days in minutes.
+#
+# Most malicious npm releases in the 2025-2026 wave were yanked within minutes to
+# hours, so a 14-day window neutralises the dominant fast-yanked pattern.
+#
+# This file is the enforcement point for both pnpm majors: pnpm 10.34.5 (pinned in
+# `packageManager`) and pnpm 11 both gate on it here. Setting it in .npmrc does NOT
+# work -- see the note in that file. To take an exception, add the exact package to
+# minimumReleaseAgeExclude with a documented reason and a Reviewed-by sign-off.
+# See SUPPLY-CHAIN-SECURITY.md.
+minimumReleaseAge: 20160
+minimumReleaseAgeExclude: []

@@ -96,8 +96,7 @@ export function buildCaptureLogDoc(
   fileResults: TestFileResult[],
   matchContext: (file: TestFile) => { root: string; cwd: string },
   customPatterns?:
-    | Record<string, string | RegExp>
-    | ((file: TestFile) => Record<string, string | RegExp>),
+    Record<string, string | RegExp> | ((file: TestFile) => Record<string, string | RegExp>),
 ): CaptureLogDoc {
   const files = fileResults.map((fr) => {
     const ctx = matchContext(fr.file);
@@ -139,8 +138,7 @@ export async function writeCaptureLog(
   fileResults: TestFileResult[],
   matchContext: (file: TestFile) => { root: string; cwd: string },
   customPatterns?:
-    | Record<string, string | RegExp>
-    | ((file: TestFile) => Record<string, string | RegExp>),
+    Record<string, string | RegExp> | ((file: TestFile) => Record<string, string | RegExp>),
 ): Promise<void> {
   const doc = buildCaptureLogDoc(fileResults, matchContext, customPatterns);
   const header = '# tryscript capture log\n';

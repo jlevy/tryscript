@@ -25,7 +25,10 @@ export type {
 } from './lib/types.js';
 
 // Core functions (for programmatic use)
-export { parseTestFile } from './lib/parser.js';
+export { parseTestFile, validateConfig, TestParseError } from './lib/parser.js';
+export type { ConfigWarning } from './lib/parser.js';
+export { buildBlock, spliceBlocks, fenceOf } from './lib/block-writer.js';
+export type { BlockParts } from './lib/block-writer.js';
 export { runBlock, createExecutionContext, cleanupExecutionContext } from './lib/runner.js';
 export type { ExecutionContext } from './lib/runner.js';
 export { matchOutput, normalizeOutput, matchAndCapture } from './lib/matcher.js';

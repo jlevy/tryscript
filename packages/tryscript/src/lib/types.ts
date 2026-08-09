@@ -54,6 +54,17 @@ export interface TestBlock {
   lineNumber: number;
   /** Raw content of the block for update mode */
   rawContent: string;
+  /**
+   * Offset of this block's opening fence in the raw file content.
+   *
+   * Rewrites (`--update`, `--expand`) splice by offset rather than searching for
+   * `rawContent`, so blocks with byte-identical source are still updated in place.
+   */
+  startOffset: number;
+  /** Offset just past this block's closing fence in the raw file content */
+  endOffset: number;
+  /** Fence info string as written (`console` or `bash`), preserved across rewrites */
+  infoString: string;
   /** Skip this test (from <!-- skip --> annotation) */
   skip?: boolean;
   /** Run only this test (from <!-- only --> annotation) */
@@ -68,6 +79,8 @@ export interface TestFile {
   path: string;
   /** Merged configuration (global + frontmatter) */
   config: TestConfig;
+  /** Non-fatal problems found in this file's frontmatter */
+  configWarnings?: { path: string; message: string }[];
   /** Parsed test blocks in order */
   blocks: TestBlock[];
   /** Raw file content for update mode */
@@ -88,6 +101,8 @@ export interface TestBlockResult {
   actualExitCode: number;
   /** Diff if test failed (unified diff format) */
   diff?: string;
+  /** Diff of stderr, when the block asserts stderr separately and it did not match */
+  stderrDiff?: string;
   /** Duration in milliseconds */
   duration: number;
   /** Error message if execution failed */
@@ -115,6 +130,8 @@ export interface TestRunSummary {
   totalPassed: number;
   totalFailed: number;
   totalBlocks: number;
+  /** Files that could not be parsed, and so produced no block results */
+  parseErrors?: number;
   duration: number;
 }
 

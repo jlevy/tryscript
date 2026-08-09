@@ -101,6 +101,9 @@ describe('runBlock', () => {
     expectedExitCode: 0,
     lineNumber: 1,
     rawContent: '',
+    startOffset: 0,
+    endOffset: 0,
+    infoString: 'console',
   });
 
   it('captures stdout', async () => {

@@ -10,6 +10,9 @@ function makeBlock(overrides: Partial<TestBlock> = {}): TestBlock {
     expectedExitCode: 0,
     lineNumber: 1,
     rawContent: '```console\n$ echo hello\nhello\n? 0\n```',
+    startOffset: 0,
+    endOffset: 42,
+    infoString: 'console',
     name: 'test block',
     ...overrides,
   };

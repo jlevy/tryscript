@@ -10,7 +10,7 @@ import { readFile } from 'node:fs/promises';
 import fg from 'fast-glob';
 import { loadConfig, mergeConfig } from '../../lib/config.js';
 import { logWarn, logError, colors, status as statusIndicators } from '../lib/shared.js';
-import { parseTestFile } from '../../lib/parser.js';
+import { parseTestFile, TestParseError } from '../../lib/parser.js';
 import {
   runBlock,
   createExecutionContext,
@@ -222,6 +222,7 @@ async function runCommand(files: string[], options: RunOptions): Promise<void> {
   const fileContexts = new Map<string, { root: string; cwd: string }>();
   const filePatterns = new Map<string, Record<string, string | RegExp>>();
   let shouldStop = false;
+  let parseErrors = 0;
 
   for (const filePath of testFiles) {
     if (shouldStop) {
@@ -229,7 +230,27 @@ async function runCommand(files: string[], options: RunOptions): Promise<void> {
     }
 
     const content = await readFile(filePath, 'utf-8');
-    const testFile = parseTestFile(content, filePath);
+
+    let testFile;
+    try {
+      testFile = parseTestFile(content, filePath);
+    } catch (error) {
+      // A malformed file is a failure of that file, not a crash of the whole run.
+      if (error instanceof TestParseError) {
+        logError(error.message);
+        parseErrors++;
+        if (opts.failFast) {
+          break;
+        }
+        continue;
+      }
+      throw error;
+    }
+
+    for (const warning of testFile.configWarnings ?? []) {
+      logWarn(`${filePath}: ${warning.message}`);
+    }
+
     const config = mergeConfig(globalConfig, testFile.config);
 
     // Filter blocks by name if specified
@@ -291,11 +312,20 @@ async function runCommand(files: string[], options: RunOptions): Promise<void> {
         result.passed = outputMatches && stderrMatches && exitCodeMatches && !result.error;
 
         if (!result.passed && opts.diff) {
+          // Diff the same stream that was compared, so a block asserting stderr
+          // separately does not show its stderr as phantom stdout additions.
           result.diff = createDiff(
             block.expectedOutput,
-            result.actualOutput,
+            outputToCheck,
             `${filePath}:${block.lineNumber}`,
           );
+          if (block.expectedStderr !== undefined && !stderrMatches) {
+            result.stderrDiff = createDiff(
+              block.expectedStderr,
+              result.actualStderr ?? '',
+              `${filePath}:${block.lineNumber} (stderr)`,
+            );
+          }
         }
 
         results.push(result);
@@ -374,6 +404,7 @@ async function runCommand(files: string[], options: RunOptions): Promise<void> {
     totalPassed: fileResults.reduce((sum, f) => sum + f.results.filter((r) => r.passed).length, 0),
     totalFailed: fileResults.reduce((sum, f) => sum + f.results.filter((r) => !r.passed).length, 0),
     totalBlocks: fileResults.reduce((sum, f) => sum + f.results.length, 0),
+    parseErrors,
     duration: Date.now() - startTime,
   };
 
@@ -427,6 +458,7 @@ async function runCommand(files: string[], options: RunOptions): Promise<void> {
     }
   }
 
-  // Exit code
-  process.exit(summary.totalFailed > 0 ? 1 : 0);
+  // Exit code. A file that failed to parse never produced results, so it has to be
+  // counted here or a malformed suite would exit 0.
+  process.exit(summary.totalFailed > 0 || parseErrors > 0 ? 1 : 0);
 }

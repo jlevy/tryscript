@@ -83,9 +83,11 @@ function patternToRegex(
   // Escape special regex characters
   let regex = escapeRegex(processed);
 
-  // Restore markers to their regex replacements
+  // Restore markers to their regex replacements. The replacement is passed as a
+  // function so that `$&`, `` $` ``, `$'`, and `$<` inside a custom pattern are
+  // inserted literally instead of being expanded by `replaceAll`.
   for (const [marker, replacement] of replacements) {
-    regex = regex.replaceAll(escapeRegex(marker), replacement);
+    regex = regex.replaceAll(escapeRegex(marker), () => replacement);
   }
 
   // Match the entire string (dotall mode for . to match newlines if needed)
@@ -124,7 +126,10 @@ export function normalizeOutput(output: string): string {
     .split('\n')
     .map((line) => line.trimEnd())
     .join('\n')
-    .replace(/\n+$/, '\n');
+    // `\n*` rather than `\n+`: expected output always ends with a newline, so output
+    // that ends without one (a bare `process.stdout.write`) could otherwise never
+    // match, and `--update` could not fix it either.
+    .replace(/\n*$/, '\n');
 
   // Handle empty output
   if (normalized === '\n') {
@@ -235,7 +240,8 @@ function patternToCapturingRegex(
     if (meta) {
       groups.push(meta);
     }
-    regex = regex.replaceAll(escapeRegex(marker), replacement);
+    // Function replacement: see `patternToRegex()` for why.
+    regex = regex.replaceAll(escapeRegex(marker), () => replacement);
   }
 
   return { regex: new RegExp(`^${regex}$`, 's'), groups };

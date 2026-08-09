@@ -1,5 +1,6 @@
 import { parse as parseYaml } from 'yaml';
 import type { TestConfig, TestBlock, TestFile } from './types.js';
+import { TestConfigSchema } from './types.js';
 
 /** Regex to match YAML frontmatter at the start of a file */
 const FRONTMATTER_REGEX = /^---\r?\n([\s\S]*?)\r?\n---\r?\n/;
@@ -13,11 +14,40 @@ const SKIP_ANNOTATION_REGEX = /<!--\s*skip\s*-->/i;
 /** Regex to match only annotation in heading or nearby HTML comment */
 const ONLY_ANNOTATION_REGEX = /<!--\s*only\s*-->/i;
 
+/**
+ * A malformed test file, reported with the location of the offending line.
+ *
+ * Thrown instead of guessing, for input where any guess would silently run
+ * something the author did not write.
+ */
+export class TestParseError extends Error {
+  constructor(
+    message: string,
+    readonly filePath: string,
+    readonly lineNumber: number,
+  ) {
+    super(`${filePath}:${lineNumber}: ${message}`);
+    this.name = 'TestParseError';
+  }
+}
+
+/** A non-fatal problem with a test file's frontmatter. */
+export interface ConfigWarning {
+  /** Dotted path to the offending key, e.g. `env.NO_COLOR` */
+  path: string;
+  message: string;
+}
+
 interface CodeBlockMatch {
   fullMatch: string;
   infoString: string;
   content: string;
+  /** Offset of the opening fence within the string that was scanned */
   index: number;
+  /** Offset just past the closing fence within the string that was scanned */
+  endIndex: number;
+  /** 1-indexed line number of the opening fence within the scanned string */
+  line: number;
 }
 
 /**
@@ -68,6 +98,8 @@ function findConsoleCodeBlocks(text: string): CodeBlockMatch[] {
           infoString,
           content: text.slice(contentStart, contentEnd),
           index: startOffset,
+          endIndex: endOffset,
+          line: openLineIdx + 1,
         });
         i++;
         break;
@@ -80,32 +112,80 @@ function findConsoleCodeBlocks(text: string): CodeBlockMatch[] {
 }
 
 /**
+ * Validate parsed frontmatter, returning warnings rather than throwing.
+ *
+ * Unknown and mistyped keys are reported but never fatal: a file that ran on an
+ * earlier version must keep running, and a stray key is an authoring mistake worth
+ * surfacing, not a reason to fail the suite.
+ */
+export function validateConfig(raw: unknown): ConfigWarning[] {
+  if (raw === null || raw === undefined) {
+    return [];
+  }
+  if (typeof raw !== 'object' || Array.isArray(raw)) {
+    return [{ path: '', message: 'frontmatter must be a YAML mapping' }];
+  }
+
+  const warnings: ConfigWarning[] = [];
+
+  // `coverage` is valid in a config file and harmless in frontmatter, so accept it
+  // here rather than reporting it as unknown.
+  const known = new Set([...Object.keys(TestConfigSchema.shape), 'coverage']);
+  for (const key of Object.keys(raw)) {
+    if (!known.has(key)) {
+      warnings.push({ path: key, message: `unknown config key '${key}'` });
+    }
+  }
+
+  const result = TestConfigSchema.safeParse(raw);
+  if (!result.success) {
+    for (const issue of result.error.issues) {
+      const path = issue.path.join('.');
+      // Unknown keys are already reported above with a clearer message.
+      if (path && known.has(String(issue.path[0]))) {
+        warnings.push({ path, message: issue.message });
+      }
+    }
+  }
+
+  return warnings;
+}
+
+/**
  * Parse a .tryscript.md file into structured test data.
+ *
+ * @throws {TestParseError} if a console block is malformed.
  */
 export function parseTestFile(content: string, filePath: string): TestFile {
   const rawContent = content;
   let config: TestConfig = {};
+  let configWarnings: ConfigWarning[] = [];
   let body = content;
+  // Offset of `body` within `content`, so block offsets index the raw file.
+  let bodyOffset = 0;
 
   // Extract frontmatter if present
   const frontmatterMatch = FRONTMATTER_REGEX.exec(content);
   if (frontmatterMatch) {
     const yamlContent = frontmatterMatch[1] ?? '';
-    config = parseYaml(yamlContent) as TestConfig;
+    const parsed: unknown = parseYaml(yamlContent);
+    configWarnings = validateConfig(parsed);
+    config = parsed ?? {};
     body = content.slice(frontmatterMatch[0].length);
+    bodyOffset = frontmatterMatch[0].length;
   }
+
+  // Number of lines consumed by the frontmatter, so block line numbers stay
+  // relative to the whole file.
+  const bodyLineOffset = bodyOffset === 0 ? 0 : content.slice(0, bodyOffset).split('\n').length - 1;
 
   // Parse all console blocks (supports extended fences with 4+ backticks)
   const blocks: TestBlock[] = [];
   const codeBlocks = findConsoleCodeBlocks(body);
 
   for (const codeBlock of codeBlocks) {
-    const blockContent = codeBlock.content;
     const blockStart = codeBlock.index;
-
-    // Find the line number (1-indexed)
-    const precedingContent = content.slice(0, content.indexOf(codeBlock.fullMatch));
-    const lineNumber = precedingContent.split('\n').length;
+    const lineNumber = codeBlock.line + bodyLineOffset;
 
     // Look for a heading before this block (for test name)
     const contentBefore = body.slice(0, blockStart);
@@ -122,7 +202,7 @@ export function parseTestFile(content: string, filePath: string): TestFile {
     const only = ONLY_ANNOTATION_REGEX.test(headingContext);
 
     // Parse the block content
-    const parsed = parseBlockContent(blockContent);
+    const parsed = parseBlockContent(codeBlock.content, filePath, lineNumber);
     if (parsed) {
       blocks.push({
         name,
@@ -132,19 +212,30 @@ export function parseTestFile(content: string, filePath: string): TestFile {
         expectedExitCode: parsed.expectedExitCode,
         lineNumber,
         rawContent: codeBlock.fullMatch,
+        startOffset: bodyOffset + codeBlock.index,
+        endOffset: bodyOffset + codeBlock.endIndex,
+        infoString: codeBlock.infoString,
         skip,
         only,
       });
     }
   }
 
-  return { path: filePath, config, blocks, rawContent };
+  return { path: filePath, config, configWarnings, blocks, rawContent };
 }
 
 /**
  * Parse the content of a single console block.
+ *
+ * @param content - Block body, without the fences
+ * @param filePath - Test file path, for error messages
+ * @param blockLine - 1-indexed line of the opening fence, for error messages
  */
-function parseBlockContent(content: string): {
+function parseBlockContent(
+  content: string,
+  filePath: string,
+  blockLine: number,
+): {
   command: string;
   expectedOutput: string;
   expectedStderr?: string;
@@ -156,21 +247,55 @@ function parseBlockContent(content: string): {
   const stderrLines: string[] = [];
   let expectedExitCode = 0;
   let inCommand = false;
+  let sawExitCode = false;
+  let sawPrompt = false;
 
-  for (const line of lines) {
+  // Line numbers within the block body start just after the opening fence.
+  const lineNumberOf = (index: number): number => blockLine + 1 + index;
+
+  for (const [index, line] of lines.entries()) {
     if (line.startsWith('$ ')) {
-      // Start of a command
+      // Start of a command. One command per block: concatenating a second prompt
+      // would build an invocation the author never wrote, so reject it instead.
+      if (sawPrompt) {
+        throw new TestParseError(
+          'a console block may contain only one `$ ` command prompt; ' +
+            'put the second command in its own console block',
+          filePath,
+          lineNumberOf(index),
+        );
+      }
+      sawPrompt = true;
       inCommand = true;
       commandLines.push(line.slice(2));
     } else if (line.startsWith('> ') && inCommand) {
       // Continuation of a multi-line command
       commandLines.push(line.slice(2));
     } else if (line.startsWith('? ')) {
-      // Exit code specification
+      // Exit code specification. A bare `?` stays stdout: unlike `!` (issue #45) it
+      // has no meaning to gain, and reinterpreting it would break files that print
+      // a literal `?` line.
       inCommand = false;
-      expectedExitCode = parseInt(line.slice(2).trim(), 10);
-    } else if (line.startsWith('! ')) {
-      // Stderr line (prefixed with !)
+      if (sawExitCode) {
+        throw new TestParseError(
+          'a console block may specify `? ` (expected exit code) only once',
+          filePath,
+          lineNumberOf(index),
+        );
+      }
+      sawExitCode = true;
+      const raw = line.slice(1).trim();
+      if (!/^\d+$/.test(raw)) {
+        throw new TestParseError(
+          `expected exit code must be a non-negative integer, got '${raw}'`,
+          filePath,
+          lineNumberOf(index),
+        );
+      }
+      expectedExitCode = parseInt(raw, 10);
+    } else if (line === '!' || line.startsWith('! ')) {
+      // Stderr line (prefixed with !). A bare `!` is an empty stderr line; spelling
+      // it `! ` would depend on trailing whitespace that editors strip.
       inCommand = false;
       stderrLines.push(line.slice(2));
     } else {
