@@ -5,15 +5,15 @@ title: Print raw CLI documents byte-for-byte
 kind: bug
 status: closed
 priority: 2
-version: 4
-spec_path: docs/project/specs/active/spec-v0.1.8-stability-review.md
+version: 5
+spec_path: docs/project/specs/active/spec-v0.2.0-stability-review.md
 labels:
   - pr-review
   - pr-48
 dependencies: []
 parent_id: is-01kzm4z425gqmnfts7k93dqrbt
 created_at: 2026-08-09T23:29:30.791Z
-updated_at: 2026-08-10T00:51:03.004Z
+updated_at: 2026-08-10T01:12:45.565Z
 closed_at: 2026-08-10T00:34:09.549Z
 close_reason: Implemented with regression coverage; all local non-security quality, build, package, unit, golden, and coverage gates pass.
 ---

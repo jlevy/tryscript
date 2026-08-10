@@ -5,15 +5,15 @@ title: Preserve and enforce explicit empty-stderr assertions
 kind: bug
 status: closed
 priority: 1
-version: 5
-spec_path: docs/project/specs/active/spec-v0.1.8-stability-review.md
+version: 7
+spec_path: docs/project/specs/active/spec-v0.2.0-stability-review.md
 labels:
   - pr-review
   - pr-48
 dependencies: []
 parent_id: is-01kzm4z425gqmnfts7k93dqrbt
 created_at: 2026-08-09T21:19:08.221Z
-updated_at: 2026-08-10T00:51:02.576Z
+updated_at: 2026-08-10T01:12:53.690Z
 closed_at: 2026-08-10T00:34:09.056Z
 close_reason: Implemented with regression coverage; all local non-security quality, build, package, unit, golden, and coverage gates pass.
 ---
