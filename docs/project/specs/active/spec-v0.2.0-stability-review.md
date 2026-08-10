@@ -1,19 +1,29 @@
-# Stability Review for tryscript v0.1.8
+# Stability Review for tryscript v0.2.0
 
-**Status:** active **Baseline:** v0.1.7 (`0a79ba8`) **Date:** 2026-08-09
+**Status:** active **Baseline:** v0.1.7 (`1aa7ecd`) **Date:** 2026-08-09
 
-A full review of tryscript’s correctness, ergonomics, and dependency posture, to decide
-whether a patch release is warranted and what it should contain.
+A full review of tryscript’s correctness, ergonomics, public compatibility, packaging,
+documentation, and dependency posture, to decide the next release boundary and what it
+should contain.
 
-**Conclusion: yes, ship v0.1.8.** The review found 12 defects, 5 of which cause
-tryscript to report a *wrong* result — the worst class of bug for a testing tool,
-because the failure is silent.
-Every fix below preserves the behavior of test files that pass on v0.1.7.
+**Conclusion: ship v0.2.0 as a backward-compatible minor release.** The review found 12
+initial defects, 5 of which cause tryscript to report a *wrong* result — the worst class
+of bug for a testing tool, because the failure is silent.
+The remediation also adds public validation exports and makes documented CLI
+capabilities reliable.
+Valid test files that pass on v0.1.7 remain compatible.
+
+**Implementation status:** B1-B12 and D1-D52 are complete at the current local head.
+Quality, documentation, unit, golden, package, compatibility, minimum-runtime, coverage,
+and production-audit gates pass.
+D53 remains in progress while the PR is updated and CI runs.
+The release cannot leave draft until a human approves the exact fresh advisory fixes,
+the full audit is clean, and terminal CI is green.
 
 ## Backward Compatibility Contract
 
-Every change here obeys one rule: **a `.tryscript.md` file that passes on v0.1.7 must
-still pass on v0.1.8.** Fixes therefore fall into three safe shapes:
+Every change here obeys one rule: **a valid `.tryscript.md` file that passes on v0.1.7
+must still pass on v0.2.0.** Fixes therefore fall into three safe shapes:
 
 - Tests that wrongly *failed* now pass (B3).
 - Tests that wrongly *passed* now fail (B2) — a false pass is not behavior worth
@@ -190,7 +200,7 @@ Regression tests protect the local pins; upstream generator work is tracked as
 ### Documentation, CLI, and Release Contract Pass
 
 Reconciling every maintained document and user-facing help string with the
-implementation found forty-eight more contract defects.
+implementation found fifty-three more contract and release defects.
 Each is tracked under the PR remediation parent bead:
 
 | ID | Defect | Resolution | Bead |
@@ -243,6 +253,11 @@ Each is tracked under the PR remediation parent bead:
 | D46 | Prettier excludes Markdown, but no formatter or CI gate owns maintained docs | Pin `flowmark-rs`, separate generated and byte-exact files through `.flowmarkignore`, auto-fix at commit, and verify the maintained set in CI | `try-38ck` |
 | D47 | Closing a pager or downstream pipe can surface `EPIPE` as a CLI crash | Exit successfully for closed stdout or stderr pipes while rethrowing every other stream error | `try-u241` |
 | D48 | LCOV serialization retains input order for files and branches and has no same-line function tiebreaker | Sort every record type with complete ordinal and numeric comparison chains | `try-9auf` |
+| D49 | The package smoke test uses pnpm’s workspace-aware pack behavior, masking an npm artifact without `LICENSE` | Exercise `npm pack`, list and synchronize the package-root license explicitly, and compare the packed bytes with the repository source | `try-h4p8` |
+| D50 | The exported `CoverageContext` narrows a v0.1.7 TypeScript input shape | Preserve the published shape, keep a concrete internal context, and compile legacy consumers against both packed declaration formats | `try-ivh7` |
+| D51 | Release validation has no executable comparison with the published baseline | Replay the pinned v0.1.7 corpus and permit only the 14 reviewed tryscript CLI snapshot changes | `try-pxy0` |
+| D52 | A patch changeset understates additive public exports and user-visible CLI capabilities | Prepare v0.2.0 as a backward-compatible minor release with explicit migration guidance | `try-oe1p` |
+| D53 | PR metadata and fixed-issue bookkeeping no longer describe the reviewed branch | Reconcile the title, body, linked issues, review disposition, validation evidence, and release boundary before ready-for-review | `try-7ctq` |
 
 The documentation pass makes exact `flowmark-rs==0.3.2` formatting authoritative for the
 18 maintained documents and adds a repository check for local links, H1 structure, and
@@ -254,10 +269,32 @@ floor as TypeScript.
 Generated cross-project snapshots and completed historical specs retain their original
 ownership and chronology.
 
+## Release Compatibility Assessment
+
+The release is a **minor v0.2.0**, not a patch, because it adds public validation
+exports and makes documented CLI capabilities available and reliable.
+It is not a major release:
+
+- No command, option, package export path, engine requirement, or v0.1.7 named export is
+  removed.
+- Valid v0.1.7 test files remain supported.
+  Inputs that relied on a false pass or malformed executable syntax now fail
+  deliberately with a located diagnostic.
+- Representative v0.1.7 `CoverageContext`, `TestBlock`, and `TryscriptConfig` consumers
+  compile against both packed CommonJS and ESM declarations with strict
+  optional-property checks.
+- The pinned v0.1.7 corpus retains 110 assertions; the 14 reviewed differences snapshot
+  tryscript’s own improved help, warning, error, progress, and coverage text.
+- The packed artifact retains the v0.1.7 file count and MIT license while adding working
+  CommonJS output and synchronized user documentation.
+
+The migration section in the changeset lists every case that can require user action.
+There are no known unintentional runtime, CLI, package, or TypeScript source breaks.
+
 ## Deferred
 
 - **#44 (startup timing diagnostics)** — a feature, not a fix.
-  Out of scope for a patch release; the per-command duration is already collected in
+  Out of scope for v0.2.0; the per-command duration is already collected in
   `TestBlockResult.duration`, so a `--timings` summary is a small follow-up.
 - **Runtime major bumps** — `zod` 3→4 (the `z.record` signature changed and would break
   `TestConfigSchema`), `commander` 14→15, `diff` 8→9. Each needs its own compatibility
@@ -386,13 +423,17 @@ supported development runtime.
 1. Fix B1-B12 with a regression test per fix.
 2. Dependency and hardening changes above; `pnpm audit` clean of runtime findings.
 3. `pnpm precommit` plus golden self-tests green.
-4. Changeset as a **patch** — all changes are fixes, and no documented API changes
-   shape.
-5. Release notes call out B2 and B4 explicitly: both can turn a currently-green suite
-   red, and in both cases the green was wrong.
-6. Address every PR review finding, run package smoke tests on Node 20.0.0, obtain any
-   required fresh-security-patch sign-off, and require a clean audit and green CI before
-   marking the PR ready.
+4. Changeset as a **minor** release because the public validation API and CLI
+   capabilities are additive, while the compatibility review found no required
+   major-version break.
+5. Release notes and migration guidance call out B2 and B4 explicitly: both can turn a
+   currently-green suite red, and in both cases the green was wrong.
+6. Pack through npm-compatible behavior, require the MIT license, compile both
+   declaration formats, and replay the pinned v0.1.7 corpus.
+7. Obtain the required fresh-security-fix sign-off and require clean production and full
+   audits.
+8. Address every PR review finding, run all gates on Node 20.0.0 and the normal CI
+   runtime, and require green CI before marking the PR ready.
 
 <!-- This document follows common-doc-guidelines.md.
 See github.com/jlevy/practical-prose and review guidelines before editing.

@@ -30,6 +30,7 @@
     "tryscript": "./dist/bin.mjs"
   },
   "files": [
+    "LICENSE",
     "dist",
     "docs",
     "README.md"
@@ -51,7 +52,8 @@
     "test:coverage:tryscript": "node dist/bin.mjs run 'tests/**/*.tryscript.md' --coverage --merge-lcov coverage/lcov.info",
     "test:coverage": "pnpm test:coverage:vitest && pnpm test:coverage:tryscript",
     "publint": "publint && pnpm test:package",
-    "test:package": "node scripts/package-smoke.mjs",
+    "test:package": "node scripts/package-smoke.mjs && pnpm test:compat",
+    "test:compat": "node scripts/v0-1-7-compatibility-smoke.mjs",
     "prepack": "pnpm build",
     "tryscript": "tsx src/bin.ts"
   },

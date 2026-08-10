@@ -10,6 +10,7 @@ import { fileURLToPath } from 'node:url';
 import { writeFile } from 'atomically';
 
 const packageRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..');
+const repositoryRoot = resolve(packageRoot, '..', '..');
 const expectedVersionPattern = /^(\d+\.\d+\.\d+.*|development)$/;
 
 /**
@@ -42,7 +43,8 @@ function run(command, args, cwd) {
 
 const tempRoot = await mkdtemp(join(tmpdir(), 'tryscript-package-smoke-'));
 try {
-  run('pnpm', ['pack', '--pack-destination', tempRoot], packageRoot);
+  run(process.execPath, [join(packageRoot, 'scripts', 'copy-docs.mjs')], packageRoot);
+  run('npm', ['pack', '--pack-destination', tempRoot], packageRoot);
   const archives = (await readdir(tempRoot)).filter((entry) => entry.endsWith('.tgz'));
   if (archives.length !== 1) {
     throw new Error(`Expected one packed archive, found ${String(archives.length)}`);
@@ -54,12 +56,30 @@ try {
 
   run('tar', ['-xzf', join(tempRoot, archive), '-C', tempRoot], packageRoot);
   const packedRoot = join(tempRoot, 'package');
+  const sourceLicense = await readFile(join(repositoryRoot, 'LICENSE'), 'utf8');
+  let packedLicense;
+  try {
+    packedLicense = await readFile(join(packedRoot, 'LICENSE'), 'utf8');
+  } catch (error) {
+    throw new Error('Packed package must include LICENSE', { cause: error });
+  }
+  if (packedLicense !== sourceLicense) {
+    throw new Error('Packed LICENSE must match the repository LICENSE');
+  }
   const packedManifest = /** @type {unknown} */ (
     JSON.parse(await readFile(join(packedRoot, 'package.json'), 'utf8'))
   );
+  if (typeof packedManifest !== 'object' || packedManifest === null) {
+    throw new Error('Packed manifest must be an object');
+  }
   if (
-    typeof packedManifest !== 'object' ||
-    packedManifest === null ||
+    !('files' in packedManifest) ||
+    !Array.isArray(packedManifest.files) ||
+    !packedManifest.files.includes('LICENSE')
+  ) {
+    throw new Error('Packed manifest must include LICENSE in its files allowlist');
+  }
+  if (
     !('dependencies' in packedManifest) ||
     typeof packedManifest.dependencies !== 'object' ||
     packedManifest.dependencies === null ||
@@ -97,6 +117,59 @@ typed-config
 ? 0
 \`\`\`
 `,
+  );
+  const publicApiCompatibilitySource = `import { defineConfig } from 'tryscript';
+import type { CoverageContext, TestBlock, TryscriptConfig } from 'tryscript';
+
+const coverageContext: CoverageContext = {
+  tempDir: '/tmp/tryscript-coverage',
+  options: {
+    reportsDir: undefined,
+    reporters: undefined,
+    include: undefined,
+    exclude: undefined,
+    excludeNodeModules: undefined,
+    excludeAfterRemap: undefined,
+    skipFull: undefined,
+    allowExternal: undefined,
+    src: undefined,
+    monocart: undefined,
+  },
+};
+const testBlock: TestBlock = {
+  command: 'node --version',
+  expectedOutput: 'v20.0.0',
+  expectedExitCode: 0,
+  lineNumber: 1,
+  rawContent: '$ node --version\\nv20.0.0',
+};
+const config: TryscriptConfig = defineConfig({ fixtures: [{ source: 'fixture.txt' }] });
+
+void [coverageContext, testBlock, config];
+`;
+  await Promise.all([
+    writeFile(join(consumerRoot, 'public-api-smoke.cts'), publicApiCompatibilitySource),
+    writeFile(join(consumerRoot, 'public-api-smoke.mts'), publicApiCompatibilitySource),
+  ]);
+  run(
+    process.execPath,
+    [
+      join(packageRoot, 'node_modules', 'typescript', 'bin', 'tsc'),
+      '--noEmit',
+      '--strict',
+      '--exactOptionalPropertyTypes',
+      '--module',
+      'NodeNext',
+      '--moduleResolution',
+      'NodeNext',
+      '--target',
+      'ES2022',
+      '--skipLibCheck',
+      'false',
+      'public-api-smoke.cts',
+      'public-api-smoke.mts',
+    ],
+    consumerRoot,
   );
 
   run(

@@ -1,12 +1,14 @@
 ---
-'tryscript': patch
+'tryscript': minor
 ---
 
-Fix correctness, compatibility, diagnostics, and release-hardening defects found during
-a full senior engineering review. Existing v0.1.7 test files remain compatible unless
-they depended on a false-positive result.
+Ship a backward-compatible minor release after a full senior engineering review of
+correctness, compatibility, diagnostics, documentation, packaging, and release safety.
+No command, option, package export path, Node.js requirement, or valid v0.1.7 test-file
+behavior is removed. Suites that depended on a false-positive result or malformed input
+will now fail with an actionable diagnostic.
 
-**Correct results**
+## Correct Results
 
 - Rewrite duplicate blocks by source offset, so `--update` and `--expand` cannot rotate
   captured output between byte-identical blocks (#47).
@@ -25,7 +27,7 @@ they depended on a false-positive result.
 - Parse a bare `!` as an explicit empty stderr line, enforce it even when empty, and
   preserve it through rewrites (#45).
 
-**Lossless updates and actionable diagnostics**
+## Lossless Updates and Actionable Diagnostics
 
 - Preserve `bash` fences and separate stdout/stderr assertions through `--update` and
   `--expand`, including blocks whose wildcard exists only on stderr.
@@ -47,7 +49,7 @@ they depended on a false-positive result.
   and stderr independently when the test asserts them separately, and label each
   capture's stream.
 
-**Compatibility and hardening**
+## Compatibility and Hardening
 
 - Load `tryscript.config.ts` through the packaged `tsx` runtime on Node.js 20, and honor
   project-level `tests` patterns when no files are passed on the command line.
@@ -66,6 +68,15 @@ they depended on a false-positive result.
 - Bundle ESM-only runtime dependencies into CommonJS output, then pack the package and
   smoke-test every published entry point on the declared minimum Node.js 20.0.0 as well
   as the normal CI runtime.
+- Preserve the v0.1.7 `CoverageContext` source shape while keeping concrete resolved
+  options inside tryscript. Compile representative v0.1.7 consumers against both packed
+  declaration formats under strict TypeScript settings.
+- Restore the MIT `LICENSE` to the npm artifact, list it explicitly, make the smoke test
+  use the publisher’s `npm pack` behavior, and compare the packed license byte for byte
+  with the repository source.
+- Replay the pinned v0.1.7 golden corpus against the candidate build. The release keeps
+  110 assertions unchanged and limits differences to 14 reviewed snapshots of
+  tryscript’s own help, warning, error, progress, and coverage text.
 - Require an installed local `c8` for coverage instead of allowing a runtime package
   runner to download code, and invoke its JavaScript entry point through the current Node
   executable without platform-specific package-manager shell shims.
@@ -78,7 +89,7 @@ they depended on a false-positive result.
 - Derive development versions with argument-array Git execution and validated SemVer
   tags, and copy published documentation through a portable atomic Node script.
 
-**CLI and documentation**
+## CLI and Documentation
 
 - Prefix warnings and errors consistently, make `--verbose` show captured output for
   passing tests, and return a failing exit status when a requested capture log or
@@ -115,3 +126,23 @@ they depended on a false-positive result.
   execution error instead of a successful command.
 - Treat a downstream pager or pipeline closing stdout or stderr as a successful CLI
   termination while preserving every other stream failure.
+
+## Public API
+
+- Export `validateConfig`, `TestParseError`, and `ConfigWarning` for programmatic config
+  validation and located parse-error handling.
+- Keep every v0.1.7 named export and package export path. New `TestBlock` source metadata
+  remains optional for callers that construct blocks directly.
+
+## Migration
+
+No migration is required for valid v0.1.7 test files or ordinary programmatic use.
+Review these deliberate diagnostic changes when upgrading:
+
+- Split multiple `$ ` prompts into separate executable fences, close every executable
+  fence, and give each executable fence a command.
+- Remove misspelled or stale configuration keys reported by the new validation warnings.
+- Investigate newly failing signal, hook, stderr, fixture, capture-log, or coverage cases;
+  v0.1.7 could report false success for those failures.
+- Update snapshots only when they intentionally assert tryscript’s own CLI text. User
+  command output and the `.tryscript.md` format otherwise remain compatible.

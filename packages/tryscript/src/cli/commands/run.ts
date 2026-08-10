@@ -35,9 +35,9 @@ import type {
   TestBlockResult,
   TestFileResult,
   TestRunSummary,
-  CoverageContext,
   CoverageConfig,
   ExpandLevel,
+  ResolvedCoverageContext,
 } from '../../lib/types.js';
 
 interface RunOptions {
@@ -193,7 +193,7 @@ async function runCommand(files: string[], options: RunOptions): Promise<void> {
   }
 
   // Setup coverage if enabled
-  let coverageCtx: CoverageContext | undefined;
+  let coverageCtx: ResolvedCoverageContext | undefined;
   let coverageEnv: Record<string, string> = {};
 
   if (options.coverage) {

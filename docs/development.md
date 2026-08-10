@@ -229,7 +229,7 @@ pnpm lint:check       # ESLint and TypeScript, without source changes
 pnpm typecheck       # TypeScript type checking
 pnpm test            # All tests
 pnpm test:golden     # Golden self-tests only
-pnpm publint         # Validate package exports
+pnpm publint         # Validate exports, the npm artifact, and v0.1.7 compatibility
 ```
 
 ### Test Categories
@@ -247,6 +247,20 @@ pnpm test:golden
 ```
 
 The golden suite runs the built tryscript CLI against its own `.tryscript.md` files.
+
+**Published-package and compatibility tests:**
+
+```bash
+pnpm --filter tryscript test:package
+pnpm --filter tryscript test:compat
+```
+
+The package test uses `npm pack`, verifies the MIT license, compiles representative
+v0.1.7 consumers against both declaration formats, and exercises every JavaScript and
+CLI entry point. The compatibility test replays the pinned v0.1.7 golden corpus and
+rejects differences outside the reviewed tryscript CLI-text allowlist.
+Both require a built package; the replay also requires full Git history containing its
+pinned baseline commit.
 
 ### Coverage
 
@@ -319,7 +333,8 @@ in order:
 
 5. `pnpm --filter tryscript test:coverage`
 
-6. The packed-package smoke test under the declared minimum Node.js 20.0.0 runtime.
+6. The npm-compatible package and pinned v0.1.7 replay tests under the declared minimum
+   Node.js 20.0.0 runtime.
 
 Run `pnpm verify` for the local release-quality gate.
 Coverage and the explicit Node.js 20.0.0 compatibility run remain CI checks.

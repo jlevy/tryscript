@@ -1,8 +1,8 @@
 /**
- * Regressions for the v0.1.8 stability review.
+ * Regressions for the v0.2.0 stability review.
  *
  * Each test names the finding it locks down; see
- * docs/project/specs/active/spec-v0.1.8-stability-review.md.
+ * docs/project/specs/active/spec-v0.2.0-stability-review.md.
  */
 
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';

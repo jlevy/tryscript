@@ -11,7 +11,8 @@ architecture, planning, and reference material.
 - [Language architecture](project/architecture/current/arch-tryscript-language.md):
   parser, execution, matching, and rewrite design for maintainers
 
-The build copies the root README and the tryscript reference into the published package.
+The build copies the root README, the tryscript reference, and the repository license
+into the published package.
 Edit their source files above, not the ignored copies under `packages/tryscript/`.
 Flowmark owns formatting for the 18 maintained documents selected by `.flowmarkignore`;
 Prettier deliberately excludes Markdown so the formatters cannot churn each other’s

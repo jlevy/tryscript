@@ -11,8 +11,8 @@ creates the GitHub release from the generated changelog.
 - `pnpm version-packages` consumes pending changesets, updates
   `packages/tryscript/package.json`, and writes `packages/tryscript/CHANGELOG.md`.
 - A `v*` tag triggers `.github/workflows/release.yml`.
-- A read-only job runs `pnpm verify`, packs one tarball, and uploads that verified
-  artifact.
+- A read-only job runs `pnpm verify`, uses `npm pack` to create one publisher-compatible
+  tarball, and uploads that verified artifact.
 - A dependent publish job downloads the tarball and receives npm OIDC authority; it does
   not install dependencies, execute repository build code, or receive repository write
   permission.
@@ -78,7 +78,7 @@ Do not add a duplicate when the merged pull request already supplied one.
 If a release has no appropriate changeset, create one non-interactively:
 
 ```bash
-pnpm changeset:add patch 0.1.8 "Fix incorrect signal exit results"
+pnpm changeset:add minor 0.2.0 "Add validation APIs and harden CLI test results"
 ```
 
 Choose the bump from the public compatibility impact:
@@ -106,13 +106,17 @@ Confirm that:
 - the changelog describes user-visible behavior in present tense; and
 - fixes that can turn a false pass into a real failure are called out explicitly.
 
+The verification gate must also confirm that the tarball contains the repository MIT
+license, both declaration formats compile for a strict v0.1.7 consumer, and the pinned
+v0.1.7 corpus differs only in reviewed tryscript CLI snapshots.
+
 ### 4. Verify and Commit
 
 ```bash
 pnpm verify
 pnpm --filter tryscript test:coverage
 git add packages/tryscript/package.json packages/tryscript/CHANGELOG.md .changeset
-git commit -m "chore: release tryscript v0.1.8"
+git commit -m "chore: release tryscript v0.2.0"
 git push
 ```
 
@@ -126,9 +130,9 @@ Create the tag only after the version commit is on `origin/main`:
 ```bash
 git fetch origin main --tags
 git status --short --branch
-git tag --list v0.1.8
-git tag -a v0.1.8 -m "tryscript v0.1.8"
-git push origin v0.1.8
+git tag --list v0.2.0
+git tag -a v0.2.0 -m "tryscript v0.2.0"
+git push origin v0.2.0
 ```
 
 The `git tag --list` command must return no existing tag.
@@ -153,12 +157,12 @@ gh run watch <run-id> --exit-status
 ## Verify the Published Release
 
 ```bash
-npm view tryscript@0.1.8 version dist.integrity dist.tarball
-gh release view v0.1.8 --repo jlevy/tryscript
+npm view tryscript@0.2.0 version dist.integrity dist.tarball
+gh release view v0.2.0 --repo jlevy/tryscript
 ```
 
 Also confirm that the npm page shows provenance and that the GitHub release notes match
-the `0.1.8` changelog section.
+the `0.2.0` changelog section.
 
 ## Failure Recovery
 

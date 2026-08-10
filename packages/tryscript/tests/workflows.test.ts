@@ -48,14 +48,25 @@ describe('privileged workflow isolation', () => {
     expect(coverageJob).toContain('davelosert/vitest-coverage-report-action@');
   });
 
+  it('checks out the tagged compatibility baseline in the test job', async () => {
+    const workflow = await readFile(join(repositoryRoot, '.github', 'workflows', 'ci.yml'), 'utf8');
+    const testJob = jobBlock(workflow, 'test', 'coverage');
+
+    expect(testJob).toContain('fetch-depth: 0');
+    expect(testJob).toContain('pnpm --filter tryscript test:package');
+  });
+
   it('keeps GitHub release creation out of the npm OIDC job', async () => {
     const workflow = await readFile(
       join(repositoryRoot, '.github', 'workflows', 'release.yml'),
       'utf8',
     );
     const publishJob = jobBlock(workflow, 'publish', 'release');
+    const verifyJob = jobBlock(workflow, 'verify', 'publish');
     const releaseJob = jobBlock(workflow, 'release');
 
+    expect(verifyJob).toContain('npm pack');
+    expect(verifyJob).not.toContain('pnpm --filter tryscript pack');
     expect(publishJob).toContain('id-token: write');
     expect(publishJob).not.toContain('contents: write');
     expect(publishJob).not.toContain('softprops/action-gh-release@');

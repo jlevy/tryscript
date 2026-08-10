@@ -7,6 +7,10 @@ const packageRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const repositoryRoot = resolve(packageRoot, '..', '..');
 const copies = [
   {
+    source: join(repositoryRoot, 'LICENSE'),
+    destination: join(packageRoot, 'LICENSE'),
+  },
+  {
     source: join(repositoryRoot, 'README.md'),
     destination: join(packageRoot, 'README.md'),
   },

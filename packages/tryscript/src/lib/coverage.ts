@@ -10,7 +10,7 @@ import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { existsSync } from 'node:fs';
 import { createRequire } from 'node:module';
-import type { CoverageContext, CoverageConfig } from './types.js';
+import type { CoverageConfig, ResolvedCoverageContext } from './types.js';
 import { resolveCoverageConfig } from './config.js';
 import {
   readLcovFile,
@@ -79,7 +79,9 @@ export async function isC8Available(): Promise<boolean> {
 /**
  * Create a coverage context for collecting V8 coverage data.
  */
-export async function createCoverageContext(config?: CoverageConfig): Promise<CoverageContext> {
+export async function createCoverageContext(
+  config?: CoverageConfig,
+): Promise<ResolvedCoverageContext> {
   const options = resolveCoverageConfig(config);
   const tempDir = await mkdtemp(join(tmpdir(), 'tryscript-coverage-'));
 
@@ -92,7 +94,7 @@ export async function createCoverageContext(config?: CoverageConfig): Promise<Co
 /**
  * Get environment variables for enabling V8 coverage in spawned processes.
  */
-export function getCoverageEnv(ctx: CoverageContext): Record<string, string> {
+export function getCoverageEnv(ctx: ResolvedCoverageContext): Record<string, string> {
   return {
     NODE_V8_COVERAGE: ctx.tempDir,
   };
@@ -102,7 +104,7 @@ export function getCoverageEnv(ctx: CoverageContext): Record<string, string> {
  * Generate coverage report from collected V8 coverage data using c8.
  * Throws an error if coverage report generation fails.
  */
-export async function generateCoverageReport(ctx: CoverageContext): Promise<void> {
+export async function generateCoverageReport(ctx: ResolvedCoverageContext): Promise<void> {
   const { options, tempDir } = ctx;
   const c8 = resolveC8Command();
   if (!c8) {
@@ -157,7 +159,7 @@ export async function generateCoverageReport(ctx: CoverageContext): Promise<void
 /**
  * Clean up coverage context by removing the temporary directory.
  */
-export async function cleanupCoverageContext(ctx: CoverageContext): Promise<void> {
+export async function cleanupCoverageContext(ctx: ResolvedCoverageContext): Promise<void> {
   // `force` handles an already-absent path. Other filesystem failures must propagate;
   // reporting success while sensitive execution data remains would be misleading.
   await rm(ctx.tempDir, { recursive: true, force: true });

@@ -49,6 +49,10 @@ export type ResolvedCoverageConfig = {
   [Key in Exclude<keyof CoverageConfig, 'mergeLcov'>]-?: Exclude<CoverageConfig[Key], undefined>;
 } & { mergeLcov?: string };
 
+type PublicCoverageContextOptions = Omit<Required<CoverageConfig>, 'mergeLcov'> & {
+  mergeLcov?: string;
+};
+
 /** Schema for fixture configuration */
 export const FixtureSchema = z.union([
   z.string().describe('Source path (copied to same name in temp)'),
@@ -197,7 +201,18 @@ export interface TestRunSummary {
 export interface CoverageContext {
   /** Temporary directory for V8 coverage data files */
   tempDir: string;
-  /** Resolved coverage options with defaults applied */
+  /**
+   * Resolved coverage options with defaults applied.
+   *
+   * Required properties retain their v0.1.7 `undefined` unions for source compatibility.
+   * Contexts created by tryscript contain concrete runtime values.
+   */
+  options: PublicCoverageContextOptions;
+}
+
+/** Internal coverage context after runtime defaults eliminate `undefined`. */
+export interface ResolvedCoverageContext {
+  tempDir: string;
   options: ResolvedCoverageConfig;
 }
 

@@ -280,9 +280,11 @@ The user-facing limitations and collector differences are documented in the
 Unit tests cover parsing, normalization, matching, expansion, rewriting, configuration,
 coverage helpers, and process exit mapping.
 Integration and golden tests exercise CLI text and real shell behavior.
-The packed-package smoke test installs the produced archive as a consumer and exercises
-ESM, CommonJS, both CLI bundles, and a typed configuration on the minimum Node.js
-runtime.
+The packed-package smoke test installs the npm-compatible archive as a consumer,
+verifies its license, compiles strict legacy consumers against both declaration formats,
+and exercises ESM, CommonJS, both CLI bundles, and a typed configuration on the minimum
+Node.js runtime. The compatibility smoke test replays the pinned v0.1.7 corpus and
+rejects any difference outside the reviewed CLI-text allowlist.
 
 Any change to parsing or rewriting must add a source-level regression.
 Any change to a public CLI description must update the CLI golden file.
@@ -292,7 +294,7 @@ Packaging changes must pass the consumer smoke test, not only workspace imports.
 
 ### Open Questions
 
-There are no unresolved language-contract questions for v0.1.8. Fresh dependency
+There are no unresolved language-contract questions for v0.2.0. Fresh dependency
 exceptions are release governance decisions, not language architecture.
 
 ### Potential Improvements
@@ -309,7 +311,7 @@ exceptions are release governance decisions, not language architecture.
 - [Node.js child process events](https://nodejs.org/api/child_process.html#event-close)
 - [Node.js signal constants](https://nodejs.org/api/os.html#signal-constants)
 - [CommonMark fenced code blocks](https://spec.commonmark.org/current/#fenced-code-blocks)
-- [v0.1.8 stability review](../../specs/active/spec-v0.1.8-stability-review.md)
+- [v0.2.0 stability review](../../specs/active/spec-v0.2.0-stability-review.md)
 
 <!-- This document follows common-doc-guidelines.md.
 See github.com/jlevy/practical-prose and review guidelines before editing.
