@@ -5,7 +5,7 @@ title: "Address PR #48 senior review and release readiness"
 kind: task
 status: in_progress
 priority: 1
-version: 74
+version: 79
 spec_path: docs/project/specs/active/spec-v0.1.8-stability-review.md
 labels:
   - pr-review
@@ -79,7 +79,12 @@ child_order_hints:
   - is-01kzmgnp3abzyhapfcv8xt8143
   - is-01kzmh15r3fzsqsnrrqw4maeg9
   - is-01kzmh15yx67v33scs9cx9pdtn
+  - is-01kzmjbfsx05ar64ent41jh900
+  - is-01kzmjbfzm38kbkzc5gbcxwhyd
+  - is-01kzmjbg5a2yft7dkv1vnxbn7b
+  - is-01kzmjbgaxptrbyyeeyh66v256
+  - is-01kzmjbggkegj3rvbbaxw1h771
 created_at: 2026-08-09T20:55:56.228Z
-updated_at: 2026-08-10T00:26:46.621Z
+updated_at: 2026-08-10T00:50:18.538Z
 ---
 Parent tracker for every finding in the full senior engineering review of https://github.com/jlevy/tryscript/pull/48. Completion requires one disposition per finding, local quality gates, pushed fixes, green CI, and a merge-ready PR.
