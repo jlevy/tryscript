@@ -13,7 +13,7 @@ The remediation also adds public validation exports and makes documented CLI
 capabilities reliable.
 Valid test files that pass on v0.1.7 remain compatible.
 
-**Implementation status:** B1-B12, D1-D52, and D54-D56 are complete at the current local
+**Implementation status:** B1-B12, D1-D52, and D54-D57 are complete at the current local
 head. Quality, documentation, unit, golden, package, compatibility, minimum-runtime,
 coverage, and both production and full-audit gates pass.
 The exact fresh-security-fix exceptions have completed human and artifact review.
@@ -200,7 +200,7 @@ Regression tests protect the local pins; upstream generator work is tracked as
 ### Documentation, CLI, and Release Contract Pass
 
 Reconciling every maintained document and user-facing help string with the
-implementation found fifty-six more contract and release defects.
+implementation found fifty-seven more contract and release defects.
 Each is tracked under the PR remediation parent bead:
 
 | ID | Defect | Resolution | Bead |
@@ -261,6 +261,7 @@ Each is tracked under the PR remediation parent bead:
 | D54 | The compatibility replay inherits `GIT_DIR` and related state from pre-push hooks, so its archived repository loses Git-root behavior | Remove inherited `GIT_*` variables from every baseline subprocess and reproduce the hook environment in a regression run | `try-3z3e` |
 | D55 | The first security override covers only root ESLint’s minimatch path, and separate js-yaml exception entries do not satisfy pnpm’s exact multi-version syntax | Cover c8’s workspace-local minimatch edge, use pnpm’s documented version disjunction, and verify both dependency graphs plus the full audit | `try-0a09` |
 | D56 | ESLint traverses the gitignored attic used for third-party source review and loads foreign project configuration | Add the attic to the flat-config global ignores so external review material cannot alter repository quality gates | `try-datx` |
+| D57 | GitHub Actions enables ANSI output, so the compatibility harness rejects the correct replay result while parsing raw colored text | Strip ANSI only for structural assertions, preserve raw diagnostics, and reproduce the GitHub environment locally | `try-93an` |
 
 The documentation pass makes exact `flowmark-rs==0.3.2` formatting authoritative for the
 18 maintained documents and adds a repository check for local links, H1 structure, and
