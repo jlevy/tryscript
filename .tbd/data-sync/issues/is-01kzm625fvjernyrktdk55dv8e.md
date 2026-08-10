@@ -5,7 +5,7 @@ title: Make project-root golden assertion work in Git worktrees
 kind: bug
 status: closed
 priority: 2
-version: 4
+version: 5
 spec_path: docs/project/specs/active/spec-v0.1.8-stability-review.md
 labels:
   - pr-review
@@ -13,7 +13,7 @@ labels:
 dependencies: []
 parent_id: is-01kzm4z425gqmnfts7k93dqrbt
 created_at: 2026-08-09T21:15:04.571Z
-updated_at: 2026-08-10T00:34:09.317Z
+updated_at: 2026-08-10T00:51:02.571Z
 closed_at: 2026-08-10T00:34:09.317Z
 close_reason: Implemented with regression coverage; all local non-security quality, build, package, unit, golden, and coverage gates pass.
 ---

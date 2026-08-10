@@ -5,7 +5,7 @@ title: "Cleanup: full cycle 2026-08-09"
 kind: epic
 status: closed
 priority: 2
-version: 16
+version: 17
 spec_path: docs/project/specs/active/spec-v0.1.8-stability-review.md
 labels: []
 dependencies: []
@@ -25,7 +25,7 @@ child_order_hints:
   - is-01kzmcq16x9hexwh13dyda4szt
   - is-01kzmcq1e2kcf82tbzxjwjtp90
 created_at: 2026-08-09T23:11:00.689Z
-updated_at: 2026-08-10T00:34:09.447Z
+updated_at: 2026-08-10T00:51:02.824Z
 closed_at: 2026-08-10T00:34:09.447Z
 close_reason: Implemented with regression coverage; all local non-security quality, build, package, unit, golden, and coverage gates pass.
 ---

@@ -5,7 +5,7 @@ title: Make discovered test-file execution order deterministic
 kind: bug
 status: closed
 priority: 2
-version: 3
+version: 4
 spec_path: docs/project/specs/active/spec-v0.1.8-stability-review.md
 labels:
   - pr-review
@@ -13,7 +13,7 @@ labels:
 dependencies: []
 parent_id: is-01kzm4z425gqmnfts7k93dqrbt
 created_at: 2026-08-09T22:26:09.297Z
-updated_at: 2026-08-10T00:34:09.393Z
+updated_at: 2026-08-10T00:51:02.693Z
 closed_at: 2026-08-10T00:34:09.393Z
 close_reason: Implemented with regression coverage; all local non-security quality, build, package, unit, golden, and coverage gates pass.
 ---
