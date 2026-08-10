@@ -1,24 +1,19 @@
 /**
  * Docs command - Display the tryscript quick reference.
  *
- * Shows the tryscript-reference.md file, formatted for the terminal when interactive,
- * or as plain text when piped.
+ * Prints the tryscript-reference.md source without changing its bytes.
  */
 
-import type { Command } from 'commander';
+import { Option, type Command } from 'commander';
 
-import {
-  resolveMarkdownDocumentPath,
-  showMarkdownDocument,
-  type MarkdownDisplayOptions,
-} from '../lib/markdown.js';
+import { printDocumentation, resolveDocumentationPath } from '../lib/documentation.js';
 
 /**
  * Get the path to the tryscript-reference.md file.
  * Works both during development and when installed as a package.
  */
 export function getDocsPath(): string {
-  return resolveMarkdownDocumentPath(import.meta.url, ['docs', 'tryscript-reference.md']);
+  return resolveDocumentationPath(import.meta.url, ['docs', 'tryscript-reference.md']);
 }
 
 /**
@@ -28,9 +23,9 @@ export function registerDocsCommand(program: Command): void {
   program
     .command('docs')
     .description('Print the syntax reference')
-    .option('--raw', 'Print unformatted Markdown')
-    .option('--color', 'Use color even when output is redirected')
-    .action((options: MarkdownDisplayOptions) => {
-      showMarkdownDocument(getDocsPath(), 'reference docs', options);
+    .addOption(new Option('--raw', 'Deprecated; documentation is always raw').hideHelp())
+    .addOption(new Option('--color', 'Deprecated; documentation is never colorized').hideHelp())
+    .action(() => {
+      printDocumentation(getDocsPath(), 'reference docs');
     });
 }

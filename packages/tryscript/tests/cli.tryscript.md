@@ -117,7 +117,7 @@ $ node $TRYSCRIPT_TEST_DIR/../dist/bin.mjs --version
 # Test: readme command displays README
 
 ```console
-$ node $TRYSCRIPT_TEST_DIR/../dist/bin.mjs readme --raw | head -5
+$ node $TRYSCRIPT_TEST_DIR/../dist/bin.mjs readme | head -5
 # tryscript
 
 ...
@@ -134,24 +134,6 @@ A `.tryscript.md` file combines Markdown prose with console blocks that execute 
 commands and assert their output.
 This keeps the command, result, and explanation in one reviewable file.
 
-? 0
-```
-
-# Test: docs command with --color formats markdown
-
-The NO_COLOR env must be unset for colors to work. Output contains ANSI escape sequences.
-
-```console
-$ NO_COLOR= node $TRYSCRIPT_TEST_DIR/../dist/bin.mjs docs --color 2>&1 | head -1 | cat -v
-^[[1m^[[36m# tryscript Reference^[[39m^[[22m
-? 0
-```
-
-# Test: readme command with --color formats markdown
-
-```console
-$ NO_COLOR= node $TRYSCRIPT_TEST_DIR/../dist/bin.mjs readme --color 2>&1 | head -1 | cat -v
-^[[1m^[[36m# tryscript^[[39m^[[22m
 ? 0
 ```
 

@@ -65,6 +65,9 @@ will now fail with an actionable diagnostic.
 - Keep file arguments after repeatable coverage reporter and exclude options from being
   consumed as option values.
 - Exclude unnamed blocks when `--filter` requests matching named tests.
+- Emit `docs` and `readme` as exact source Markdown without ANSI styling. Their legacy
+  `--raw` and `--color` options remain accepted as no-ops so existing commands continue
+  to run.
 - Bundle ESM-only runtime dependencies into CommonJS output, then pack the package and
   smoke-test every published entry point on the declared minimum Node.js 20.0.0 as well
   as the normal CI runtime.
@@ -75,8 +78,8 @@ will now fail with an actionable diagnostic.
   use the publisher’s `npm pack` behavior, and compare the packed license byte for byte
   with the repository source.
 - Replay the pinned v0.1.7 golden corpus against the candidate build. The release keeps
-  110 assertions unchanged and limits differences to 14 reviewed snapshots of
-  tryscript’s own help, warning, error, progress, and coverage text.
+  108 assertions unchanged and limits differences to 16 reviewed snapshots of
+  tryscript’s own help, documentation, warning, error, progress, and coverage text.
 - Require an installed local `c8` for coverage instead of allowing a runtime package
   runner to download code, and invoke its JavaScript entry point through the current Node
   executable without platform-specific package-manager shell shims.
@@ -111,9 +114,9 @@ will now fail with an actionable diagnostic.
 - Reject malformed LCOV numeric records with source-line context and merge coverage
   without mutating either caller-owned input. Serialize files, same-line functions,
   branches, and lines in a fully deterministic order.
-- Render nested and tilde Markdown fences correctly in `tryscript docs` and
-  `tryscript readme`, with `--raw` taking precedence over color output and reproducing
-  the source Markdown byte for byte.
+- Make `tryscript docs` and `tryscript readme` emit source Markdown byte for byte for
+  stable use by people, agents, and pipelines. The legacy `--raw` and `--color` options
+  remain accepted as compatibility no-ops.
 - Make source-mode documentation commands read tracked workspace files so they work in
   a clean checkout before the first build.
 - Align the README, syntax reference, architecture, contributor runbooks, and Speculate

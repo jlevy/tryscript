@@ -210,7 +210,7 @@ Each is tracked under the PR remediation parent bead:
 | D2 | Project-level `tests` patterns are defined but ignored | Load config before discovery and test the CLI-argument/config/default precedence | `try-f9cx` |
 | D3 | Capture-log and coverage-report failures still exit 0 | Count requested-artifact failures in the final process status | `try-ge6b` |
 | D4 | `run --verbose` has no effect | Print captured output for passing blocks and lock the behavior in the CLI golden suite | `try-opve` |
-| D5 | The two documentation commands duplicate a fence parser that misreads nested Markdown | Share one renderer that tracks CommonMark fence character and width; make `--raw` override color | `try-ozkr` |
+| D5 | The two documentation commands duplicate partial Markdown formatters | Emit source Markdown unchanged and retain `--raw` and `--color` as compatibility no-ops | `try-ozkr`, `try-lxf1` |
 | D6 | Coverage report failures call `process.exit()` before temporary data cleanup | Set the deferred exit status, return through `finally`, and assert the reported directory is removed | `try-d8qb` |
 | D7 | A fixture-copy failure leaks the execution directory created before context setup | Remove partial contexts on every initialization error and retain both errors if cleanup also fails | `try-6k2i` |
 | D8 | Non-zero `before` and `after` hooks are silently treated as successful | Fail with the hook’s exit and output, prevent commands after failed setup, and preserve cleanup on every error path | `try-7f7u` |
@@ -256,7 +256,7 @@ Each is tracked under the PR remediation parent bead:
 | D48 | LCOV serialization retains input order for files and branches and has no same-line function tiebreaker | Sort every record type with complete ordinal and numeric comparison chains | `try-9auf` |
 | D49 | The package smoke test uses pnpm’s workspace-aware pack behavior, masking an npm artifact without `LICENSE` | Exercise `npm pack`, list and synchronize the package-root license explicitly, and compare the packed bytes with the repository source | `try-h4p8` |
 | D50 | The exported `CoverageContext` narrows a v0.1.7 TypeScript input shape | Preserve the published shape, keep a concrete internal context, and compile legacy consumers against both packed declaration formats | `try-ivh7` |
-| D51 | Release validation has no executable comparison with the published baseline | Replay the pinned v0.1.7 corpus and permit only the 14 reviewed tryscript CLI snapshot changes | `try-pxy0` |
+| D51 | Release validation has no executable comparison with the published baseline | Replay the pinned v0.1.7 corpus and permit only the reviewed tryscript CLI snapshot changes | `try-pxy0` |
 | D52 | A patch changeset understates additive public exports and user-visible CLI capabilities | Prepare v0.2.0 as a backward-compatible minor release with explicit migration guidance | `try-oe1p` |
 | D53 | PR metadata and fixed-issue bookkeeping no longer describe the reviewed branch | Reconcile the title, body, linked issues, review disposition, validation evidence, and release boundary before ready-for-review | `try-7ctq` |
 | D54 | The compatibility replay inherits `GIT_DIR` and related state from pre-push hooks, so its archived repository loses Git-root behavior | Remove inherited `GIT_*` variables from every baseline subprocess and reproduce the hook environment in a regression run | `try-3z3e` |
@@ -288,8 +288,8 @@ It is not a major release:
 - Representative v0.1.7 `CoverageContext`, `TestBlock`, and `TryscriptConfig` consumers
   compile against both packed CommonJS and ESM declarations with strict
   optional-property checks.
-- The pinned v0.1.7 corpus retains 110 assertions; the 14 reviewed differences snapshot
-  tryscript’s own improved help, warning, error, progress, and coverage text.
+- The pinned v0.1.7 corpus retains 108 assertions; the 16 reviewed differences snapshot
+  tryscript’s own help, raw documentation, warning, error, progress, and coverage text.
 - The packed artifact retains the v0.1.7 file count and MIT license while adding working
   CommonJS output and synchronized user documentation.
 
