@@ -41,6 +41,11 @@ const expectedPathWarningSuffixes = [
 const expectedWildcardWarning =
   'Warning: 15 unknown wildcards found (??? or [??]). ' +
   'Run with --expand, then review the replacement before committing.';
+// Git hooks export repository-local GIT_* variables. The archived baseline must
+// discover only the temporary repository initialized below.
+const isolatedGitEnvironment = Object.fromEntries(
+  Object.entries(process.env).filter(([name]) => !name.startsWith('GIT_')),
+);
 
 /**
  * Run a setup command that must succeed.
@@ -50,7 +55,11 @@ const expectedWildcardWarning =
  * @param {string} cwd
  */
 function run(command, args, cwd) {
-  const result = spawnSync(command, args, { cwd, encoding: 'utf8' });
+  const result = spawnSync(command, args, {
+    cwd,
+    encoding: 'utf8',
+    env: isolatedGitEnvironment,
+  });
   if (result.error) {
     throw new Error(`Failed to start ${command}`, { cause: result.error });
   }
@@ -125,7 +134,7 @@ try {
       '--quiet',
       '--no-diff',
     ],
-    { cwd: baselineRoot, encoding: 'utf8' },
+    { cwd: baselineRoot, encoding: 'utf8', env: isolatedGitEnvironment },
   );
   if (replay.error) {
     throw new Error('Failed to start the v0.1.7 compatibility replay', { cause: replay.error });

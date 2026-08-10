@@ -13,9 +13,9 @@ The remediation also adds public validation exports and makes documented CLI
 capabilities reliable.
 Valid test files that pass on v0.1.7 remain compatible.
 
-**Implementation status:** B1-B12 and D1-D52 are complete at the current local head.
-Quality, documentation, unit, golden, package, compatibility, minimum-runtime, coverage,
-and production-audit gates pass.
+**Implementation status:** B1-B12, D1-D52, and D54 are complete at the current local
+head. Quality, documentation, unit, golden, package, compatibility, minimum-runtime,
+coverage, and production-audit gates pass.
 D53 remains in progress while the PR is updated and CI runs.
 The release cannot leave draft until a human approves the exact fresh advisory fixes,
 the full audit is clean, and terminal CI is green.
@@ -200,7 +200,7 @@ Regression tests protect the local pins; upstream generator work is tracked as
 ### Documentation, CLI, and Release Contract Pass
 
 Reconciling every maintained document and user-facing help string with the
-implementation found fifty-three more contract and release defects.
+implementation found fifty-four more contract and release defects.
 Each is tracked under the PR remediation parent bead:
 
 | ID | Defect | Resolution | Bead |
@@ -258,6 +258,7 @@ Each is tracked under the PR remediation parent bead:
 | D51 | Release validation has no executable comparison with the published baseline | Replay the pinned v0.1.7 corpus and permit only the 14 reviewed tryscript CLI snapshot changes | `try-pxy0` |
 | D52 | A patch changeset understates additive public exports and user-visible CLI capabilities | Prepare v0.2.0 as a backward-compatible minor release with explicit migration guidance | `try-oe1p` |
 | D53 | PR metadata and fixed-issue bookkeeping no longer describe the reviewed branch | Reconcile the title, body, linked issues, review disposition, validation evidence, and release boundary before ready-for-review | `try-7ctq` |
+| D54 | The compatibility replay inherits `GIT_DIR` and related state from pre-push hooks, so its archived repository loses Git-root behavior | Remove inherited `GIT_*` variables from every baseline subprocess and reproduce the hook environment in a regression run | `try-3z3e` |
 
 The documentation pass makes exact `flowmark-rs==0.3.2` formatting authoritative for the
 18 maintained documents and adds a repository check for local links, H1 structure, and
