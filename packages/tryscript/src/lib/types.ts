@@ -52,14 +52,8 @@ export type ResolvedCoverageConfig = {
 /**
  * The v0.1.7 shape of `CoverageContext.options`, preserved exactly.
  *
- * v0.1.7 derived this as `Omit<Required<CoverageConfig>, 'mergeLcov'>` from a
- * non-strict schema, where zod's inferred output kept `| undefined` on each property
- * and `Required` only removed the `?`. Making `CoverageConfigSchema` strict (needed to
- * report unknown nested coverage keys) changes that inference, so the same derivation
- * now drops `| undefined` and rejects consumer code that compiled against v0.1.7.
- *
- * The union is therefore restated here rather than derived, which keeps the published
- * type independent of how the validation schema is configured.
+ * Keep `undefined` explicit so validation-schema strictness cannot narrow the public
+ * API under `exactOptionalPropertyTypes`.
  */
 type PublicCoverageContextOptions = {
   [Key in Exclude<keyof CoverageConfig, 'mergeLcov'>]-?: CoverageConfig[Key] | undefined;

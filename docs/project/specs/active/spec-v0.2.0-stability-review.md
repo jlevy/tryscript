@@ -13,12 +13,13 @@ The remediation also adds public validation exports and makes documented CLI
 capabilities reliable.
 Valid test files that pass on v0.1.7 remain compatible.
 
-**Implementation status:** B1-B12, D1-D52, and D54-D57 are complete at the current local
-head. Quality, documentation, unit, golden, package, compatibility, minimum-runtime,
-coverage, and both production and full-audit gates pass.
+**Implementation status:** B1-B12 and D1-D57 are complete.
+Quality, documentation, unit, golden, package, compatibility, minimum-runtime, coverage,
+and both production and full-audit gates pass.
 The exact fresh-security-fix exceptions have completed human and artifact review.
-D53 remains in progress while the PR is updated and CI runs; the release stays draft
-until the local commits are pushed and terminal CI is green.
+PR metadata, review disposition, issue bookkeeping, validation evidence, and the release
+boundary are reconciled.
+GitHub CI remains required on every pushed commit before merge.
 
 ## Backward Compatibility Contract
 
