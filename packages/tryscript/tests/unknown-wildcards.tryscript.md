@@ -1,6 +1,5 @@
 ---
 sandbox: true
-bin: ../dist/bin.mjs
 env:
   NO_COLOR: "1"
 ---

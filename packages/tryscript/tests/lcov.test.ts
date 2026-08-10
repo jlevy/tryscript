@@ -68,6 +68,23 @@ end_of_record
       const file = result.files.get('/path/to/file.ts');
       expect(file!.functions.get('myFunction<T, U>')?.hitCount).toBe(3);
     });
+
+    it('retains zero source lines used for functions with unknown locations', () => {
+      const result = parseLcov('SF:/path/to/file.ts\nFN:0,anonymous\nend_of_record\n');
+
+      expect(result.files.get('/path/to/file.ts')?.functions.get('anonymous')?.lineNumber).toBe(0);
+    });
+
+    it.each([
+      ['DA', 'DA:not-a-line,1'],
+      ['FN', 'FN:not-a-line,myFunction'],
+      ['FNDA', 'FNDA:not-a-count,myFunction'],
+      ['BRDA', 'BRDA:10,not-a-block,0,1'],
+    ])('rejects malformed %s numeric records with source-line context', (recordType, record) => {
+      const lcov = `SF:/path/to/file.ts\n${record}\nend_of_record\n`;
+
+      expect(() => parseLcov(lcov)).toThrow(`LCOV input:2: invalid ${recordType} record`);
+    });
   });
 
   describe('mergeLcov', () => {
@@ -144,9 +161,82 @@ end_of_record
       expect(file!.branches[0]?.taken).toBe(5); // max(5, 3)
       expect(file!.branches[1]?.taken).toBe(2); // -1 was not taken, now it's 2
     });
+
+    it('does not mutate either input while merging nested coverage values', () => {
+      const first = parseLcov(`SF:/path/to/file.ts
+FN:1,myFunc
+FNDA:1,myFunc
+DA:1,1
+BRDA:1,0,0,1
+end_of_record
+`);
+      const second = parseLcov(`SF:/path/to/file.ts
+FN:1,myFunc
+FNDA:9,myFunc
+DA:1,9
+BRDA:1,0,0,9
+end_of_record
+`);
+      const firstBefore = formatLcov(first);
+      const secondBefore = formatLcov(second);
+
+      const merged = mergeLcov(first, second);
+
+      expect(formatLcov(first)).toBe(firstBefore);
+      expect(formatLcov(second)).toBe(secondBefore);
+      expect(formatLcov(merged)).toContain('FNDA:9,myFunc');
+      expect(formatLcov(merged)).toContain('DA:1,9');
+      expect(formatLcov(merged)).toContain('BRDA:1,0,0,9');
+    });
   });
 
   describe('formatLcov', () => {
+    it('orders every record deterministically instead of retaining input order', () => {
+      const parsed = parseLcov(`SF:/z.ts
+DA:3,1
+DA:1,1
+BRDA:5,1,1,2
+BRDA:5,0,1,3
+BRDA:4,0,0,-
+FN:2,zeta
+FN:2,alpha
+FNDA:1,zeta
+FNDA:2,alpha
+end_of_record
+SF:/a.ts
+DA:1,1
+end_of_record
+`);
+
+      expect(formatLcov(parsed)).toBe(`SF:/a.ts
+FNF:0
+FNH:0
+BRF:0
+BRH:0
+DA:1,1
+LF:1
+LH:1
+end_of_record
+SF:/z.ts
+FN:2,alpha
+FN:2,zeta
+FNDA:2,alpha
+FNDA:1,zeta
+FNF:2
+FNH:2
+BRDA:4,0,0,-
+BRDA:5,0,1,3
+BRDA:5,1,1,2
+BRF:3
+BRH:2
+DA:1,1
+DA:3,1
+LF:2
+LH:2
+end_of_record
+`);
+    });
+
     it('round-trips LCOV data', () => {
       const original = `SF:/path/to/file.ts
 FN:1,myFunction

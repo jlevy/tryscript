@@ -4,34 +4,56 @@
 # Pre-push: Full test validation (target: 3-5s cached, <30s uncached)
 
 pre-commit:
-  parallel: true
+  parallel: false
 
   commands:
-    # Auto-format with prettier (~500ms)
+    # Auto-format code and data with Prettier (~500ms).
     format:
-      glob: '*.{js,ts,tsx,json,yaml,yml}'
-      run: npx prettier --write --log-level warn {staged_files}
+      glob: '*.{js,jsx,mjs,cjs,ts,tsx,mts,cts,json,yaml,yml}'
+      run: pnpm exec prettier --write --log-level warn {staged_files}
       stage_fixed: true
       priority: 1
+
+    # Auto-format maintained Markdown with the exact reviewed Flowmark release.
+    format-markdown:
+      glob: '*.{md,mdc,markdown}'
+      run: pnpm flowmark --auto --force-exclude {staged_files}
+      stage_fixed: true
+      priority: 2
 
     # Lint with auto-fix and caching (~1s first, ~200ms cached)
     lint:
       glob: '*.{ts,tsx,js,jsx,mjs,cjs}'
       run: >
-        npx eslint
+        pnpm exec eslint
         --cache
         --cache-location node_modules/.cache/eslint
         --fix {staged_files}
       stage_fixed: true
-      priority: 2
+      priority: 3
 
     # Type check with incremental mode (~2s)
     typecheck:
-      glob: '*.{ts,tsx}'
+      glob: '*.{ts,tsx,mts,cts}'
       run: pnpm typecheck
-      priority: 3
+      priority: 4
 
 pre-push:
+  parallel: false
+
   commands:
+    quality:
+      run: pnpm ci:quality
+      priority: 1
+
+    build:
+      run: pnpm build && pnpm publint
+      priority: 2
+
     test:
       run: pnpm test
+      priority: 3
+
+    audit:
+      run: pnpm audit --audit-level=moderate
+      priority: 4

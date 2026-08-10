@@ -4,6 +4,7 @@ import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import {
   isC8Available,
+  resolveC8Command,
   createCoverageContext,
   getCoverageEnv,
   cleanupCoverageContext,
@@ -11,6 +12,31 @@ import {
 import { resolveCoverageConfig, DEFAULT_COVERAGE_CONFIG } from '../src/lib/config.js';
 
 describe('coverage', () => {
+  describe('resolveC8Command', () => {
+    it('runs the installed JavaScript entry point through the current Node executable', () => {
+      const result = resolveC8Command();
+
+      expect(result?.command).toBe(process.execPath);
+      expect(result?.argsPrefix).toHaveLength(1);
+      expect(result?.argsPrefix[0]?.replaceAll('\\', '/')).toMatch(/\/c8\/bin\/c8\.js$/);
+    });
+
+    it('uses an explicit test command without adding arguments', () => {
+      const previous = process.env.TRYSCRIPT_C8_COMMAND;
+      process.env.TRYSCRIPT_C8_COMMAND = '/tmp/mock-c8';
+
+      try {
+        expect(resolveC8Command()).toEqual({ command: '/tmp/mock-c8', argsPrefix: [] });
+      } finally {
+        if (previous === undefined) {
+          delete process.env.TRYSCRIPT_C8_COMMAND;
+        } else {
+          process.env.TRYSCRIPT_C8_COMMAND = previous;
+        }
+      }
+    });
+  });
+
   describe('resolveCoverageConfig', () => {
     it('returns defaults when no config provided', () => {
       const result = resolveCoverageConfig();

@@ -74,6 +74,17 @@ export function reportFile(result: TestFileResult, options: ReporterOptions): vo
     if (blockResult.passed) {
       if (!options.quiet) {
         console.error(`  ${statusIcon.pass} ${name}`);
+        if (options.verbose) {
+          const output = blockResult.actualOutput.trimEnd();
+          if (output) {
+            console.error(
+              output
+                .split('\n')
+                .map((line) => `    ${line}`)
+                .join('\n'),
+            );
+          }
+        }
       }
     } else {
       console.error(`  ${statusIcon.fail} ${name}`);
@@ -94,6 +105,12 @@ export function reportFile(result: TestFileResult, options: ReporterOptions): vo
           console.error('');
           console.error(blockResult.diff);
         }
+
+        if (options.diff && blockResult.stderrDiff) {
+          console.error('');
+          console.error(`    ${pc.bold('stderr:')}`);
+          console.error(blockResult.stderrDiff);
+        }
       }
     }
   }
@@ -104,7 +121,7 @@ export function reportFile(result: TestFileResult, options: ReporterOptions): vo
 /**
  * Report final summary.
  */
-export function reportSummary(summary: TestRunSummary, _options: ReporterOptions): void {
+export function reportSummary(summary: TestRunSummary): void {
   const parts: string[] = [];
 
   if (summary.totalPassed > 0) {
@@ -112,6 +129,13 @@ export function reportSummary(summary: TestRunSummary, _options: ReporterOptions
   }
   if (summary.totalFailed > 0) {
     parts.push(pc.red(`${summary.totalFailed} failed`));
+  }
+  if (summary.parseErrors) {
+    const files = summary.parseErrors === 1 ? 'file' : 'files';
+    parts.push(pc.red(`${summary.parseErrors} unparsable ${files}`));
+  }
+  if (parts.length === 0) {
+    parts.push('no tests run');
   }
 
   const duration = formatDuration(summary.duration);

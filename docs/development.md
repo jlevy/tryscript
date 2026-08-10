@@ -1,32 +1,40 @@
 # Development Guide
 
-> This document covers essential developer workflows for this project.
-> **Update this document** as new patterns and workflows are established during
-> implementation.
+Use these workflows to build, test, and release tryscript from a clean checkout.
+The [documentation map](docs-overview.md) links the product reference, architecture, and
+historical records.
 
 ## Prerequisites
 
-- **Node.js 20+** — We recommend v24 (current) or v22 LTS. Minimum supported is v20.
-  [nodejs.org](https://nodejs.org/)
+- **Node.js 20.19 or newer:** Node.js 24 is the recommended development runtime.
+  The published CLI retains its Node.js 20 contract, and package smoke tests run on
+  20.0.0. See the [Node.js releases](https://nodejs.org/en/about/previous-releases) page
+  for the support schedule.
 
-- **pnpm 10.x** — Install via `corepack enable` or `npm install -g pnpm`
+- **pnpm 10.34.5:** The root `packageManager` field pins the repository version.
+  Enable Corepack before installing dependencies.
 
-- **GitHub CLI** (for releases) — See [GitHub CLI Setup](general/agent-setup/github-cli-setup.md)
+- **uv 0.11.28 or newer:** Repository scripts use `uvx` to run the exact reviewed
+  `flowmark-rs==0.3.2` Markdown formatter.
+  CI pins uv 0.11.28. See the
+  [uv installation guide](https://docs.astral.sh/uv/getting-started/installation/).
+
+- **GitHub CLI:** Required for pull-request and release operations.
+  See [GitHub CLI setup](general/agent-setup/github-cli-setup.md).
 
 ### Node.js Setup
 
-This project requires Node.js 20 or higher.
-We recommend Node 24 (current) for best performance.
+This project requires Node.js 20.19 or newer for development.
+Node.js 24 matches the release workflow.
 
 **Option 1: Direct installation**
 
-Download from [nodejs.org](https://nodejs.org/) and install Node.js 24 (current) or
-Node.js 22 LTS.
+Download Node.js 24 from [nodejs.org](https://nodejs.org/).
 
 **Option 2: Using a version manager**
 
 ```bash
-# Using nvm (recommended: install latest)
+# Using nvm
 nvm install 24
 nvm use 24
 
@@ -41,8 +49,9 @@ mise use node@24
 **Verify Installation**
 
 ```bash
-node --version   # Should show v20.x.x or higher (v24 recommended)
+node --version   # Should show v20.19.x or higher (v24 recommended)
 pnpm --version   # Should show 10.x.x
+uv --version     # Should show 0.11.28 or higher
 ```
 
 ## Project Structure
@@ -57,7 +66,7 @@ tryscript/
         cli/             # CLI commands
         lib/             # Core: parsing, matching, running
       tests/             # Self-tests (.tryscript.md) and unit tests
-      docs/              # Package documentation
+      docs/              # Generated package documentation (ignored)
   docs/                  # Project documentation
   .changeset/            # Version management
   .github/workflows/     # CI/CD
@@ -71,6 +80,9 @@ Run from repository root:
 # Install dependencies
 pnpm install
 
+# Install the repository's pinned Git hooks (install scripts are disabled)
+pnpm exec lefthook install
+
 # Build all packages
 pnpm build
 
@@ -83,8 +95,17 @@ pnpm test
 # Lint
 pnpm lint
 
+# Format code, data files, and maintained Markdown
+pnpm format
+
+# Verify Flowmark formatting without changing Markdown
+pnpm format:docs:check
+
 # Validate package exports
 pnpm publint
+
+# Check maintained Markdown structure and local links
+pnpm docs:check
 ```
 
 Run commands for a specific package:
@@ -104,86 +125,91 @@ pnpm --filter tryscript test
 
 ### Making Changes
 
-1. Create a feature branch from `main`
+1. Create a feature branch from `main`.
 
-2. Make changes and ensure tests pass
+2. Make the change and add focused regression coverage.
 
-3. Run full validation: `pnpm lint && pnpm typecheck && pnpm build && pnpm test`
+3. Run the full validation gate with `pnpm verify`.
 
-4. Commit and push
+4. Review the diff, commit, and push.
 
 ### Pre-commit Checklist
 
 Before committing, ensure:
 
 ```bash
-pnpm format:check  # Formatting correct
-pnpm lint          # No lint errors
+pnpm format:check  # Prettier and Flowmark formatting correct
+pnpm lint:check    # No lint errors or source changes
 pnpm typecheck     # No type errors
 pnpm build         # Build succeeds
 pnpm publint       # Package exports valid
 pnpm test          # Tests pass
+pnpm docs:check    # Maintained docs and local links are valid
 ```
 
-Or run the full check:
+Or run the full verification gate:
 
 ```bash
-pnpm precommit     # Runs format, lint, typecheck, test
+pnpm verify        # Format check, lint, types, build, package smoke, tests, audit
 ```
 
 ### Releases
 
-Changesets are created at release time, not per-PR. Just merge your work to `main`. See
-[Publishing](publishing.md) for the release workflow. The release process requires the
-GitHub CLI (`gh`) — see [GitHub CLI Setup](general/agent-setup/github-cli-setup.md).
+User-visible changes need a Changeset, either in their pull request or during release
+preparation.
+See the [publishing runbook](publishing.md) for versioning, tagging, trusted
+publishing, and release verification.
 
 ## CLI Usage
 
 Run the CLI from the repository root:
 
 ```bash
-# Development: runs TypeScript source directly via tsx (always current, no build needed)
+# Run TypeScript source directly through tsx; no build is required.
 pnpm tryscript --help
 pnpm tryscript run tests/basic.tryscript.md
-pnpm tryscript run tests/ --verbose
+pnpm tryscript run 'tests/**/*.tryscript.md' --verbose
 
-# Testing built output (requires pnpm build first)
+# Exercise built output after pnpm build.
 node packages/tryscript/dist/bin.mjs --help
 ```
 
 **Why two approaches?**
 
-- `pnpm tryscript` — Runs source via `tsx`. Use this during development—always current,
-  no build step needed.
+- `pnpm tryscript`: Runs source through `tsx`. Use it while changing the CLI. Its
+  `readme` and `docs` commands read the tracked workspace documents, so they work before
+  the first build.
 
-- `node dist/bin.mjs` — Runs the built binary from `dist/`. Use this to verify the
-  published output works correctly before release.
+- `node packages/tryscript/dist/bin.mjs`: Runs the built ESM executable.
+  The package smoke test separately verifies the packed ESM, CommonJS, and CLI entry
+  points.
 
 ### CLI Commands
 
 | Command | Description |
 | --- | --- |
-| (none) | Display help (same as --help) |
-| `run [files...]` | Run golden tests |
-| `readme` | Display README documentation |
-| `docs` | Display concise syntax reference |
+| (none) | Print help |
+| `run [files...]` | Run Markdown golden tests |
+| `coverage <commands...>` | Collect merged V8 coverage from one or more commands |
+| `readme` | Print the README |
+| `docs` | Print the syntax reference |
 
 ### CLI Options (for `run` command)
 
 | Option | Description |
 | --- | --- |
-| `--update` | Update golden files with actual output |
-| `--expand` | Expand unknown wildcards (`???`/`[??]`) with actual output |
-| `--expand-generic` | Expand unknown + generic wildcards |
-| `--expand-all` | Expand all wildcards (including named patterns) |
-| `--capture-log <path>` | Write wildcard capture log to YAML file |
+| `--update` | Replace expected output with actual output |
+| `--expand` | Replace unknown wildcards (`???` and `[??]`) with actual output |
+| `--expand-generic` | Replace unknown and generic wildcards |
+| `--expand-all` | Replace all wildcards, including named patterns |
+| `--capture-log <path>` | Write wildcard captures to a YAML file |
 | `--diff` | Show diff on failure (default: true) |
 | `--no-diff` | Hide diff on failure |
 | `--fail-fast` | Stop on first failure |
-| `--filter <regex>` | Filter tests by name pattern |
-| `--verbose` | Show detailed output |
-| `--quiet` | Suppress non-essential output |
-| `--coverage` | Enable code coverage collection (requires c8) |
+| `--filter <pattern>` | Run named tests matching a regular expression |
+| `--verbose` | Include captured output for passing tests |
+| `--quiet` | Show only failures and the final summary |
+| `--coverage` | Collect V8 coverage with an installed `c8` package |
 | `--coverage-*` | Coverage options (see [Coverage CLI Options](#coverage-cli-options)) |
 
 ## Testing
@@ -191,38 +217,54 @@ node packages/tryscript/dist/bin.mjs --help
 ### Quick Reference
 
 ```bash
-# Full precommit check (format, lint, typecheck, test)
+# Fast local gate; formatting may update files.
 pnpm precommit
 
-# Individual commands
+# Full release-quality gate
+pnpm verify
+
+# Individual checks
 pnpm build           # Build all packages
-pnpm lint            # ESLint
+pnpm lint:check       # ESLint and TypeScript, without source changes
 pnpm typecheck       # TypeScript type checking
 pnpm test            # All tests
 pnpm test:golden     # Golden self-tests only
-pnpm publint         # Validate package exports
+pnpm publint         # Validate exports, the npm artifact, and v0.1.7 compatibility
 ```
 
 ### Test Categories
 
-**Unit Tests** (`tests/*.test.ts`): Test individual modules
+**Unit and integration tests:** `packages/tryscript/tests/*.test.ts`
 
 ```bash
 pnpm test
 ```
 
-**Golden Tests** (`tests/*.tryscript.md`): Self-tests using tryscript on itself
+**Golden tests:** `packages/tryscript/tests/*.tryscript.md`
 
 ```bash
 pnpm test:golden
 ```
 
-Golden tests run tryscript against .tryscript.md files to validate the golden testing
-works correctly.
+The golden suite runs the built tryscript CLI against its own `.tryscript.md` files.
+
+**Published-package and compatibility tests:**
+
+```bash
+pnpm --filter tryscript test:package
+pnpm --filter tryscript test:compat
+```
+
+The package test uses `npm pack`, verifies the MIT license, compiles representative
+v0.1.7 consumers against both declaration formats, and exercises every JavaScript and
+CLI entry point. The compatibility test replays the pinned v0.1.7 golden corpus and
+rejects differences outside the reviewed tryscript CLI-text allowlist.
+Both require a built package; the replay also requires full Git history containing its
+pinned baseline commit.
 
 ### Coverage
 
-tryscript uses **LCOV merging** to combine coverage from unit tests and golden tests:
+Tryscript merges LCOV data from unit tests and golden tests:
 
 ```bash
 pnpm test:coverage          # Run both and merge results
@@ -230,17 +272,18 @@ pnpm test:coverage          # Run both and merge results
 
 This runs two steps:
 
-1. `test:coverage:vitest` - Unit tests with vitest coverage (produces `coverage/lcov.info`)
-2. `test:coverage:tryscript` - Golden tests with c8/NODE_V8_COVERAGE, then merges with vitest's LCOV via built-in `--merge-lcov`
+1. `test:coverage:vitest` runs Vitest coverage and writes `coverage/lcov.info`.
+2. `test:coverage:tryscript` runs golden tests with `c8` and `NODE_V8_COVERAGE`, then
+   merges Vitest’s LCOV file through `--merge-lcov`.
 
 **Why LCOV merging?**
 
-- Vitest uses `node:inspector` for coverage (captures imports)
-- Tryscript uses `NODE_V8_COVERAGE` (captures subprocess spawns)
-- These are different mechanisms that must be merged via LCOV files
-- The built-in `--merge-lcov` flag handles this automatically
+- Vitest controls the V8 profiler through `node:inspector`.
+- Tryscript sets `NODE_V8_COVERAGE` for spawned processes.
+- `--merge-lcov` combines the two result sets without assuming they share a collector.
 
-The merged coverage is written to `coverage-tryscript/lcov.info` and `coverage-tryscript/coverage-summary.json`.
+The merged coverage is written to `coverage-tryscript/lcov.info` and
+`coverage-tryscript/coverage-summary.json`.
 
 #### Individual Coverage Scripts
 
@@ -265,8 +308,8 @@ Use the same LCOV merging approach for any CLI project:
 
 #### Deep Dive: Coverage Architecture
 
-For comprehensive documentation on coverage strategies, see
-[Research: Code Coverage Best Practices](general/research/current/research-code-coverage-typescript.md).
+For the investigation behind this design, see
+[TypeScript coverage research](general/research/current/research-code-coverage-typescript.md).
 
 ### Watch Mode
 
@@ -277,30 +320,38 @@ pnpm --filter tryscript test:watch
 
 ### CI Consistency
 
-The CI workflow (`.github/workflows/ci.yml`) runs these commands in order:
+The CI workflow (`.github/workflows/ci.yml`) pins uv and Flowmark, then runs these gates
+in order:
 
-1. `pnpm install`
+1. `pnpm install --frozen-lockfile`
 
-2. `pnpm format:check`
+2. `pnpm audit --audit-level=moderate`
 
-3. `pnpm lint:check`
+3. `pnpm ci:quality` (Prettier, Flowmark, maintained docs, types, and lint)
 
-4. `pnpm build`
+4. `pnpm build` and `pnpm publint`
 
-5. `pnpm publint`
+5. `pnpm --filter tryscript test:coverage`
 
-6. `pnpm test:coverage`
+6. The npm-compatible package and pinned v0.1.7 replay tests under the declared minimum
+   Node.js 20.0.0 runtime.
 
-To match CI behavior locally, run `pnpm precommit` which executes the same checks.
+Run `pnpm verify` for the local release-quality gate.
+Coverage and the explicit Node.js 20.0.0 compatibility run remain CI checks.
+Pull-request test execution has read-only repository access.
+After a successful test job, coverage data moves through an artifact to a comment-only
+job with pull-request write access.
+A separate main-only job receives repository write access to refresh coverage badges.
 
 ## Writing Test Files
 
-Test files use the `.tryscript.md` extension and contain markdown with console code
+Test files use the `.tryscript.md` extension and contain Markdown with console code
 blocks:
 
 ````markdown
 ---
-bin: ./my-cli
+path:
+  - .
 env:
   NO_COLOR: "1"
 ---
@@ -319,7 +370,7 @@ Usage: my-cli [options]
 
 There are three categories of wildcards (in order of preference):
 
-**Named patterns** -- typed dynamic values:
+**Named patterns:** Typed dynamic values.
 
 | Pattern | Matches | Example |
 | --- | --- | --- |
@@ -328,14 +379,14 @@ There are three categories of wildcards (in order of preference):
 | `[EXE]` | `.exe` on Windows, empty else | `my-cli[EXE]` |
 | `[PATTERN]` | Custom regex from config | User-defined |
 
-**Unknown wildcards** -- temporary placeholders (expand with `--expand`):
+**Unknown wildcards:** Temporary placeholders to replace with `--expand`.
 
 | Pattern | Matches | Example |
 | --- | --- | --- |
 | `[??]` | Any characters on line | `Result: [??]` |
 | `???` | Zero or more lines | `???\nDone` |
 
-**Generic wildcards** -- intentional omission of variable output:
+**Generic wildcards:** Intentional omissions of variable output.
 
 | Pattern | Matches | Example |
 | --- | --- | --- |
@@ -344,39 +395,38 @@ There are three categories of wildcards (in order of preference):
 
 ## Git Hooks
 
-Pre-commit and pre-push hooks are managed by Lefthook:
+Lefthook manages the repository’s local checks:
 
-- **Pre-commit**: Format, lint, and typecheck
+- **Pre-commit:** Format staged files, lint them, and type-check the workspace.
 
-- **Pre-push**: Run tests
+- **Pre-push:** Run formatting and lint checks, build and validate the package, run the
+  tests, and audit dependencies.
 
-To skip hooks temporarily:
+Install the pinned hook configuration after each fresh clone:
 
 ```bash
-git commit --no-verify
-git push --no-verify
+pnpm exec lefthook install
 ```
 
 ## Issue Tracking
 
-This project uses **bd (beads)** for issue tracking.
-See `docs/general/agent-setup/beads-setup.md` for setup instructions.
+This project uses **tbd beads** for issue tracking.
+Agents operate tbd on the user’s behalf; beads preserve findings, dependencies, and
+session state in Git.
 
 ```bash
-# Check what's ready to work on
-bd ready
+# Inspect ready work.
+tbd ready
 
-# Create a new issue
-bd create "Description" -p 2 -t feature
+# Create and claim work.
+tbd create "Description" --type task --priority 2
+tbd update <id> --status in_progress
 
-# Update issue status
-bd update <id> --status in_progress
-
-# Close an issue
-bd close <id>
+# Complete and synchronize tracked work.
+tbd close <id> --reason "Implemented and verified"
+tbd sync
 ```
 
-* * *
-
-> **Note:** This is an initial version created during Phase 0 scaffolding.
-> Update as implementation progresses and new patterns emerge.
+<!-- This document follows common-doc-guidelines.md.
+See github.com/jlevy/practical-prose and review guidelines before editing.
+-->

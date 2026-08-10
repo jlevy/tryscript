@@ -81,6 +81,54 @@ describe('matchOutput', () => {
     it('replaces [CWD] with cwd path', () => {
       expect(matchOutput('Dir: /test/cwd/subdir\n', 'Dir: [CWD]/subdir\n', context)).toBe(true);
     });
+
+    it('keeps wildcard-looking text inside resolved paths literal', () => {
+      const bracketedContext = { root: '/test/[..]', cwd: '/test/[??]' };
+
+      expect(
+        matchOutput(
+          'File: /test/not-the-root/output.txt\n',
+          'File: [ROOT]/output.txt\n',
+          bracketedContext,
+        ),
+      ).toBe(false);
+      expect(
+        matchOutput(
+          'Dir: /test/not-the-cwd/output.txt\n',
+          'Dir: [CWD]/output.txt\n',
+          bracketedContext,
+        ),
+      ).toBe(false);
+    });
+
+    it('accepts Windows path separators without turning path text into wildcards', () => {
+      const windowsContext = {
+        root: String.raw`C:\test\[..]`,
+        cwd: String.raw`\\server\share\[??]`,
+      };
+
+      expect(
+        matchOutput(
+          String.raw`File: C:\test\[..]\output.txt` + '\n',
+          'File: [ROOT]/output.txt\n',
+          windowsContext,
+        ),
+      ).toBe(true);
+      expect(
+        matchOutput(
+          String.raw`Dir: \\server\share\[??]\output.txt` + '\n',
+          'Dir: [CWD]/output.txt\n',
+          windowsContext,
+        ),
+      ).toBe(true);
+      expect(
+        matchOutput(
+          String.raw`File: C:\test\anything\output.txt` + '\n',
+          'File: [ROOT]/output.txt\n',
+          windowsContext,
+        ),
+      ).toBe(false);
+    });
   });
 
   describe('custom patterns', () => {
@@ -102,6 +150,15 @@ describe('matchOutput', () => {
           patterns,
         ),
       ).toBe(true);
+    });
+
+    it('retains source-only RegExp matching when flags are present', () => {
+      expect(matchOutput('ready\n', '[WORD]\n', context, { WORD: /ready/i })).toBe(true);
+      expect(matchOutput('READY\n', '[WORD]\n', context, { WORD: /ready/i })).toBe(false);
+    });
+
+    it('keeps built-in behavior when a custom name is reserved', () => {
+      expect(matchOutput('anything\n', '[??]\n', context, { '??': 'must-not-replace' })).toBe(true);
     });
   });
 
@@ -149,6 +206,13 @@ describe('matchOutput', () => {
           context,
         ),
       ).toBe(true);
+    });
+
+    it('keeps private-use marker text literal', () => {
+      const markerText = '\uE0000\uE000';
+
+      expect(matchOutput(`${markerText} value\n`, `${markerText} [..]\n`, context)).toBe(true);
+      expect(matchOutput(`${markerText} value\n`, `${markerText} exact\n`, context)).toBe(false);
     });
   });
 });
@@ -228,6 +292,81 @@ describe('matchAndCapture', () => {
       name: 'VERSION',
       captured: '1.2.3',
     });
+  });
+
+  it('keeps later captures aligned when a custom pattern has capture groups', () => {
+    const patterns = {
+      PAIR: '(\\d+)-(\\d+)',
+      WORD: '[a-z]+',
+    };
+    const result = matchAndCapture(
+      'Pair: 12-34, word: ready\n',
+      'Pair: [PAIR], word: [WORD]\n',
+      context,
+      patterns,
+    );
+
+    expect(result?.captures).toMatchObject([
+      { category: 'named', name: 'PAIR', captured: '12-34' },
+      { category: 'named', name: 'WORD', captured: 'ready' },
+    ]);
+  });
+
+  it('preserves numeric backreferences inside custom pattern captures', () => {
+    const patterns = {
+      REPEATED: '(a)\\1',
+      WORD: '[a-z]+',
+    };
+    const result = matchAndCapture(
+      'Value: aa, word: ready\n',
+      'Value: [REPEATED], word: [WORD]\n',
+      context,
+      patterns,
+    );
+
+    expect(result?.captures).toMatchObject([
+      { name: 'REPEATED', captured: 'aa' },
+      { name: 'WORD', captured: 'ready' },
+    ]);
+  });
+
+  it('keeps legacy decimal escapes from binding to wrapper captures', () => {
+    const result = matchAndCapture('prefix-\x02\n', '[..]-[VALUE]\n', context, {
+      VALUE: '\\2',
+    });
+
+    expect(result?.captures).toMatchObject([
+      { category: 'generic', captured: 'prefix' },
+      { category: 'named', name: 'VALUE', captured: '\x02' },
+    ]);
+  });
+
+  it('keeps a named escape literal when the custom pattern defines no named groups', () => {
+    const result = matchAndCapture('Value: k<missing>\n', 'Value: [VALUE]\n', context, {
+      VALUE: '\\k<missing>',
+    });
+
+    expect(result?.captures).toMatchObject([
+      { category: 'named', name: 'VALUE', captured: 'k<missing>' },
+    ]);
+  });
+
+  it('rejects a missing named backreference when the custom pattern has named groups', () => {
+    expect(() =>
+      matchAndCapture('Value: ak<missing>\n', 'Value: [VALUE]\n', context, {
+        VALUE: '(?<known>a)\\k<missing>',
+      }),
+    ).toThrow(/custom pattern \[VALUE\].*undefined named group 'missing'/iu);
+  });
+
+  it('namespaces named groups when a custom pattern appears more than once', () => {
+    const patterns = { PAIR: '(?<digit>\\d)\\k<digit>' };
+    const result = matchAndCapture('11 22\n', '[PAIR] [PAIR]\n', context, patterns);
+
+    expect(result?.captures).toMatchObject([
+      { name: 'PAIR', captured: '11' },
+      { name: 'PAIR', captured: '22' },
+    ]);
   });
 
   it('captures multiple wildcards in order with correct metadata', () => {

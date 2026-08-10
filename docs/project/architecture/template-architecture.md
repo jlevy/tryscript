@@ -1,84 +1,80 @@
-# [Component/Feature] Architecture
+# [Component or Feature] Architecture
 
-Last updated: YYYY-MM-DD
+- **Status:** draft | current | superseded
+- **Last reviewed:** YYYY-MM-DD
+- **Owners:** [team or people]
 
-Maintenance: When revising this doc you must follow instructions in
-@shortcut-revise-architecture-doc.md.
+[Explain what this system does, why it exists, and which reader decisions this document supports. Link to the user-facing reference instead of repeating it.]
 
-## Overview
+## Scope and Design Goals
 
-[1-2 paragraphs describing what this architecture document covers and why it exists]
+**In scope:** [components, workflows, and contracts described here]
 
-**Scope**: [Brief description of what’s in scope vs out of scope]
+**Out of scope:** [nearby concerns documented elsewhere]
 
-**Related Documents:**
+The design must preserve these properties:
 
-- [Link to related architecture docs]
+- [Invariant or compatibility requirement]
+- [Security, reliability, or performance requirement]
+- [Maintainability requirement]
 
-- [Link to feature specs or research briefs]
+## Context and Terminology
 
-## Terminology
+[Define only terms needed to understand the design. Link to shared definitions where possible.]
 
-[Define key terms or link to docs that define them]
+## Components
 
-## Topic 1
+| Component | Source | Responsibility |
+| --- | --- | --- |
+| [Name] | `path/to/source` | [Single responsibility and boundary] |
 
-**File(s)**: `path/to/main/file.ts`
+## Runtime or Data Flow
 
-[High-level description of the architectural solution]
+1. [Input enters the system]
+2. [Validation and transformation]
+3. [Side effect or downstream call]
+4. [Result, error, and cleanup behavior]
 
-### Key Components
+[Add the smallest useful diagram when prose does not show the relationships clearly.]
 
-#### 1. [Component Name]
+## Interfaces and Configuration
 
-[Description of this component’s responsibility]
+[Describe public types, APIs, configuration precedence, persistence formats, and compatibility guarantees. Keep implementation detail close to the relevant component.]
 
-```typescript
-// Example usage or interface
-```
+## Failure and Safety Model
 
-**What it does:**
+- **Invalid input:** [handling and user-visible result]
+- **Dependency failure:** [retry, propagation, or fallback behavior]
+- **Partial work:** [atomicity, cleanup, or recovery behavior]
+- **Security boundary:** [trust assumptions and validation]
 
-1. [Responsibility 1]
+## Verification Boundaries
 
-2. [Responsibility 2]
+| Risk | Verification |
+| --- | --- |
+| [Key failure mode] | [Unit, integration, end-to-end, or operational check] |
 
-**Benefits:**
+State which changes require compatibility, package-consumer, migration, or performance
+tests.
 
-- [Benefit 1]
+## Future Considerations
 
-- [Benefit 2]
+### Open Questions
 
-## Implementation
+- [Question that blocks or could change the current design, with an owner]
 
-**Created**: `path/to/files` (Month Year)
+### Potential Improvements
 
-- [List of new files or functions created]
+- [Tracked non-blocking improvement and bead or issue ID]
 
-**Migrated from**: `path/to/old/files` (if applicable)
-
-- Removed: [List deprecated code]
-
-## Architecture Diagram
-
-```
-[ASCII diagram showing component relationships and data flow]
-```
-
-## Usage Guidelines
-
-### DO: [Best Practices]
-
-```typescript
-// ✅ CORRECT: Example of proper usage
-```
-
-### DON’T: [Anti-patterns]
-
-```typescript
-// ❌ WRONG: Example of what to avoid
-```
+Do not list speculative work without a tracking record.
 
 ## References
 
-[Key links to relevant docs, APIs, libraries, etc.]
+- [User or API reference]
+- [Governing specification]
+- [External primary source]
+
+<!-- This document follows common-doc-guidelines.md.
+See github.com/jlevy/practical-prose and review guidelines before editing.
+-->

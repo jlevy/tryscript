@@ -5,7 +5,6 @@ sandbox: true
 fixtures:
   - my-cli.sh
 ---
-
 # Test: CLI help
 
 ```console
@@ -41,3 +40,7 @@ $ bash my-cli.sh process data.json > output.txt && grep "success" output.txt
 [..]success[..]
 ? 0
 ```
+
+<!-- This document follows common-doc-guidelines.md.
+See github.com/jlevy/practical-prose and review guidelines before editing.
+-->

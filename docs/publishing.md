@@ -1,329 +1,186 @@
-# Publishing
+# Publishing tryscript
 
-This project uses [Changesets](https://github.com/changesets/changesets) for version
-management and tag-based releases with OIDC trusted publishing to npm.
+Tryscript uses Changesets for package versioning and a tag-triggered GitHub Actions
+workflow for npm publishing.
+The workflow verifies the repository, publishes through npm trusted publishing, and
+creates the GitHub release from the generated changelog.
 
-## One-Time Setup
+## Release Contract
 
-Before the first release, complete these steps:
+- Release preparation happens on `main` in a clean checkout.
+- `pnpm version-packages` consumes pending changesets, updates
+  `packages/tryscript/package.json`, and writes `packages/tryscript/CHANGELOG.md`.
+- A `v*` tag triggers `.github/workflows/release.yml`.
+- A read-only job runs `pnpm verify`, uses `npm pack` to create one publisher-compatible
+  tarball, and uploads that verified artifact.
+- A dependent publish job downloads the tarball and receives npm OIDC authority; it does
+  not install dependencies, execute repository build code, or receive repository write
+  permission.
+- The workflow verifies that both the source manifest and packed manifest match the
+  pushed tag before publication.
+- A final job receives repository write permission to create the GitHub release; it has
+  no npm OIDC authority.
+- npm authentication uses a short-lived OpenID Connect (OIDC) identity.
+  The repository does not store an `NPM_TOKEN`.
+- A published version and its Git tag are immutable.
+  A correction receives a new patch version.
 
-### 1. Manual First Publish
+See the [Changesets documentation](https://github.com/changesets/changesets) for the
+versioning model and
+[npm trusted publishing](https://docs.npmjs.com/trusted-publishers/) for the registry
+authentication model.
 
-The package must exist on npm before OIDC can be configured.
-Run from the package directory (important: the root `.npmrc` has pnpm-specific config
-that confuses npm):
+## Trusted Publisher Configuration
 
-```bash
-cd packages/tryscript
-npm login
-npm publish --access public
-```
+The npm package settings must authorize this exact GitHub Actions identity:
 
-This will prompt for web-based authentication in your browser.
+| Field | Value |
+| --- | --- |
+| Provider | GitHub Actions |
+| Organization or user | `jlevy` |
+| Repository | `tryscript` |
+| Workflow filename | `release.yml` |
+| Environment | Empty unless the workflow adopts a protected environment |
+| Allowed action | `npm publish` |
 
-### 2. Configure OIDC Trusted Publishing on npm
+Only the artifact-publishing job grants `id-token: write`, which lets GitHub mint the
+short-lived OIDC token; the permission does not itself grant repository write access.
+See
+[GitHub’s OIDC permission reference](https://docs.github.com/en/actions/reference/security/oidc#required-permission).
 
-1. Go to https://www.npmjs.com/package/tryscript/access
+After trusted publishing is configured, npm publishing access should require two-factor
+authentication and disallow traditional write tokens.
+npm documents this as its recommended configuration.
+The release workflow uses GitHub-hosted runners and Node.js 24, matching npm’s current
+trusted-publishing requirements.
 
-2. Under “Publishing access”, click “Add a trusted publisher” or “Configure Trusted
-   Publishing”
+## Prepare a Release
 
-3. Select **GitHub Actions** as the publisher
-
-4. Fill in the form:
-
-   - **Organization or user**: `jlevy`
-
-   - **Repository**: `tryscript`
-
-   - **Workflow filename**: `release.yml`
-
-   - **Environment name**: Leave blank (not required unless using GitHub environments)
-
-5. For **Publishing access**, select **“Require two-factor authentication and disallow
-   tokens (recommended)”** - OIDC trusted publishers work regardless of this setting
-
-6. Click “Set up connection”
-
-### 3. Verify Repository is Public
-
-OIDC trusted publishing requires a public GitHub repository.
-
-## During Development
-
-Merge PRs to `main` without creating changesets.
-Changesets are created only at release time.
-
-## Release Workflow
-
-Follow these steps to publish a new version.
-All commands are non-interactive and can be run by an agent or human.
-
-### Step 1: Prepare
+### 1. Start From Clean `main`
 
 ```bash
-git checkout main
-git pull
-git status  # Must be clean
+git switch main
+git pull --ff-only
+git status --short
 ```
 
-### Step 2: Determine Version
+Stop if the checkout has uncommitted changes or local commits not present on the remote.
 
-Review changes since last release:
+### 2. Review Pending Changesets
 
 ```bash
-git log $(git describe --tags --abbrev=0 2>/dev/null || echo "HEAD~20")..HEAD --oneline
+ls .changeset/*.md
+git log "$(git describe --tags --abbrev=0)"..HEAD --oneline
 ```
 
-Choose version bump:
-
-- `patch` (0.1.0 → 0.1.1): Bug fixes, docs, internal changes
-
-- `minor` (0.1.0 → 0.2.0): New features, non-breaking changes
-
-- `major` (0.1.0 → 1.0.0): Breaking changes
-
-### Step 3: Create Changeset
+Each user-visible change needs one accurate Changeset summary.
+Do not add a duplicate when the merged pull request already supplied one.
+If a release has no appropriate changeset, create one non-interactively:
 
 ```bash
-pnpm changeset:add <bump> <version> "<summary>"
+pnpm changeset:add minor 0.2.0 "Add validation APIs and harden CLI test results"
 ```
 
-Examples:
+Choose the bump from the public compatibility impact:
 
-```bash
-pnpm changeset:add patch 0.1.1 "Fix parsing bug"
-pnpm changeset:add minor 0.2.0 "Add new export format"
-pnpm changeset:add major 1.0.0 "Breaking API changes"
-```
+| Bump | Use for |
+| --- | --- |
+| `patch` | Compatible fixes and documentation corrections |
+| `minor` | Backward-compatible features |
+| `major` | Breaking public API or file-format changes |
 
-Commit:
+The version argument to `changeset:add` documents the intended target; Changesets
+calculates the actual version from the package state and all pending changesets.
 
-```bash
-git add .changeset
-git commit -m "chore: add changeset for v0.2.0"
-```
-
-### Step 4: Version Packages
-
-Run changesets to bump version and update CHANGELOG:
+### 3. Apply the Version
 
 ```bash
 pnpm version-packages
+git diff -- packages/tryscript/package.json packages/tryscript/CHANGELOG.md .changeset
 ```
 
-Review and commit:
+Confirm that:
+
+- the package version is the intended SemVer version;
+- consumed changeset files were removed;
+- the changelog describes user-visible behavior in present tense; and
+- fixes that can turn a false pass into a real failure are called out explicitly.
+
+The verification gate must also confirm that the tarball contains the repository MIT
+license, both declaration formats compile for a strict v0.1.7 consumer, and the pinned
+v0.1.7 corpus differs only in reviewed tryscript CLI snapshots.
+
+### 4. Verify and Commit
 
 ```bash
-git diff  # Verify package.json and CHANGELOG.md
-git add .
+pnpm verify
+pnpm --filter tryscript test:coverage
+git add packages/tryscript/package.json packages/tryscript/CHANGELOG.md .changeset
 git commit -m "chore: release tryscript v0.2.0"
-```
-
-### Step 5: Write Release Notes
-
-Before pushing, compose release notes categorizing changes. Follow this format:
-
-```markdown
-## What's Changed
-
-### Features
-- Brief description of new capabilities
-
-### Fixes
-- Bug fixes and corrections
-
-### Refactoring
-- Internal improvements (if user-visible)
-
-### Documentation
-- Documentation updates (if significant)
-
-**Full Changelog**: https://github.com/jlevy/tryscript/compare/v0.1.0...v0.2.0
-```
-
-Guidelines:
-- Each bullet should be concise and user-focused
-- Group related commits together
-- Include only user-visible changes (skip chore/CI updates)
-- Link to the full commit comparison at the end
-
-### Step 6: Push and Tag (Option A - Direct push)
-
-For local development with direct push access:
-
-```bash
 git push
-git tag v0.2.0
-git push --tags
 ```
 
-### Step 7: Push and Tag (Option B - Via PR and API)
+If branch protection requires a pull request, push a release branch, merge it through
+the normal review process, then update the local `main` checkout before tagging.
 
-For restricted environments like Claude Code Web, use GitHub CLI. See
-[GitHub CLI Setup](general/agent-setup/shortcut:setup-github-cli.md) for installation.
+## Publish the Release
+
+Create the tag only after the version commit is on `origin/main`:
 
 ```bash
-# 1. Push to feature branch
-git push -u origin <branch-name>
-
-# 2. Create and merge PR
-gh pr create -R jlevy/tryscript --base main --head <branch-name> \
-  --title "chore: release tryscript v0.2.0" \
-  --body "Release v0.2.0"
-gh pr merge <pr-number> -R jlevy/tryscript --merge
-
-# 3. Get merge commit SHA
-MERGE_SHA=$(gh pr view <pr-number> -R jlevy/tryscript --json mergeCommit -q '.mergeCommit.oid')
-
-# 4. Create tag via API (triggers release workflow)
-gh api repos/jlevy/tryscript/git/refs -X POST \
-  -f ref="refs/tags/v0.2.0" \
-  -f sha="$MERGE_SHA"
+git fetch origin main --tags
+git status --short --branch
+git tag --list v0.2.0
+git tag -a v0.2.0 -m "tryscript v0.2.0"
+git push origin v0.2.0
 ```
 
-The release workflow will automatically create the GitHub Release when the tag is
-pushed.
+The `git tag --list` command must return no existing tag.
+The push starts the release workflow, which:
 
-### Step 8: Update GitHub Release
+1. installs the frozen lockfile with dependency scripts disabled;
+2. runs the release-quality verification gate;
+3. packs and transfers the verified tarball between jobs with SHA-pinned official
+   artifact actions;
+4. confirms that the tag and packed package version match;
+5. publishes that tarball through npm OIDC without rebuilding it; and
+6. creates a GitHub release from the matching changelog section in a job without OIDC
+   authority.
 
-After the workflow creates the GitHub Release, add the formatted release notes:
+Watch the specific run through completion:
 
 ```bash
-# Edit the release to add proper notes
-gh release edit v0.2.0 -R jlevy/tryscript --notes "$(cat <<'EOF'
-## What's Changed
-
-### Features
-- Feature description here
-
-### Fixes
-- Fix description here
-
-**Full Changelog**: https://github.com/jlevy/tryscript/compare/v0.1.0...v0.2.0
-EOF
-)"
+gh run list --workflow release.yml --limit 3
+gh run watch <run-id> --exit-status
 ```
 
-### Step 9: Verify
+## Verify the Published Release
 
 ```bash
-gh run list -R jlevy/tryscript --limit 3  # Check release workflow started
-gh run view --log                          # Watch progress
-gh release view v0.2.0 -R jlevy/tryscript  # Verify release notes
+npm view tryscript@0.2.0 version dist.integrity dist.tarball
+gh release view v0.2.0 --repo jlevy/tryscript
 ```
 
-The GitHub Actions workflow will build and publish to npm using OIDC authentication.
+Also confirm that the npm page shows provenance and that the GitHub release notes match
+the `0.2.0` changelog section.
 
-## Quick Reference
+## Failure Recovery
 
-### Local Development (direct push)
+- **Verification failed before publish:** Fix the version commit on `main`. If the tag
+  has not been pushed, tag the corrected commit.
+  If it has been pushed, inspect the run before changing any reference.
+- **Publish succeeded but release creation failed:** Keep the immutable tag and npm
+  version. Repair or create the GitHub release from the existing tag.
+- **The npm version already exists:** Never overwrite it.
+  Prepare a new patch release.
+- **OIDC authentication failed:** Confirm the npm trusted-publisher fields, the
+  `id-token: write` permission, the GitHub-hosted runner, and the allowed `npm publish`
+  action against the
+  [npm troubleshooting guidance](https://docs.npmjs.com/trusted-publishers/#troubleshooting).
+- **The first publish of a new package is required:** A maintainer must establish the
+  package on npm before configuring its trusted publisher.
+  This does not apply to the existing `tryscript` package.
 
-```bash
-# Full release sequence (replace version as needed)
-git checkout main && git pull
-pnpm changeset:add minor 0.2.0 "Summary of changes"
-git add .changeset && git commit -m "chore: add changeset for v0.2.0"
-pnpm version-packages
-git add . && git commit -m "chore: release tryscript v0.2.0"
-git push && git tag v0.2.0 && git push --tags
-
-# Update release notes after workflow creates the release
-gh release edit v0.2.0 -R jlevy/tryscript --notes-file RELEASE_NOTES.md
-```
-
-### Restricted Environments (via PR and API)
-
-```bash
-# Prepare release on feature branch
-pnpm changeset:add minor 0.2.0 "Summary of changes"
-git add .changeset && git commit -m "chore: add changeset for v0.2.0"
-pnpm version-packages
-git add . && git commit -m "chore: release tryscript v0.2.0"
-git push -u origin <branch-name>
-
-# Merge via PR
-gh pr create -R jlevy/tryscript --base main --head <branch-name> \
-  --title "chore: release tryscript v0.2.0" --body "Release v0.2.0"
-gh pr merge <pr-number> -R jlevy/tryscript --merge
-
-# Create tag via API (triggers release workflow)
-MERGE_SHA=$(gh pr view <pr-number> -R jlevy/tryscript --json mergeCommit -q '.mergeCommit.oid')
-gh api repos/jlevy/tryscript/git/refs -X POST -f ref="refs/tags/v0.2.0" -f sha="$MERGE_SHA"
-
-# Update release notes after workflow creates the release
-gh release edit v0.2.0 -R jlevy/tryscript --notes-file RELEASE_NOTES.md
-
-# Verify
-gh run list -R jlevy/tryscript --limit 3
-gh release view v0.2.0 -R jlevy/tryscript
-```
-
-## How OIDC Publishing Works
-
-This project uses npm’s trusted publishing via OIDC (OpenID Connect):
-
-- **No tokens to manage**: GitHub Actions presents an OIDC identity to npm
-
-- **No secrets to rotate**: npm issues a one-time credential for each workflow run
-
-- **Provenance attestation**: Published packages include signed build provenance
-
-The release workflow (`.github/workflows/release.yml`) triggers on `v*` tags and
-publishes automatically without requiring an `NPM_TOKEN` secret.
-
-## GitHub Releases
-
-The release workflow automatically creates a GitHub Release when a tag is pushed:
-
-- **Release name**: Matches the tag (e.g., `v0.1.1`)
-
-- **Release notes**: Initially extracted from the CHANGELOG; update with categorized
-  notes (see Step 8)
-
-- **Pre-release flag**: Automatically set for versions containing `-` (e.g.,
-  `1.0.0-beta.1`)
-
-After pushing a tag, update the release notes and verify at:
-`https://github.com/jlevy/tryscript/releases`
-
-## Troubleshooting
-
-**Release workflow not running?**
-
-- Ensure tag format is `v*` (e.g., `v0.2.0`)
-
-- Check tag was pushed: `git ls-remote --tags origin`
-
-**npm publish failing with 401/403?**
-
-- Verify OIDC is configured: https://www.npmjs.com/package/tryscript/access
-
-- Check repository is listed under “Trusted Publishing”
-
-- Ensure the repository is public
-
-**First publish?**
-
-- OIDC requires the package to already exist on npm
-
-- Do a manual `npm publish --access public` first (see One-Time Setup)
-
-## Alternative: Interactive Mode
-
-For humans who prefer prompts, use `pnpm changeset` instead of writing the file
-directly. It will prompt for package selection, bump type, and description.
-
-## Installing from Git (Bleeding Edge)
-
-To use the latest unreleased code directly from GitHub:
-
-```bash
-# pnpm
-pnpm add "github:jlevy/tryscript#path:packages/tryscript"
-
-# npm
-npm install "github:jlevy/tryscript#path:packages/tryscript"
-```
-
-This runs the `prepare` script to build from source.
+<!-- This document follows common-doc-guidelines.md.
+See github.com/jlevy/practical-prose and review guidelines before editing.
+-->

@@ -1,136 +1,24 @@
 /**
  * Readme command - Display the README documentation.
  *
- * Shows the package README.md, formatted for the terminal when interactive,
- * or as plain text when piped.
+ * Prints the package README.md source without changing its bytes.
  */
 
-import type { Command } from 'commander';
+import { Option, type Command } from 'commander';
 
-import { readFileSync } from 'node:fs';
-import { dirname, join } from 'node:path';
-import { fileURLToPath } from 'node:url';
-import pc from 'picocolors';
+import { printDocumentation, resolveDocumentationPath } from '../lib/documentation.js';
 
 /**
  * Get the path to the README.md file.
  * Works both during development and when installed as a package.
  */
-function getReadmePath(): string {
-  const thisDir = dirname(fileURLToPath(import.meta.url));
-  const dirName = thisDir.split(/[/\\]/).pop();
-
-  if (dirName === 'dist') {
-    // Bundled: dist -> package root -> README.md
-    return join(dirname(thisDir), 'README.md');
-  }
-
-  // Development: src/cli/commands -> src/cli -> src -> package root -> README.md
-  return join(dirname(dirname(dirname(thisDir))), 'README.md');
+export function getReadmePath(): string {
+  return resolveDocumentationPath(import.meta.url, ['README.md']);
 }
 
-/**
- * Load the README content.
- */
-function loadReadme(): string {
-  const readmePath = getReadmePath();
-  try {
-    return readFileSync(readmePath, 'utf-8');
-  } catch (error) {
-    const message = error instanceof Error ? error.message : String(error);
-    throw new Error(`Failed to load README from ${readmePath}: ${message}`);
-  }
-}
-
-/**
- * Apply basic terminal formatting to markdown content.
- * Colorizes headers, code blocks, and other elements for better readability.
- */
-function formatMarkdown(content: string, useColors: boolean): string {
-  if (!useColors) {
-    return content;
-  }
-
-  const lines = content.split('\n');
-  const formatted: string[] = [];
-  let inCodeBlock = false;
-
-  for (const line of lines) {
-    // Track code blocks
-    if (line.startsWith('```')) {
-      inCodeBlock = !inCodeBlock;
-      formatted.push(pc.dim(line));
-      continue;
-    }
-
-    if (inCodeBlock) {
-      formatted.push(pc.dim(line));
-      continue;
-    }
-
-    // Headers
-    if (line.startsWith('# ')) {
-      formatted.push(pc.bold(pc.cyan(line)));
-      continue;
-    }
-    if (line.startsWith('## ')) {
-      formatted.push(pc.bold(pc.blue(line)));
-      continue;
-    }
-    if (line.startsWith('### ')) {
-      formatted.push(pc.bold(line));
-      continue;
-    }
-
-    // Inline code (backticks)
-    let formattedLine = line.replace(/`([^`]+)`/g, (_match, code: string) => {
-      return pc.yellow(code);
-    });
-
-    // Bold text
-    formattedLine = formattedLine.replace(/\*\*([^*]+)\*\*/g, (_match, text: string) => {
-      return pc.bold(text);
-    });
-
-    // Links - show text in cyan, URL dimmed
-    formattedLine = formattedLine.replace(
-      /\[([^\]]+)\]\(([^)]+)\)/g,
-      (_match, text: string, url: string) => {
-        return `${pc.cyan(text)} ${pc.dim(`(${url})`)}`;
-      },
-    );
-
-    formatted.push(formattedLine);
-  }
-
-  return formatted.join('\n');
-}
-
-/**
- * Check if stdout is an interactive terminal.
- */
-function isInteractive(): boolean {
-  return process.stdout.isTTY === true;
-}
-
-/**
- * Display the README content.
- * Exported for use as the default command.
- */
-export function showReadme(options?: { raw?: boolean; color?: boolean }): void {
-  try {
-    const readme = loadReadme();
-
-    // Determine if we should colorize
-    const shouldColorize = options?.color ?? (!options?.raw && isInteractive());
-
-    const formatted = formatMarkdown(readme, shouldColorize);
-    console.log(formatted);
-  } catch (error) {
-    const message = error instanceof Error ? error.message : String(error);
-    console.error(pc.red(`Error: ${message}`));
-    process.exit(1);
-  }
+/** Print the tracked or packaged README. */
+export function showReadme(): void {
+  printDocumentation(getReadmePath(), 'README');
 }
 
 /**
@@ -139,8 +27,10 @@ export function showReadme(options?: { raw?: boolean; color?: boolean }): void {
 export function registerReadmeCommand(program: Command): void {
   program
     .command('readme')
-    .description('Display README documentation')
-    .option('--raw', 'Output raw markdown without formatting')
-    .option('--color', 'Force colorized output (for testing)')
-    .action(showReadme);
+    .description('Print the README')
+    .addOption(new Option('--raw', 'Deprecated; documentation is always raw').hideHelp())
+    .addOption(new Option('--color', 'Deprecated; documentation is never colorized').hideHelp())
+    .action(() => {
+      showReadme();
+    });
 }

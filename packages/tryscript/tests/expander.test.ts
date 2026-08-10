@@ -98,6 +98,22 @@ describe('expandExpectedOutput', () => {
     expect(result!.expandedCount).toBe(1);
   });
 
+  it('ignores custom names reserved for built-in path tokens', () => {
+    const result = expandExpectedOutput(
+      'File: [ROOT]/output.txt\n',
+      'File: /test/root/output.txt\n',
+      context,
+      'all',
+      { ROOT: '.+' },
+    );
+
+    expect(result).toEqual({
+      expandedOutput: 'File: [ROOT]/output.txt\n',
+      captures: [],
+      expandedCount: 0,
+    });
+  });
+
   it('handles mixed wildcards, only expanding targeted ones', () => {
     const result = expandExpectedOutput(
       'a: [..]\n???\nd\n',
@@ -149,6 +165,7 @@ describe('expandTestFile', () => {
       expectedExitCode: 0,
       lineNumber: 5,
       rawContent: '```console\n$ echo hello\n[??]\n? 0\n```',
+      infoString: 'console',
       ...overrides,
     };
   }
@@ -245,5 +262,53 @@ describe('expandTestFile', () => {
 
     expect(expanded).toBe(false);
     expect(expandedCount).toBe(0);
+  });
+
+  it('expands a wildcard when the block only asserts stderr', async () => {
+    const block = makeBlock({
+      expectedOutput: '',
+      expectedStderr: '[??]\n',
+      rawContent: '```console\n$ echo error\n! [??]\n? 0\n```',
+    });
+    const file: TestFile = {
+      path: '/tmp/test-expand-stderr.tryscript.md',
+      blocks: [block],
+      rawContent: block.rawContent,
+      config: {},
+    };
+    const result = makeResult(block, {
+      actualOutput: 'error\n',
+      actualStdout: '',
+      actualStderr: 'error\n',
+    });
+
+    const expanded = await expandTestFile(file, [result], 'unknown', context);
+
+    expect(expanded.expanded).toBe(true);
+    expect(expanded.expandedCount).toBe(1);
+  });
+
+  it('expands stderr when stdout matches without a wildcard', async () => {
+    const block = makeBlock({
+      expectedOutput: 'ok\n',
+      expectedStderr: 'error: [??]\n',
+      rawContent: '```console\n$ command\nok\n! error: [??]\n? 0\n```',
+    });
+    const file: TestFile = {
+      path: '/tmp/test-expand-mixed.tryscript.md',
+      blocks: [block],
+      rawContent: block.rawContent,
+      config: {},
+    };
+    const result = makeResult(block, {
+      actualOutput: 'ok\nerror: details\n',
+      actualStdout: 'ok\n',
+      actualStderr: 'error: details\n',
+    });
+
+    const expanded = await expandTestFile(file, [result], 'unknown', context);
+
+    expect(expanded.expanded).toBe(true);
+    expect(expanded.expandedCount).toBe(1);
   });
 });

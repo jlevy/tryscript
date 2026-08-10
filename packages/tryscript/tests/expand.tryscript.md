@@ -14,9 +14,10 @@ $ node $TRYSCRIPT_TEST_DIR/../dist/bin.mjs run target.tryscript.md 2>&1
 PASS [..]target.tryscript.md
   ✓ Simple echo with unknown wildcard
   ✓ Multi-line with unknown wildcard
+  ✓ Stderr with unknown wildcard
 
-2 unknown wildcard(s) found (??? or [??]). These are temporary and should be expanded. Use --expand to fill them in.
-2 passed [..]
+Warning: 3 unknown wildcards found (??? or [??]). Run with --expand, then review the replacement before committing.
+3 passed [..]
 ? 0
 ```
 
@@ -27,10 +28,11 @@ $ node $TRYSCRIPT_TEST_DIR/../dist/bin.mjs run --expand target.tryscript.md 2>&1
 PASS [..]target.tryscript.md
   ✓ Simple echo with unknown wildcard
   ✓ Multi-line with unknown wildcard
+  ✓ Stderr with unknown wildcard
 
-  ↻ Expanded 2 wildcard(s): [..]
-2 unknown wildcard(s) found (??? or [??]). These are temporary and should be expanded. Use --expand to fill them in.
-2 passed [..]
+  ↻ Expanded 3 wildcards: [..]
+Warning: 3 unknown wildcards found (??? or [??]). Run with --expand, then review the replacement before committing.
+3 passed [..]
 ? 0
 ```
 
@@ -44,7 +46,8 @@ $ node $TRYSCRIPT_TEST_DIR/../dist/bin.mjs run target.tryscript.md 2>&1
 PASS [..]target.tryscript.md
   ✓ Simple echo with unknown wildcard
   ✓ Multi-line with unknown wildcard
+  ✓ Stderr with unknown wildcard
 
-2 passed [..]
+3 passed [..]
 ? 0
 ```

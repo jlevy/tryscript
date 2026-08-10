@@ -16,24 +16,28 @@ export function run(argv: string[]): void {
   const program = withColoredHelp(
     new Command()
       .name('tryscript')
-      .version(VERSION, '--version', 'Show version number')
-      .description('Golden testing for CLI applications')
-      .showHelpAfterError('(use --help for usage)'),
+      .version(VERSION, '--version', 'Print the version')
+      .description('Markdown golden tests for CLI applications')
+      .configureOutput({
+        outputError: (message, write) => {
+          write(message.replace(/^error:/u, 'Error:'));
+        },
+      })
+      .showHelpAfterError('Run tryscript --help for usage.'),
   );
 
-  // Register subcommands
   registerRunCommand(program);
   registerCoverageCommand(program);
   registerReadmeCommand(program);
   registerDocsCommand(program);
 
-  // Default action: show help when no command given
   program.action(() => {
     program.help();
   });
 
-  program.parseAsync(argv).catch((err: Error) => {
-    logError(`Error: ${err.message}`);
+  program.parseAsync(argv).catch((error: unknown) => {
+    const message = error instanceof Error ? error.message : String(error);
+    logError(message);
     process.exit(2);
   });
 }

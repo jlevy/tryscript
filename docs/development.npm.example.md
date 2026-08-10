@@ -1,40 +1,73 @@
-## Developer Workflows
+# npm Development Guide Template
 
-> This is a sample `development.md` file describing developer workflows for agents and
-> humans, using a simple npm/node project as an example.
-> 
-> Fill this in or adjust as needed with all information agents should routinely need
-> (such as what you’d put in CLAUDE.md).
+> Copy this template into an npm-based project and replace every bracketed field.
+> Delete commands and sections that the project does not implement.
 
-### Initial Setup
+## Prerequisites
 
-Install dependencies:
+- **Node.js:** `[supported version range]`
+- **npm:** `[pinned or minimum version]`
+- **uv:** `[pinned version used to run the exact flowmark-rs release]`
+- **Platform tools:** `[compiler, database, container runtime, or none]`
 
-```bash
-# Install all dependencies (npm workspaces installs for both root and web/)
-npm install     # Installs dependencies + git hooks via prepare script
-```
+Explain why the selected runtime is required and link its support policy.
 
-### Development Environment Variables
-
-For local development, the single source of truth for secrets is `.env` (optionally
-override with `.env.local`).
-
-### Running Tests
+## Setup
 
 ```bash
-# View all test-related scripts
-npm run help | grep test
-
-# Formatting and linting
-npm run format           # Format all files
-npm run lint             # Lint all files
-
-# Common test commands
-npm run precommit        # Full precommit check (codegen, format, lint, unit, integration)
-npm test                 # Same as precommit
-npm run test:unit        # Unit tests only
-npm run test:integration # Integration tests only
-npm run test:e2e         # End-to-end tests
-npm run test:coverage    # Run with coverage report
+npm ci
+cp .env.example .env
+npm run hooks:install
 ```
+
+Document each step that is not self-explanatory.
+State where non-secret example values come from and how a contributor obtains required
+secrets; never place credentials in this file.
+
+## Project Structure
+
+```text
+[project]/
+  src/       # [owned source]
+  test/      # [unit and integration tests]
+  docs/      # [maintained documentation]
+```
+
+Keep this tree short.
+Link a maintained architecture document when component ownership or runtime boundaries
+need more detail.
+
+## Common Commands
+
+| Command | Purpose |
+| --- | --- |
+| `npm run build` | Build production artifacts |
+| `npm run format` | Format code, data files, and maintained Markdown |
+| `npm run format:check` | Verify Prettier and Flowmark formatting without changes |
+| `npm run format:docs` | Format maintained Markdown with the pinned Flowmark release |
+| `npm run lint` | Check source without changing it |
+| `npm run typecheck` | Check static types |
+| `npm test` | Run the default test suite |
+| `npm run test:coverage` | Run tests and write coverage reports |
+| `npm run verify` | Run the release-quality gate |
+
+Use the actual script names from `package.json`. If a command changes files, say so in
+its description.
+
+## Development Workflow
+
+1. Start from a clean branch based on the current default branch.
+2. Make one scoped change and add regression coverage.
+3. Run the focused tests while iterating.
+4. Run `npm run verify` before committing.
+5. Review generated files and the complete diff before pushing.
+
+## Continuous Integration
+
+List the CI gates in execution order and explain any check that cannot run locally.
+The local verification command should cover the same release blockers whenever
+practical.
+
+<!-- This document follows common-doc-guidelines.md.
+See github.com/jlevy/practical-prose and review guidelines before editing.
+-->

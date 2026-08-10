@@ -1,99 +1,65 @@
-# Implementation Spec: [Feature or Task Title]
+# Implementation Spec: [Feature or Task]
 
-## Purpose
+- **Status:** draft | active | complete
+- **Plan spec:** [plan filename]
+- **Parent bead:** [ID]
 
-This is an implementation spec, used to track and record the implementation of a feature
-or task.
+## Intended Outcome
 
-This should be filled in after a Plan Spec is written.
-The Plan Spec covers Stage 1 and 2 and this Implementation Spec covers Stage 3.
+[Summarize the accepted design, compatibility contract, and measurable completion criteria. Link to the plan for product context and alternatives.]
 
-It should be updated during the development process, then kept as a record for later
-context once implementation is complete.
+## Constraints
 
-**Feature Plan:** [plan-YYYY-MM-DD-feature-description.md]
+- [Repository and language guidelines]
+- [Compatibility or migration boundary]
+- [Security, performance, or operational boundary]
 
-## Stage 3: Implementation Stage
+## Implementation Phases
 
-> AGENT INSTRUCTIONS:
-> 
-> - Break down to implementation and small feedback loops, with tests and features.
->
-> - Clarify if any changes require backward compatibility (DO NOT preserve backward
->   compatibility unless confirmed in the spec).
->
-> - Always follow test-driven development (TDD) following the Red → Green → Refactor
->   cycle. See `@tdd-guidelines.md` for complete TDD and Tidy First methodology.
->
-> - Implement simplest version with working testing and then iterate.
->
-> - Architecture review step post implementation
->
-> - Rules:
->   
->   1. Explicitly look for duplicated code and consolidate
->
->   2. Explicitly look for dead code and remove
-> 
-> Add implementation plans below.
-> Begin with Phases.
+| Phase | Beads | Deliverable | Test First |
+| --- | --- | --- | --- |
+| 1 | [IDs] | [Small independently reviewable outcome] | [Failing regression or contract test] |
+| 2 | [IDs] | [Next outcome] | [Focused failing test] |
 
-### Implementation Phases
+Each phase follows red-green-refactor and ends in a state that builds and can be
+reviewed.
 
-> AGENT INSTRUCTIONS:
-> 
-> The implementation includes ongoing TDD (Test Driven Development) so should include
-> testing at each phase and whenever possible.
-> 
-> - If there are a lot of changes required, break the changes into a few separate
->   commits, each testable and reviewable by the user, so ideally at most a few thousand
->   lines of code.
->
-> - If the feature is small enough, it can be just one phase.
->   A large feature may be 3-4 phases.
->
-> - The user may supply Phase breakdowns.
->   If they are not provided, you should pick 1 to 4 phases, depending on the scope of
->   the work. Small features can be one phase.
+## Phase 1: [Outcome]
 
-The implementation is broken into phases that may be committed and tested separately:
+### Files and Boundaries
 
-- Phase 1: …
+- `path/to/file`: [reason it changes]
+- [Public API, storage, or configuration boundary]
 
-- Phase 2: …
+### Test-Driven Sequence
 
-## Phase 1
+1. Add [specific failing test and expected failure].
+2. Implement [minimum behavior needed to pass].
+3. Refactor [duplication or boundary cleanup] while tests stay green.
+4. Run [focused quality gates].
 
-### Files to Touch
+### Decisions and Risks
 
-> List files to be modified below.
+- **Decision:** [choice and evidence]
+- **Risk:** [failure mode and mitigation]
 
-- path1/file1.txt
+## Phase 2: [Outcome]
 
-- …
+[Repeat the phase structure only when another phase is needed.]
 
-### Automated Testing Strategy
+## Final Verification
 
-> Describe the steps to test this feature below.
-> 
-> Be sure to read the project README.md for context on formatting, linting, building,
-> and testing steps for this project.
+- [ ] Acceptance criteria map to passing tests
+- [ ] Formatting, linting, strict type checking, build, and tests pass
+- [ ] Package, migration, security, or browser checks pass when applicable
+- [ ] User-facing behavior and documentation agree
+- [ ] All worked beads are closed or updated and synchronized
+- [ ] Changes are committed, pushed, and CI is green
 
-- Testing steps…
+## Open Questions and Follow-Up
 
-### Libraries Used
+[List only unresolved items with owners or bead IDs. Remove this section when empty.]
 
-> List any new libraries that will be used in this feature below.
-
-### Open Questions (resolve now)
-
-> List any open questions that need to be resolved before starting work on this feature,
-> then delete these instructions.
-
-- [ ] …
-
-### Out of Scope (do NOT do now)
-
-> List features or aspects that are NOT part of the work described in this doc.
-> List only likely next steps that are not being addressed here, to avoid accidentally
-> adding features or scope creep.
+<!-- This document follows common-doc-guidelines.md.
+See github.com/jlevy/practical-prose and review guidelines before editing.
+-->

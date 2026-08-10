@@ -32,17 +32,18 @@ Comprehensive tests for all tryscript CLI features.
 $ node $TRYSCRIPT_TEST_DIR/../dist/bin.mjs --help
 Usage: tryscript [options] [command]
 
-Golden testing for CLI applications
+Markdown golden tests for CLI applications
 
 Options:
-  --version                         Show version number
+  --version                         Print the version
   -h, --help                        display help for command
 
 Commands:
-  run [options] [files...]          Run golden tests
-  coverage [options] <commands...>  Run commands with merged V8 coverage
-  readme [options]                  Display README documentation
-  docs [options]                    Display concise syntax reference
+  run [options] [files...]          Run Markdown golden tests
+  coverage [options] <commands...>  Collect merged V8 coverage from one or more
+                                    commands
+  readme [options]                  Print the README
+  docs [options]                    Print the syntax reference
 ? 0
 ```
 
@@ -52,38 +53,36 @@ Commands:
 $ node $TRYSCRIPT_TEST_DIR/../dist/bin.mjs run --help
 Usage: tryscript run [options] [files...]
 
-Run golden tests
+Run Markdown golden tests
 
 Arguments:
-  files                               Test files to run (default:
+  files                               Files or glob patterns (default:
                                       **/*.tryscript.md)
 
 Options:
-  --update                            Update golden files with actual output
+  --update                            Replace expected output with actual output
   --diff                              Show diff on failure (default: true)
   --no-diff                           Hide diff on failure
   --fail-fast                         Stop on first failure
-  --filter <pattern>                  Filter tests by name pattern
-  --verbose                           Show detailed output including passing
-                                      test output
-  --quiet                             Suppress non-essential output (only show
-                                      failures)
-  --expand                            Expand unknown wildcards (??? and [??])
+  --filter <pattern>                  Run named tests matching a regular
+                                      expression
+  --verbose                           Include captured output for passing tests
+  --quiet                             Show only failures and the final summary
+  --expand                            Replace unknown wildcards (??? and [??])
                                       with actual output
-  --expand-generic                    Expand unknown and generic wildcards with
+  --expand-generic                    Replace unknown and generic wildcards with
                                       actual output
-  --expand-all                        Expand all wildcards (including named
-                                      patterns) with actual output
-  --capture-log <path>                Write wildcard capture log to YAML file
-  --coverage                          Enable code coverage collection (requires
-                                      c8)
+  --expand-all                        Replace all wildcards, including named
+                                      patterns
+  --capture-log <path>                Write wildcard captures to a YAML file
+  --coverage                          Collect V8 coverage with an installed c8
+                                      package
   --coverage-dir <dir>                Coverage output directory (default:
                                       coverage-tryscript)
-  --coverage-reporter <reporter...>   Coverage reporters (default: text, html).
-                                      Can be specified multiple times.
-  --coverage-exclude <pattern...>     Patterns to exclude from coverage (c8
-                                      --exclude). Can be specified multiple
-                                      times.
+  --coverage-reporter <reporter>      Coverage reporter; repeat for multiple
+                                      values (default: text, html)
+  --coverage-exclude <pattern>        Exclude pattern; repeat for multiple
+                                      values (c8 --exclude)
   --coverage-exclude-node-modules     Exclude node_modules from coverage (c8
                                       --exclude-node-modules, default: true)
   --no-coverage-exclude-node-modules  Include node_modules in coverage (c8
@@ -94,15 +93,14 @@ Options:
                                       --skip-full)
   --coverage-allow-external           Allow files from outside cwd (c8
                                       --allowExternal)
-  --coverage-monocart                 Use monocart for accurate line counts,
-                                      better for merging with vitest (c8
-                                      --experimental-monocart)
-  --merge-lcov <path>                 Merge coverage from an existing LCOV file
-                                      (e.g., from vitest --coverage)
+  --coverage-monocart                 Use monocart AST-aware line counts when
+                                      merging with Vitest
+  --merge-lcov <path>                 Merge an existing LCOV file into the
+                                      generated report
   -h, --help                          display help for command
 
 Global Options:
-  --version                           Show version number
+  --version                           Print the version
 ? 0
 ```
 
@@ -119,7 +117,7 @@ $ node $TRYSCRIPT_TEST_DIR/../dist/bin.mjs --version
 # Test: readme command displays README
 
 ```console
-$ node $TRYSCRIPT_TEST_DIR/../dist/bin.mjs readme --raw | head -5
+$ node $TRYSCRIPT_TEST_DIR/../dist/bin.mjs readme | head -5
 # tryscript
 
 ...
@@ -132,27 +130,10 @@ $ node $TRYSCRIPT_TEST_DIR/../dist/bin.mjs readme --raw | head -5
 $ node $TRYSCRIPT_TEST_DIR/../dist/bin.mjs docs --raw | head -5
 # tryscript Reference
 
-Complete reference for writing tryscript golden tests. This document covers all syntax,
-configuration, and patterns needed to write accurate CLI tests on the first try.
+A `.tryscript.md` file combines Markdown prose with console blocks that execute shell
+commands and assert their output.
+This keeps the command, result, and explanation in one reviewable file.
 
-? 0
-```
-
-# Test: docs command with --color formats markdown
-
-The NO_COLOR env must be unset for colors to work. Output contains ANSI escape sequences.
-
-```console
-$ NO_COLOR= node $TRYSCRIPT_TEST_DIR/../dist/bin.mjs docs --color 2>&1 | head -1 | cat -v
-^[[1m^[[36m# tryscript Reference^[[39m^[[22m
-? 0
-```
-
-# Test: readme command with --color formats markdown
-
-```console
-$ NO_COLOR= node $TRYSCRIPT_TEST_DIR/../dist/bin.mjs readme --color 2>&1 | head -1 | cat -v
-^[[1m^[[36m# tryscript^[[39m^[[22m
 ? 0
 ```
 
@@ -188,7 +169,8 @@ exit: 1
 $ node $TRYSCRIPT_TEST_DIR/../dist/bin.mjs run verbose.md --verbose
 PASS [..]verbose.md
   ✓ Verbose
-...
+    hello
+
 1 passed [..]
 ? 0
 ```
@@ -229,7 +211,7 @@ exit: 1
 
 ```console
 $ node $TRYSCRIPT_TEST_DIR/../dist/bin.mjs run /nonexistent/*.tryscript.md 2>&1; echo "exit: $?"
-No test files found
+Error: No test files matched: /nonexistent/*.tryscript.md (working directory: [CWD])
 exit: 1
 ? 0
 ```
@@ -317,8 +299,8 @@ PASS [..]coverage-pass.tryscript.md
 
 Generating coverage report...
 ...
-Failed to generate coverage report: c8 report exited with code 1
-? 0
+Error: Failed to generate coverage report: c8 report exited with code 1
+? 1
 ```
 
 ## Coverage Command
@@ -329,36 +311,34 @@ Failed to generate coverage report: c8 report exited with code 1
 $ node $TRYSCRIPT_TEST_DIR/../dist/bin.mjs coverage --help
 Usage: tryscript coverage [options] <commands...>
 
-Run commands with merged V8 coverage
+Collect merged V8 coverage from one or more commands
 
 Arguments:
-  commands                   Commands to run (each will inherit coverage
-                             environment)
+  commands                   Quoted shell commands to run with NODE_V8_COVERAGE
 
 Options:
   --reports-dir <dir>        Coverage output directory (default: coverage)
-  --reporters <reporters>    Comma-separated coverage reporters (default:
+  --reporters <reporters>    Comma-separated reporters (default:
                              text,json,json-summary,lcov,html)
-  --include <patterns>       Comma-separated patterns to include in coverage
-  --exclude <patterns>       Comma-separated patterns to exclude from coverage
+  --include <patterns>       Comma-separated glob patterns to include
+  --exclude <patterns>       Comma-separated glob patterns to exclude
   --exclude-node-modules     Exclude node_modules from coverage (default: true)
-                             (default: true)
   --no-exclude-node-modules  Include node_modules in coverage
   --exclude-after-remap      Apply exclude logic after sourcemap remapping
   --skip-full                Hide files with 100% coverage
-  --allow-external           Allow files from outside cwd
-  --monocart                 Use monocart for accurate line counts (recommended
-                             for merging)
+  --allow-external           Include files outside the working directory
+  --monocart                 Use monocart AST-aware line counts when merging
+                             reports
   --src <dir>                Source directory for sourcemap remapping (default:
                              src)
   --verbose                  Show coverage summary after each command for
                              debugging
-  --merge-lcov <path>        Merge coverage from an existing LCOV file (e.g.,
-                             from vitest --coverage)
+  --merge-lcov <path>        Merge an existing LCOV file into the generated
+                             report
   -h, --help                 display help for command
 
 Global Options:
-  --version                  Show version number
+  --version                  Print the version
 ? 0
 ```
 
@@ -385,8 +365,8 @@ old output
 
 ```console
 $ node $TRYSCRIPT_TEST_DIR/../dist/bin.mjs invalid-arg 2>&1; echo "exit: $?"
-error: too many arguments. Expected 0 arguments but got 1.
-(use --help for usage)
+Error: too many arguments. Expected 0 arguments but got 1.
+Run tryscript --help for usage.
 exit: 1
 ? 0
 ```
@@ -395,8 +375,8 @@ exit: 1
 
 ```console
 $ node $TRYSCRIPT_TEST_DIR/../dist/bin.mjs coverage 2>&1; echo "exit: $?"
-error: missing required argument 'commands'
-(use --help for usage)
+Error: missing required argument 'commands'
+Run tryscript --help for usage.
 exit: 1
 ? 0
 ```
@@ -414,8 +394,8 @@ Collecting V8 coverage to [..]
 === Running command 1/1: echo hello ===
 hello
 
-V8 coverage: 0 files (0 new), 0.0 KB total
-No new coverage files from this command. This may indicate the command doesn't write to NODE_V8_COVERAGE.
+V8 coverage: 0 files (0 new), 0.0 KiB total
+Warning: No new coverage files from this command. This may indicate the command doesn't write to NODE_V8_COVERAGE.
 
 === Generating coverage report ===
 mock-c8 called with: report --temp-directory [..] --reports-dir coverage --src src --all --include dist/** --exclude-node-modules --reporter text --reporter json --reporter json-summary --reporter lcov --reporter html
@@ -486,7 +466,7 @@ mock-c8 called with: report --temp-directory [..] --reports-dir coverage --src s
 ```console
 $ TRYSCRIPT_C8_COMMAND="$PWD/mock-c8.sh" node $TRYSCRIPT_TEST_DIR/../dist/bin.mjs coverage "exit 1" 2>&1; echo "exit: $?"
 ...
-Command exited with code 1: exit 1
+Warning: Command exited with code 1: exit 1
 ...
 exit: 1
 ? 0

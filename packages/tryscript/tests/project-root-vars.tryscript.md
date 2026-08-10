@@ -7,10 +7,10 @@ env:
 # Test: TRYSCRIPT_GIT_ROOT points to git repository root
 
 The TRYSCRIPT_GIT_ROOT environment variable points to the directory containing
-the nearest `.git` directory.
+the nearest `.git` entry (a directory in a normal checkout or a file in a worktree).
 
 ```console
-$ test -d "$TRYSCRIPT_GIT_ROOT/.git" && echo "has .git"
+$ test -e "$TRYSCRIPT_GIT_ROOT/.git" && echo "has .git"
 has .git
 ? 0
 ```

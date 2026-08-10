@@ -1,5 +1,7 @@
 import { writeFile } from 'atomically';
+import { buildBlock, spliceBlocks } from './block-writer.js';
 import { matchAndCapture, normalizeOutput } from './matcher.js';
+import { BUILT_IN_PATTERN_NAMES } from './types.js';
 import type {
   ExpandLevel,
   ExpansionResult,
@@ -21,6 +23,10 @@ export function shouldExpandCategory(category: WildcardCategory, level: ExpandLe
       return category === 'unknown' || category === 'generic';
     case 'all':
       return true;
+    default: {
+      const exhaustiveLevel: never = level;
+      throw new Error(`Unsupported expansion level: ${String(exhaustiveLevel)}`);
+    }
   }
 }
 
@@ -73,13 +79,11 @@ export function expandExpectedOutput(
   for (const wt of WILDCARD_TOKENS) {
     let searchFrom = 0;
     if (typeof wt.token === 'string') {
-      while (true) {
-        const pos = output.indexOf(wt.token, searchFrom);
-        if (pos === -1) {
-          break;
-        }
+      let pos = output.indexOf(wt.token, searchFrom);
+      while (pos !== -1) {
         tokenPositions.push({ pos, length: wt.token.length });
         searchFrom = pos + wt.token.length;
+        pos = output.indexOf(wt.token, searchFrom);
       }
     } else {
       const re = new RegExp(wt.token.source, 'g');
@@ -93,15 +97,16 @@ export function expandExpectedOutput(
   // Find positions of named custom pattern tokens.
   if (customPatterns) {
     for (const name of Object.keys(customPatterns)) {
+      if (BUILT_IN_PATTERN_NAMES.has(name)) {
+        continue;
+      }
       const placeholder = `[${name}]`;
       let searchFrom = 0;
-      while (true) {
-        const pos = output.indexOf(placeholder, searchFrom);
-        if (pos === -1) {
-          break;
-        }
+      let pos = output.indexOf(placeholder, searchFrom);
+      while (pos !== -1) {
         tokenPositions.push({ pos, length: placeholder.length });
         searchFrom = pos + placeholder.length;
+        pos = output.indexOf(placeholder, searchFrom);
       }
     }
   }
@@ -143,63 +148,78 @@ export async function expandTestFile(
   context: { root: string; cwd: string },
   customPatterns?: Record<string, string | RegExp>,
 ): Promise<{ expanded: boolean; expandedCount: number; changes: string[] }> {
-  let content = file.rawContent;
   const changes: string[] = [];
+  const edits: { block: (typeof file.blocks)[number]; replacement: string }[] = [];
   let totalExpanded = 0;
 
   // Map by block identity so expansion works correctly with --filter/<!-- only -->
   // where `results` can be a strict subset of `file.blocks`.
   const resultByBlock = new Map(results.map((result) => [result.block, result]));
-  // Process blocks in reverse order to maintain correct offsets
-  const blocksWithResults = [...file.blocks]
-    .map((block) => ({ block, result: resultByBlock.get(block) }))
-    .reverse();
 
-  for (const { block, result } of blocksWithResults) {
-    if (!result || !block.expectedOutput) {
+  for (const block of file.blocks) {
+    const result = resultByBlock.get(block);
+    if (!result) {
       continue;
     }
 
+    // A block asserting stderr separately matches its expected output against
+    // stdout alone, so expand against the same stream it was matched against.
+    const separateStderr = block.expectedStderr !== undefined;
+    const actualForOutput = separateStderr ? (result.actualStdout ?? '') : result.actualOutput;
+
     const expansion = expandExpectedOutput(
       block.expectedOutput,
-      result.actualOutput,
+      actualForOutput,
       context,
       level,
       customPatterns,
     );
 
-    if (!expansion || expansion.expandedCount === 0) {
+    if (!expansion) {
       continue;
     }
 
-    // Rebuild the block with expanded expected output
-    const fence = '`'.repeat(/^(`+)/.exec(block.rawContent)?.[1]?.length ?? 3);
-    const commandLines = block.command.split('\n').map((line, i) => {
-      return i === 0 ? `$ ${line}` : `> ${line}`;
+    let expandedStderr: string | undefined;
+    let stderrExpandedCount = 0;
+    if (separateStderr) {
+      const stderrExpansion = expandExpectedOutput(
+        block.expectedStderr ?? '',
+        result.actualStderr ?? '',
+        context,
+        level,
+        customPatterns,
+      );
+      if (!stderrExpansion) {
+        continue;
+      }
+      expandedStderr = stderrExpansion.expandedOutput;
+      stderrExpandedCount = stderrExpansion.expandedCount;
+    }
+
+    const blockExpandedCount = expansion.expandedCount + stderrExpandedCount;
+    if (blockExpandedCount === 0) {
+      continue;
+    }
+
+    edits.push({
+      block,
+      replacement: buildBlock(block, {
+        output: expansion.expandedOutput,
+        ...(expandedStderr === undefined ? {} : { stderr: expandedStderr }),
+        exitCode: block.expectedExitCode,
+      }),
     });
 
-    const lines: string[] = [`${fence}console`, ...commandLines];
-    const trimmedOutput = expansion.expandedOutput.trimEnd();
-    if (trimmedOutput) {
-      lines.push(trimmedOutput);
-    }
-    lines.push(`? ${block.expectedExitCode ?? result.actualExitCode}`, fence);
-
-    const newBlockContent = lines.join('\n');
-    const blockStart = content.indexOf(block.rawContent);
-    if (blockStart !== -1) {
-      content =
-        content.slice(0, blockStart) +
-        newBlockContent +
-        content.slice(blockStart + block.rawContent.length);
-      changes.push(block.name ?? `Line ${block.lineNumber}`);
-      totalExpanded += expansion.expandedCount;
-    }
+    changes.push(block.name ?? `Line ${block.lineNumber}`);
+    totalExpanded += blockExpandedCount;
   }
 
-  if (changes.length > 0) {
-    await writeFile(file.path, content);
+  if (edits.length === 0) {
+    return { expanded: false, expandedCount: 0, changes: [] };
   }
 
-  return { expanded: changes.length > 0, expandedCount: totalExpanded, changes };
+  const content = spliceBlocks(file.rawContent, edits);
+  await writeFile(file.path, content);
+
+  return { expanded: true, expandedCount: totalExpanded, changes };
 }

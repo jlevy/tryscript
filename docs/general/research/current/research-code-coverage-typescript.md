@@ -417,11 +417,11 @@ tryscript coverage --verbose "cmd1" "cmd2"
 ```
 === Running command 1/2: pnpm vitest run ===
 ... (vitest output)
-V8 coverage: 11 files (11 new), 8194.7 KB total
+V8 coverage: 11 files (11 new), 8194.7 KiB total
 
 === Running command 2/2: node dist/bin.mjs run tests/ ===
 ... (tryscript output)
-V8 coverage: 70 files (59 new), 31671.9 KB total
+V8 coverage: 70 files (59 new), 31671.9 KiB total
 ```
 
 If a command shows "0 files (0 new)", that command is not producing coverage data. This usually means:
@@ -539,7 +539,7 @@ build({
 
 **Symptom:**
 ```
-V8 coverage: 0 files (0 new), 0.0 KB total
+V8 coverage: 0 files (0 new), 0.0 KiB total
 No new coverage files from this command.
 ```
 
@@ -646,7 +646,7 @@ Some older vitest versions may not write to NODE_V8_COVERAGE correctly. Upgrade 
 ### Primary Documentation
 - [Vitest Coverage Documentation](https://vitest.dev/guide/coverage.html)
 - [Node.js NODE_V8_COVERAGE](https://nodejs.org/api/cli.html#node_v8_coveragedir)
-- [tryscript Reference](../../tryscript-reference.md)
+- [tryscript Reference](../../../tryscript-reference.md)
 
 ### Tools
 - [c8 CLI](https://github.com/bcoe/c8) - V8 coverage CLI
