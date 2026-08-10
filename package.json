@@ -1,0 +1,66 @@
+{
+  "name": "tryscript-workspace",
+  "type": "module",
+  "private": true,
+  "packageManager": "pnpm@10.34.5",
+  "engines": {
+    "node": ">=20.19"
+  },
+  "scripts": {
+    "build": "pnpm -r build",
+    "dev": "pnpm -r --parallel dev",
+    "typecheck": "tsc -p tsconfig.scripts.json --noEmit && pnpm -r typecheck",
+    "test": "pnpm -r test && pnpm --filter tryscript test:self",
+    "test:unit": "pnpm -r test",
+    "test:self": "pnpm --filter tryscript test:self",
+    "test:golden": "pnpm -r test:golden",
+    "test:coverage": "pnpm -r test:coverage",
+    "publint": "pnpm -r publint",
+    "flowmark": "uvx --from flowmark-rs==0.3.2 flowmark",
+    "format": "prettier --write --log-level warn . && pnpm format:docs",
+    "format:docs": "pnpm flowmark --auto .",
+    "format:docs:check": "pnpm flowmark --auto --check .",
+    "format:check": "prettier --check --log-level warn . && pnpm format:docs:check",
+    "docs:check": "node scripts/check-docs.mjs",
+    "lint": "eslint . --fix && pnpm typecheck && eslint . --max-warnings 0",
+    "lint:check": "pnpm typecheck && eslint . --max-warnings 0",
+    "ci:quality": "pnpm format:check && pnpm docs:check && pnpm lint:check",
+    "precommit": "pnpm format && pnpm lint:check && pnpm test",
+    "verify": "pnpm ci:quality && pnpm build && pnpm publint && pnpm test && pnpm audit --audit-level=moderate",
+    "tryscript": "pnpm --filter tryscript tryscript",
+    "prepare": "lefthook install",
+    "changeset": "changeset",
+    "changeset:add": "node scripts/changeset-add.mjs",
+    "version-packages": "changeset version",
+    "release": "pnpm build && pnpm publint && changeset publish",
+    "upgrade:check": "ncu --cooldown 14 --format group",
+    "upgrade": "ncu --cooldown 14 --target minor -u && pnpm install && pnpm test",
+    "upgrade:major": "ncu --cooldown 14 --target latest --interactive --format group"
+  },
+  "devDependencies": {
+    "@changesets/cli": "2.31.1",
+    "@eslint/js": "10.0.1",
+    "@types/node": "20.19.43",
+    "atomically": "2.1.0",
+    "eslint": "10.8.0",
+    "eslint-config-prettier": "10.1.8",
+    "lefthook": "2.1.10",
+    "npm-check-updates": "22.2.9",
+    "prettier": "3.9.6",
+    "publint": "0.3.22",
+    "tsdown": "0.21.10",
+    "typescript": "6.0.3",
+    "typescript-eslint": "8.65.0",
+    "vitest": "4.1.10"
+  },
+  "pnpm": {
+    "overrides": {
+      "micromatch>picomatch": "2.3.2",
+      "minimatch@>=9.0.0 <9.0.7": "9.0.7",
+      "flatted@<3.4.2": "3.4.2",
+      "picomatch@>=4.0.0 <5": "4.0.5",
+      "vite@>=7.0.0 <7.3.5": "7.3.5",
+      "esbuild@>=0.27.3 <0.28.1": "0.28.1"
+    }
+  }
+}

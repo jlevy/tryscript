@@ -1,0 +1,7 @@
+{
+  "name": "test-cli",
+  "version": "1.0.0",
+  "bin": {
+    "test-cli": "./cli.mjs"
+  }
+}

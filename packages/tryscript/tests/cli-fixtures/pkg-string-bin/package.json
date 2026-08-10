@@ -1,0 +1,5 @@
+{
+  "name": "simple-cli",
+  "version": "1.0.0",
+  "bin": "./cli.mjs"
+}

@@ -1,0 +1,53 @@
+# tryscript
+
+## 0.1.7
+
+### Patch Changes
+
+- 9f93f08: Wildcard expansion, unknown wildcards, capture log, extended fence parsing, and update block alignment fixes
+
+## 0.1.6
+
+### Patch Changes
+
+- 74329a3: Fix regression: restore --merge-lcov flag and coverage command functionality
+
+## 0.1.5
+
+### Patch Changes
+
+- 1d0e004: Add path configuration, environment variables (TRYSCRIPT_GIT_ROOT,
+  TRYSCRIPT_PROJECT_ROOT, TRYSCRIPT_PACKAGE_BIN), and LCOV merging for complete coverage
+
+## 0.1.4
+
+### Patch Changes
+
+- 04c78ac: Add LCOV merging for complete coverage with --merge-lcov flag
+
+## 0.1.3
+
+### Patch Changes
+
+- 26ea6fb: Add coverage debugging output and --verbose flag for troubleshooting coverage
+  collection
+
+## 0.1.2
+
+### Patch Changes
+
+- f399b82: Add --color flag and coverage improvements
+
+## 0.1.1
+
+### Patch Changes
+
+- 634984e: Add built-in coverage support for CLI testing and fix c8 path issues
+
+## 0.1.0
+
+### Minor Changes
+
+- Initial release - Golden testing framework for CLI applications.
+  Features: markdown-based test files, configurable command execution, flexible output
+  matching with elision patterns, colorized diff output, coverage support via c8.
