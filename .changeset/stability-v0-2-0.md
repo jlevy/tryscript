@@ -2,11 +2,25 @@
 'tryscript': minor
 ---
 
-Ship a backward-compatible minor release after a full senior engineering review of
-correctness, compatibility, diagnostics, documentation, packaging, and release safety.
-No command, option, package export path, Node.js requirement, or valid v0.1.7 test-file
-behavior is removed. Suites that depended on a false-positive result or malformed input
-will now fail with an actionable diagnostic.
+Ship a minor release of correctness fixes, strict enhancements, and additive public
+APIs after a full senior engineering review. Valid v0.1.7 test files and ordinary
+programmatic use remain supported. Malformed, unsafe, or falsely successful cases can
+now fail with an actionable diagnostic.
+
+## Compatibility Boundary
+
+- **Unchanged valid behavior:** No command, option, package export path, named export,
+  Node.js requirement, or valid v0.1.7 test-file behavior is removed.
+- **Correctness fixes:** Lossy rewrites, platform-specific exit results, swallowed
+  failures, and nondeterministic output now behave as documented.
+- **Strict enhancements:** Malformed executable Markdown, invalid configuration,
+  unsafe fixture destinations, and failed hooks or artifacts are detected instead of
+  being ignored or reported as successful.
+- **Additive APIs:** `validateConfig`, `TestParseError`, and `ConfigWarning` are new
+  exports; existing public TypeScript shapes remain source-compatible.
+- **Presentation simplification:** `tryscript docs` and `tryscript readme` now emit
+  deterministic raw Markdown. Their existing `--raw` and `--color` options remain
+  accepted, but neither changes the output.
 
 ## Correct Results
 
@@ -143,12 +157,15 @@ will now fail with an actionable diagnostic.
 ## Migration
 
 No migration is required for valid v0.1.7 test files or ordinary programmatic use.
-Review these deliberate diagnostic changes when upgrading:
+The strict enhancements can turn a previously green invalid suite red. Review these
+deliberate changes when upgrading:
 
 - Split multiple `$ ` prompts into separate executable fences, close every executable
   fence, and give each executable fence a command.
 - Remove misspelled or stale configuration keys reported by the new validation warnings.
 - Investigate newly failing signal, hook, stderr, fixture, capture-log, or coverage cases;
   v0.1.7 could report false success for those failures.
+- If a script depends on ANSI-styled `docs` or `readme` output, render the returned raw
+  Markdown in the caller. The legacy formatting options remain accepted as no-ops.
 - Update snapshots only when they intentionally assert tryscript’s own CLI text. User
   command output and the `.tryscript.md` format otherwise remain compatible.
