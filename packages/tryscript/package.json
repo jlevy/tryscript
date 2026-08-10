@@ -1,6 +1,6 @@
 {
   "name": "tryscript",
-  "version": "0.1.7",
+  "version": "0.2.0",
   "description": "Markdown golden tests for CLI applications",
   "license": "MIT",
   "author": "Joshua Levy",
