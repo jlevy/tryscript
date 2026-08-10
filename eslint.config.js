@@ -61,7 +61,13 @@ const scriptStylistic = tseslint.configs.stylisticTypeChecked.map((config) => ({
 
 export default [
   {
-    ignores: ['**/dist/**', '**/node_modules/**', '**/.pnpm-store/**', 'eslint.config.*'],
+    ignores: [
+      '**/dist/**',
+      '**/node_modules/**',
+      '**/.pnpm-store/**',
+      'attic/**',
+      'eslint.config.*',
+    ],
   },
   js.configs.recommended,
   ...typedStrict,

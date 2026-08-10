@@ -49,7 +49,15 @@ export type ResolvedCoverageConfig = {
   [Key in Exclude<keyof CoverageConfig, 'mergeLcov'>]-?: Exclude<CoverageConfig[Key], undefined>;
 } & { mergeLcov?: string };
 
-type PublicCoverageContextOptions = Omit<Required<CoverageConfig>, 'mergeLcov'> & {
+/**
+ * The v0.1.7 shape of `CoverageContext.options`, preserved exactly.
+ *
+ * Keep `undefined` explicit so validation-schema strictness cannot narrow the public
+ * API under `exactOptionalPropertyTypes`.
+ */
+type PublicCoverageContextOptions = {
+  [Key in Exclude<keyof CoverageConfig, 'mergeLcov'>]-?: CoverageConfig[Key] | undefined;
+} & {
   mergeLcov?: string;
 };
 

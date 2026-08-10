@@ -13,12 +13,13 @@ The remediation also adds public validation exports and makes documented CLI
 capabilities reliable.
 Valid test files that pass on v0.1.7 remain compatible.
 
-**Implementation status:** B1-B12, D1-D52, and D54 are complete at the current local
-head. Quality, documentation, unit, golden, package, compatibility, minimum-runtime,
-coverage, and production-audit gates pass.
-D53 remains in progress while the PR is updated and CI runs.
-The release cannot leave draft until a human approves the exact fresh advisory fixes,
-the full audit is clean, and terminal CI is green.
+**Implementation status:** B1-B12 and D1-D57 are complete.
+Quality, documentation, unit, golden, package, compatibility, minimum-runtime, coverage,
+and both production and full-audit gates pass.
+The exact fresh-security-fix exceptions have completed human and artifact review.
+PR metadata, review disposition, issue bookkeeping, validation evidence, and the release
+boundary are reconciled.
+GitHub CI remains required on every pushed commit before merge.
 
 ## Backward Compatibility Contract
 
@@ -200,7 +201,7 @@ Regression tests protect the local pins; upstream generator work is tracked as
 ### Documentation, CLI, and Release Contract Pass
 
 Reconciling every maintained document and user-facing help string with the
-implementation found fifty-four more contract and release defects.
+implementation found fifty-seven more contract and release defects.
 Each is tracked under the PR remediation parent bead:
 
 | ID | Defect | Resolution | Bead |
@@ -259,6 +260,9 @@ Each is tracked under the PR remediation parent bead:
 | D52 | A patch changeset understates additive public exports and user-visible CLI capabilities | Prepare v0.2.0 as a backward-compatible minor release with explicit migration guidance | `try-oe1p` |
 | D53 | PR metadata and fixed-issue bookkeeping no longer describe the reviewed branch | Reconcile the title, body, linked issues, review disposition, validation evidence, and release boundary before ready-for-review | `try-7ctq` |
 | D54 | The compatibility replay inherits `GIT_DIR` and related state from pre-push hooks, so its archived repository loses Git-root behavior | Remove inherited `GIT_*` variables from every baseline subprocess and reproduce the hook environment in a regression run | `try-3z3e` |
+| D55 | The first security override covers only root ESLint’s minimatch path, and separate js-yaml exception entries do not satisfy pnpm’s exact multi-version syntax | Cover c8’s workspace-local minimatch edge, use pnpm’s documented version disjunction, and verify both dependency graphs plus the full audit | `try-0a09` |
+| D56 | ESLint traverses the gitignored attic used for third-party source review and loads foreign project configuration | Add the attic to the flat-config global ignores so external review material cannot alter repository quality gates | `try-datx` |
+| D57 | GitHub Actions enables ANSI output, so the compatibility harness rejects the correct replay result while parsing raw colored text | Strip ANSI only for structural assertions, preserve raw diagnostics, and reproduce the GitHub environment locally | `try-93an` |
 
 The documentation pass makes exact `flowmark-rs==0.3.2` formatting authoritative for the
 18 maintained documents and adds a repository check for local links, H1 structure, and
@@ -310,9 +314,11 @@ Reviewed against
 **Cool-off:** 14 days.
 Cutoff for this review is **2026-07-26**. The initial dependency pass selected only
 versions published on or before that date.
-The final PR audit found new advisories whose only fixes were published after the
-cutoff; those packages remain blocked on the repository’s required human `Reviewed-by:`
-exception before the PR can be declared merge-ready.
+The final PR audit found new High-severity advisories whose only complete fixes were
+published after the cutoff.
+Each exact artifact received the required source and supply-chain review before a
+package-specific exception was approved.
+The global 14-day gate remains unchanged.
 
 Held back by cool-off (newest release too young, pinned lower):
 
@@ -341,19 +347,64 @@ vitest/vite, changesets, tsdown).
 
 After the eligible updates and scoped overrides, `pnpm audit --prod` reports no known
 runtime vulnerabilities.
-The full audit is reduced to eight reports across three dev-tool transitive package
+The full audit was reduced to eight reports across three dev-tool transitive package
 families, all with fresh-only fixes:
 
-| Package family | Exact fixes required | Published | Advisory impact |
+| Package family | Exact fixes | Eligible without exception | Advisory impact |
 | --- | --- | --- | --- |
-| `brace-expansion` | 5.0.9 | 2026-07-30 | Unbounded expansion DoS |
-| `js-yaml` | 3.15.1, 4.3.1 | 2026-07-31 | Quadratic merge/omap CPU consumption |
-| `nanoid` | 3.3.17 | 2026-08-03 | Zero-size custom generator infinite loop |
+| `brace-expansion` | 5.0.9 | 2026-08-13 | High, unbounded expansion DoS |
+| `js-yaml` | 3.15.1, 4.3.1 | 2026-08-14 | High, quadratic ordered-map CPU consumption |
+| `nanoid` | 3.3.17 | 2026-08-17 | High, zero-size custom-generator infinite loop |
 
-Publisher, maintainer, timestamp, tarball URL, and integrity metadata were verified from
-the npm registry before proposing the exception.
-The exact override and audit result will be recorded here after human approval; the
-global 14-day gate will not be relaxed.
+None enters the published tryscript runtime.
+`brace-expansion` is reached only through ESLint and minimatch.
+`js-yaml` is reached only through Changesets and is not invoked by the pull-request test
+job. PostCSS imports `nanoid/non-secure` and calls `nanoid(6)`; the reported
+`customAlphabet` and `customRandom` zero-size path is not reached.
+This low application reachability limits the immediate tryscript impact, but each
+authoritative advisory is High severity and can terminate or stall a process in an
+affected consumer. The user approved exact exceptions for serious advisories after
+artifact review.
+
+The review established:
+
+- **`brace-expansion@5.0.9`.** The registry `gitHead` matches tag `v5.0.9`; the reviewed
+  source bounds both intermediate expansion paths.
+  The same publisher and maintainers shipped 5.0.8 and 5.0.9. The 13-file tarball
+  matches its registry SHA-512, contains no install lifecycle script or unsafe path, and
+  adds no dependency. The signed fix merge, 17-platform upstream matrix, and Socket check
+  pass. The release commit and tag have no publisher provenance, so the two minimatch
+  edges used by ESLint and c8 are overridden exactly rather than exempting every
+  brace-expansion consumer.
+- **`js-yaml@3.15.1` and `js-yaml@4.3.1`.** Registry `gitHead` values match both release
+  tags. Each source and 36-file artifact contains the same minimal ordered-map backport:
+  replace the quadratic array scan with own-property lookup.
+  The sole npm publisher, maintainers, dependencies, and package file sets are
+  unchanged; neither artifact has an install lifecycle script or unsafe path.
+  The v4 CI run passes.
+  The v3 branch has no release check run, so its source, rebuilt distribution, and
+  artifact delta were reviewed directly.
+  Neither legacy release has a signed tag or provenance; both pins are therefore exact
+  and independently integrity-locked.
+- **`nanoid@3.3.17`.** The fix adds only the nonpositive-size return to the synchronous,
+  browser, and asynchronous custom generators.
+  The commit and tag have verified SSH signatures.
+  npm trusted-publisher provenance binds the exact tarball SHA-512 to tag `3.3.17`,
+  commit `73d67168136b36fd3b644159b0cff149da4905d9`, and successful GitHub Actions
+  release run `30805488095`. The 25-file artifact has no dependency, install lifecycle
+  script, unsafe path, or unexpected file; its clean-publish differences only remove
+  comments, development metadata, and test scripts.
+
+The four exact versions are scoped in `overrides` and `minimumReleaseAgeExclude`. No
+range or package family is exempt.
+**Reviewed-by: jlevy.** Root and package-workspace dependency graphs resolve only
+`brace-expansion@5.0.9`, `js-yaml@3.15.1` and `4.3.1`, and `nanoid@3.3.17`. Their
+lockfile SHA-512 values match the reviewed registry artifacts.
+Both `pnpm audit --prod --audit-level=moderate` and the full
+`pnpm audit --audit-level=moderate` report no known vulnerabilities.
+Follow-up bead `try-t2h5` is deferred until 2026-08-18, when every exception has crossed
+the 14-day window; it rechecks registry availability, lockfile integrity, and both
+audits before the exception record is considered fully aged.
 
 **Two verification notes**, both cases where the obvious approach silently did nothing:
 

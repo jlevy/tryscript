@@ -83,6 +83,9 @@ will now fail with an actionable diagnostic.
 - Pin zero-install tooling outside the 14-day release cool-off, verify GitHub CLI
   downloads by checksum, use private temporary storage and atomic installation, disable
   dependency install scripts, and enforce audits in local, push, CI, and release gates.
+- Resolve the remaining High-severity development-tool advisories with exact,
+  source-reviewed package pins and package-specific cool-off exceptions while retaining
+  the global 14-day gate for every other release.
 - Adopt the current strict TypeScript and ESLint floor across source and tests, including
   maintained JavaScript tooling, TypeScript 6, exact optional properties, zero-warning
   checks, and atomic file writes.

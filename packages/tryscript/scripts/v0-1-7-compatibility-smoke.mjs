@@ -5,6 +5,7 @@ import { cp, mkdir, mkdtemp, rm, symlink } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import stripAnsi from 'strip-ansi';
 
 const packageRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const repositoryRoot = resolve(packageRoot, '..', '..');
@@ -141,13 +142,14 @@ try {
   }
 
   const output = `${replay.stdout}${replay.stderr}`;
+  const assertionOutput = stripAnsi(output);
   if (replay.status !== 1) {
     throw new Error(
       `Compatibility replay must exit 1 for the reviewed output changes; got ${String(replay.status)}:\n${output}`,
     );
   }
 
-  const summary = /(\d+) passed, (\d+) failed \(/.exec(output);
+  const summary = /(\d+) passed, (\d+) failed \(/.exec(assertionOutput);
   if (
     summary === null ||
     Number(summary[1]) !== expectedPassed ||
@@ -156,7 +158,9 @@ try {
     throw new Error(`Unexpected compatibility replay summary:\n${output}`);
   }
 
-  const failureFiles = [...output.matchAll(/^FAIL (.+)$/gm)].map((match) => match[1] ?? '');
+  const failureFiles = [...assertionOutput.matchAll(/^FAIL (.+)$/gm)].map(
+    (match) => match[1] ?? '',
+  );
   for (const [index, failureFile] of failureFiles.entries()) {
     const suffix = expectedFailureFiles[index];
     if (suffix === undefined || !failureFile.endsWith(suffix)) {
@@ -167,10 +171,12 @@ try {
     throw new Error(`Expected ${String(expectedFailureFiles.length)} failure files`);
   }
 
-  const failureNames = [...output.matchAll(/^ {2}✗ (.+)$/gm)].map((match) => match[1] ?? '');
+  const failureNames = [...assertionOutput.matchAll(/^ {2}✗ (.+)$/gm)].map(
+    (match) => match[1] ?? '',
+  );
   assertSameValues(failureNames, expectedFailureNames, 'compatibility failure names');
 
-  const warnings = output.split(/\r?\n/).filter((line) => line.startsWith('Warning:'));
+  const warnings = assertionOutput.split(/\r?\n/).filter((line) => line.startsWith('Warning:'));
   const pathWarnings = warnings.filter((line) => line.includes("unknown config key 'bin'"));
   for (const suffix of expectedPathWarningSuffixes) {
     if (!pathWarnings.some((line) => line.endsWith(suffix))) {
