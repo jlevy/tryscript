@@ -103,12 +103,30 @@ describe('tryscript CLI', () => {
     expect(result.exitCode).toBe(0);
   });
 
-  it('prints raw documentation without adding bytes', () => {
-    const result = runCli('readme --raw');
+  it('prints source Markdown exactly and accepts legacy formatting options', () => {
+    const documents = [
+      { command: 'readme', path: join(pkgDir, 'README.md') },
+      { command: 'docs', path: join(pkgDir, '..', '..', 'docs', 'tryscript-reference.md') },
+    ];
 
-    expect(result.stdout).toBe(readFileSync(join(pkgDir, 'README.md'), 'utf8'));
-    expect(result.stderr).toBe('');
-    expect(result.exitCode).toBe(0);
+    for (const { command, path } of documents) {
+      const source = readFileSync(path, 'utf8');
+      for (const options of ['', ' --raw', ' --color', ' --raw --color']) {
+        const result = runCli(`${command}${options}`);
+        expect(result.stdout).toBe(source);
+        expect(result.stderr).toBe('');
+        expect(result.exitCode).toBe(0);
+      }
+    }
+  });
+
+  it('does not advertise legacy documentation formatting options', () => {
+    for (const command of ['readme', 'docs']) {
+      const result = runCli(`${command} --help`);
+      expect(result.output).not.toContain('--raw');
+      expect(result.output).not.toContain('--color');
+      expect(result.exitCode).toBe(0);
+    }
   });
 
   it('runs passing test file', () => {

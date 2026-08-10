@@ -11,8 +11,8 @@ const packageRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const repositoryRoot = resolve(packageRoot, '..', '..');
 const baselineCommit = '1aa7ecd534f5739ead591e2361e2b2e7b9346c70';
 const baselineTestPattern = 'packages/tryscript/tests/**/*.tryscript.md';
-const expectedPassed = 110;
-const expectedFailed = 14;
+const expectedPassed = 108;
+const expectedFailed = 16;
 const expectedFailureFiles = [
   'packages/tryscript/tests/capture-log.tryscript.md',
   'packages/tryscript/tests/cli.tryscript.md',
@@ -24,6 +24,8 @@ const expectedFailureNames = [
   '--help shows usage information',
   'run --help shows run options',
   'docs command displays reference',
+  'docs command with --color formats markdown',
+  'readme command with --color formats markdown',
   'No test files found exits with code 1',
   'coverage --help shows coverage options',
   'Invalid argument shows error message',

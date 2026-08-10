@@ -612,10 +612,13 @@ corresponding behavior:
 
 ### Documentation Output
 
-`tryscript docs` and `tryscript readme` render headings and code by default.
-Pass `--raw` when another tool needs Markdown: raw mode writes the tracked or packaged
-source bytes exactly, without adding a final newline.
-`--raw` takes precedence over `--color`.
+`tryscript docs` and `tryscript readme` write the tracked or packaged Markdown source
+exactly, without adding a final newline or terminal styling.
+This stable output is suitable for people, agents, and pipelines.
+
+The legacy `--raw` and `--color` options remain accepted as no-ops for compatibility.
+They are no longer listed in command help and may be removed in a later breaking
+release.
 
 ## Code Coverage
 
