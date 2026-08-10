@@ -871,7 +871,7 @@ def scrub(text: str, scrubbers: list[dict[str, str]]) -> str:
 ## Design: TypeScript Port of trycmd (`tryscript`)
 
 > **Full implementation plan**: See
-> [plan-2025-01-01-tryscript-cli-golden-testing.md](../../../project/specs/active/plan-2025-01-01-tryscript-cli-golden-testing.md)
+> [plan-2025-01-01-tryscript-cli-golden-testing.md](../../../project/specs/done/plan-2025-01-01-tryscript-cli-golden-testing.md)
 > for the complete phased implementation plan with TDD approach.
 
 A minimal TypeScript implementation inspired by trycmd’s design, but language-agnostic

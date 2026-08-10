@@ -1,6 +1,6 @@
 import { writeFile } from 'atomically';
-import { asParsedBlock, buildBlock, spliceBlocks } from './block-writer.js';
-import type { ParsedTestBlock, TestFile, TestBlockResult } from './types.js';
+import { buildBlock, spliceBlocks } from './block-writer.js';
+import type { TestFile, TestBlockResult } from './types.js';
 
 /**
  * Update a test file with actual output from test results.
@@ -10,7 +10,7 @@ export async function updateTestFile(
   results: TestBlockResult[],
 ): Promise<{ updated: boolean; changes: string[] }> {
   const changes: string[] = [];
-  const edits: { block: ParsedTestBlock; replacement: string }[] = [];
+  const edits: { block: (typeof file.blocks)[number]; replacement: string }[] = [];
 
   // Map by block identity so update works correctly with --filter/<!-- only -->
   // where `results` can be a strict subset of `file.blocks`.
@@ -35,11 +35,13 @@ export async function updateTestFile(
     // stderr from the separately captured streams, not from combined output.
     const separateStderr = block.expectedStderr !== undefined;
 
+    const output = separateStderr ? (result.actualStdout ?? '') : result.actualOutput;
+    const stderr = separateStderr ? (result.actualStderr ?? '') : undefined;
     edits.push({
-      block: asParsedBlock(block),
-      replacement: buildBlock(asParsedBlock(block), {
-        output: separateStderr ? (result.actualStdout ?? '') : result.actualOutput,
-        stderr: separateStderr ? (result.actualStderr ?? '') : undefined,
+      block,
+      replacement: buildBlock(block, {
+        output,
+        ...(stderr === undefined ? {} : { stderr }),
         exitCode: result.actualExitCode,
       }),
     });

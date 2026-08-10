@@ -1,16 +1,14 @@
 # Stability Review for tryscript v0.1.8
 
-**Status:** active
-**Baseline:** v0.1.7 (`0a79ba8`)
-**Date:** 2026-08-09
+**Status:** active **Baseline:** v0.1.7 (`0a79ba8`) **Date:** 2026-08-09
 
-A full review of tryscript's correctness, ergonomics, and dependency posture, to decide
+A full review of tryscript’s correctness, ergonomics, and dependency posture, to decide
 whether a patch release is warranted and what it should contain.
 
-**Conclusion: yes, ship v0.1.8.** The review found 12 defects, 5 of which cause tryscript
-to report a *wrong* result — the worst class of bug for a testing tool, because the
-failure is silent. Every fix below preserves the behavior of test files that pass on
-v0.1.7.
+**Conclusion: yes, ship v0.1.8.** The review found 12 defects, 5 of which cause
+tryscript to report a *wrong* result — the worst class of bug for a testing tool,
+because the failure is silent.
+Every fix below preserves the behavior of test files that pass on v0.1.7.
 
 ## Backward Compatibility Contract
 
@@ -23,9 +21,10 @@ still pass on v0.1.8.** Fixes therefore fall into three safe shapes:
 - Files that were silently misinterpreted now produce a parse error at author time,
   never a changed result (B4).
 
-The one deliberate hard error is B4 (multiple prompts per block). It cannot be a warning:
-the current behavior builds a command nobody wrote, so anything short of rejecting it
-leaves the hazard in place. Issue #46 requests exactly this.
+The one deliberate hard error is B4 (multiple prompts per block).
+It cannot be a warning: the current behavior builds a command nobody wrote, so anything
+short of rejecting it leaves the hazard in place.
+Issue #46 requests exactly this.
 
 ## Findings
 
@@ -40,12 +39,12 @@ Severity: **S1** silently wrong result · **S2** data loss or corruption on writ
 | B4 | S1 | Two `$` prompts in one block silently concatenate into one command | `parser.ts:161-199` | #46 |
 | B5 | S1 | Bare `!` line is parsed as stdout, so blank stderr lines are inexpressible | `parser.ts:173` | #45 |
 | B6 | S2 | `--update`/`--expand` discard `!` stderr assertions, weakening the test | `updater.ts:61`, `expander.ts:176` | new |
-| B7 | S2 | `--update`/`--expand` rewrite ` ```bash ` fences as ` ```console ` | `updater.ts:70`, `expander.ts:181` | new |
-| B8 | S3 | Duplicate blocks all report the first block's line number | `parser.ts:107` | new |
+| B7 | S2 | `--update`/`--expand` rewrite `bash` fences as `console` | `updater.ts:70`, `expander.ts:181` | new |
+| B8 | S3 | Duplicate blocks all report the first block’s line number | `parser.ts:107` | new |
 | B9 | S3 | Non-numeric `? ` yields `NaN` with no parse error | `parser.ts:171` | new |
 | B10 | S3 | Failure diff shows combined output when stderr is asserted separately | `run.ts:294` | new |
 | B11 | S3 | Custom pattern containing `$&`, `` $` ``, or `$'` is corrupted | `matcher.ts:88,238` | new |
-| B12 | S4 | Frontmatter is never validated; typo'd keys are silently ignored | `parser.ts:94` | new |
+| B12 | S4 | Frontmatter is never validated; typo’d keys are silently ignored | `parser.ts:94` | new |
 
 ### B1 — Wrong block updated (#47)
 
@@ -54,12 +53,12 @@ Severity: **S1** silently wrong result · **S2** data loss or corruption on writ
 `indexOf` returns the *first* one regardless of which block the result belongs to.
 Processing in reverse then rotates outputs among the duplicates.
 
-Reproduced: a file that writes `first`, reads it, writes `second`, reads it. After
-`--update` the first read block claims `second` and the second claims `first` — exactly
-inverted, and the file then passes, cementing the wrong golden.
+Reproduced: a file that writes `first`, reads it, writes `second`, reads it.
+After `--update` the first read block claims `second` and the second claims `first` —
+exactly inverted, and the file then passes, cementing the wrong golden.
 
-**Fix:** record each block's source `startOffset`/`endOffset` in the parser and splice by
-offset. This removes the ambiguity rather than narrowing it, as #47 recommends.
+**Fix:** record each block’s source `startOffset`/`endOffset` in the parser and splice
+by offset. This removes the ambiguity rather than narrowing it, as #47 recommends.
 
 ### B2 — Signal-killed command falsely passes
 
@@ -67,23 +66,23 @@ offset. This removes the ambiguity rather than narrowing it, as #47 recommends.
 terminated by a signal, `code` is `null` and `signal` holds the name, so tryscript
 records **0**. A command killed by SIGKILL is reported as a clean success.
 
-Reproduced: `$ kill -KILL $$` against `? 99` reports "got 0". A real shell reports 137.
+Reproduced: `$ kill -KILL $$` against `? 99` reports “got 0”. A real shell reports 137.
 
 **Fix:** follow the shell convention and report `128 + signal` when `code === null`.
 
 ### B3 — Output without a trailing newline can never match
 
 `normalizeOutput` collapses trailing newlines with `.replace(/\n+$/, '\n')`, which
-normalizes *one or more* to one but leaves *zero* alone. The parser, meanwhile, always
-terminates `expectedOutput` with `\n`. So any CLI that writes its last line without a
-trailing newline is untestable.
+normalizes *one or more* to one but leaves *zero* alone.
+The parser, meanwhile, always terminates `expectedOutput` with `\n`. So any CLI that
+writes its last line without a trailing newline is untestable.
 
-This is the worst of the set for users because `--update` does not rescue them: it writes
-back the identical text and the block still fails, with a diff that renders as identical
-lines. Reproduced with `process.stdout.write('no-trailing-newline')`.
+This is the worst of the set for users because `--update` does not rescue them: it
+writes back the identical text and the block still fails, with a diff that renders as
+identical lines. Reproduced with `process.stdout.write('no-trailing-newline')`.
 
-**Fix:** `.replace(/\n*$/, '\n')` on non-empty output. Strictly widens what matches, so no
-passing test changes.
+**Fix:** `.replace(/\n*$/, '\n')` on non-empty output.
+Strictly widens what matches, so no passing test changes.
 
 ### B4 — Multiple prompts concatenate (#46)
 
@@ -96,9 +95,9 @@ pointing the author at a separate fence.
 
 ### B5 — Blank stderr lines inexpressible (#45)
 
-The parser tests `line.startsWith('! ')`, so a bare `!` falls through to stdout. Writing
-`! ` with a trailing space works only until an editor, formatter, or `git diff --check`
-strips it.
+The parser tests `line.startsWith('! ')`, so a bare `!` falls through to stdout.
+Writing `! ` with a trailing space works only until an editor, formatter, or
+`git diff --check` strips it.
 
 **Fix:** treat a line equal to `!` as an empty stderr line.
 
@@ -107,37 +106,42 @@ strips it.
 `buildUpdatedBlock` reconstructs a block from `command` + `actualOutput` + exit code
 only. Two things are dropped:
 
-- **B6:** `!`-prefixed stderr assertions. A block that asserted stdout and stderr
-  separately is rewritten as a single combined-output block. It passes afterward, so the
-  weakening is invisible — the test no longer checks what it was written to check.
-- **B7:** the fence info string. ` ```bash ` becomes ` ```console `.
+- **B6:** `!`-prefixed stderr assertions.
+  A block that asserted stdout and stderr separately is rewritten as a single
+  combined-output block.
+  It passes afterward, so the weakening is invisible — the test no longer checks what it
+  was written to check.
+- **B7:** the fence info string.
+  `bash` becomes `console`.
 
-**Fix:** preserve the info string, and re-emit `!` lines from `actualStderr` whenever the
-block asserted stderr separately.
+**Fix:** preserve the info string, and re-emit `!` lines from `actualStderr` whenever
+the block asserted stderr separately.
 
 ### B8-B11 — Misleading diagnostics
 
 - **B8:** `lineNumber` uses `content.indexOf(codeBlock.fullMatch)` — the same duplicate
-  hazard as B1. Two identical blocks both report "Line 1". Fixed for free by the B1
+  hazard as B1. Two identical blocks both report “Line 1”. Fixed for free by the B1
   offset work.
-- **B9:** `parseInt('three')` yields `NaN`, and the block reports "Expected exit code
-  NaN". Should be a parse error.
+- **B9:** `parseInt('three')` yields `NaN`, and the block reports “Expected exit code
+  NaN”. Should be a parse error.
 - **B10:** when `expectedStderr` is set the comparison uses stdout only, but the diff is
   built from `result.actualOutput` (combined), so stderr lines appear as phantom
   additions.
 - **B11:** markers are substituted with `regex.replaceAll(marker, replacement)`. A
   replacement string containing `$&`, `` $` ``, `$'`, or `$<` is interpreted by
-  `replaceAll`'s substitution rules instead of inserted literally. Verified: a custom
-  pattern of `\$&` fails to match the text it describes, while the same pattern without
-  `$` matches. Fixed by passing a function replacement.
+  `replaceAll`’s substitution rules instead of inserted literally.
+  Verified: a custom pattern of `\$&` fails to match the text it describes, while the
+  same pattern without `$` matches.
+  Fixed by passing a function replacement.
 
 ### B12 — Frontmatter is never validated
 
 `TestConfigSchema`, `FixtureSchema`, and `CoverageConfigSchema` are defined in
 `types.ts` and used **only** for `z.infer`. No `.parse()` or `.safeParse()` call exists
-anywhere in the source. `parseTestFile` does `parseYaml(yamlContent) as TestConfig` — an
-unchecked cast. A typo like `sandbox: ture` or `timout: 5000` is silently ignored and the
-test runs with surprising defaults.
+anywhere in the source.
+`parseTestFile` does `parseYaml(yamlContent) as TestConfig` — an unchecked cast.
+A typo like `sandbox: ture` or `timout: 5000` is silently ignored and the test runs with
+surprising defaults.
 
 **Fix:** validate frontmatter with `safeParse` and emit warnings for unknown keys and
 type mismatches. **Warnings, not errors** — an existing file with a stray key must keep
@@ -145,27 +149,132 @@ running.
 
 Note the consequence for the dependency graph: because the schemas are only used for
 types, `zod` is tree-shaken out of the bundle entirely (`grep -c zod dist/bin.mjs` → 0)
-while remaining a declared runtime dependency every consumer installs. Wiring up
-validation makes that dependency honest.
+while remaining a declared runtime dependency every consumer installs.
+Wiring up validation makes that dependency honest.
+
+## Pull Request Remediation Review
+
+The implementation received a second full review at PR #48. That review preserved the
+original B1-B12 design while closing additional release blockers:
+
+- Signal exit values now use Node’s platform signal table rather than hard-coded Linux
+  numbers.
+- Nested fixture and coverage validation reports precise dotted paths, and the CLI keeps
+  those paths in its warning output.
+- Wildcard expansion handles stderr-only blocks, including an explicit empty-stderr
+  assertion represented by a bare `!`.
+- The source-offset metadata added for B1 remains optional for programmatic consumers;
+  legacy blocks fall back to content lookup and fail explicitly when stale content
+  cannot be located.
+- Stale `bin` frontmatter was removed from the maintained golden files and
+  documentation.
+- CommonJS output bundles its ESM-only runtime dependencies; a packed-artifact consumer
+  test exercises it and every other published entry point on the declared minimum
+  Node.js 20.0.0.
+- GitHub CLI bootstrap scripts use private temporary directories, pinned checksums, and
+  an atomic final rename.
+  The implementation was tested with a real isolated install.
+- Internal block serialization helpers are no longer added to the package root API.
+- Runtime `npx c8` fallback was removed; coverage requires a locally installed `c8`.
+- TypeScript 6, the strict type-aware ESLint presets, exact optional properties, atomic
+  writes, verify-only CI, pinned local hook tools, and advisory gates bring the branch
+  to the current tbd TypeScript and supply-chain floor.
+
+The published review and its finding-by-finding disposition are part of the PR record.
+The tbd 0.4.2 generator currently restores the unsafe executable versions when it
+refreshes Codex helpers, so the reviewed local scripts intentionally differ from its
+managed template and `tbd doctor` reports that divergence.
+Regression tests protect the local pins; upstream generator work is tracked as
+`try-pn34`.
+
+### Documentation, CLI, and Release Contract Pass
+
+Reconciling every maintained document and user-facing help string with the
+implementation found forty-eight more contract defects.
+Each is tracked under the PR remediation parent bead:
+
+| ID | Defect | Resolution | Bead |
+| --- | --- | --- | --- |
+| D1 | Documented `tryscript.config.ts` files fail on Node.js 20 | Package the aged `tsx` runtime and smoke-test a typed config through both CLI bundles | `try-jcm5` |
+| D2 | Project-level `tests` patterns are defined but ignored | Load config before discovery and test the CLI-argument/config/default precedence | `try-f9cx` |
+| D3 | Capture-log and coverage-report failures still exit 0 | Count requested-artifact failures in the final process status | `try-ge6b` |
+| D4 | `run --verbose` has no effect | Print captured output for passing blocks and lock the behavior in the CLI golden suite | `try-opve` |
+| D5 | The two documentation commands duplicate a fence parser that misreads nested Markdown | Share one renderer that tracks CommonMark fence character and width; make `--raw` override color | `try-ozkr` |
+| D6 | Coverage report failures call `process.exit()` before temporary data cleanup | Set the deferred exit status, return through `finally`, and assert the reported directory is removed | `try-d8qb` |
+| D7 | A fixture-copy failure leaks the execution directory created before context setup | Remove partial contexts on every initialization error and retain both errors if cleanup also fails | `try-6k2i` |
+| D8 | Non-zero `before` and `after` hooks are silently treated as successful | Fail with the hook’s exit and output, prevent commands after failed setup, and preserve cleanup on every error path | `try-7f7u` |
+| D9 | Executable project configs bypass the frontmatter runtime validation | Emit the same dotted-path, non-fatal warnings before project patterns or options are consumed | `try-s14c` |
+| D10 | Unclosed or commandless executable fences silently remove intended tests | Reject each malformed fence with its source file and opening line | `try-u0nx` |
+| D11 | Windows absolute `path` entries are treated as relative | Detect absolute paths with the host platform’s path rules and retain them unchanged | `try-fy5m` |
+| D12 | A missing external LCOV file logs an error but exits successfully | Route merge failures through the requested-artifact failure count and retain temporary cleanup | `try-ltfy` |
+| D13 | Glob matches execute in arbitrary filesystem order | Sort unique absolute paths ordinally before execution so reports and `--fail-fast` are reproducible | `try-6r16` |
+| D14 | Coverage cleanup suppresses permission and I/O failures | Let forceful removal ignore an absent path while propagating every real cleanup error | `try-5qfo` |
+| D15 | A fixture destination can escape the temporary sandbox | Resolve and validate containment before every fixture copy | `try-ss51` |
+| D16 | Variadic coverage options consume the following test-file argument | Use repeatable single-value options so documented commands preserve positional files | `try-2m6y` |
+| D17 | `--filter` still runs every unnamed block | Select only named blocks whose names match the requested expression | `try-rrab` |
+| D18 | Commander argument failures use a different error prefix | Normalize built-in parse failures to the same `Error:` contract as runtime failures | `try-4edz` |
+| D19 | The maintained-document check is omitted from pull-request CI | Run the shared format, docs, type, and lint quality gate in the workflow | `try-axy1` |
+| D20 | Pull-request tests execute with repository write permission | Keep tests read-only, transfer coverage as an artifact, and comment from a successful write-scoped job | `try-52m2` |
+| D21 | Release build, tests, and GitHub release creation share npm OIDC authority | Verify and pack read-only, publish only the version-matched tarball with OIDC, and create the GitHub release in a separate job | `try-5ksi` |
+| D22 | Source-mode documentation commands depend on ignored build copies | Read tracked workspace docs in source mode and packaged copies from built distributions | `try-q9me` |
+| D23 | Unknown wildcards on expected stderr are omitted from the warning count | Count both asserted streams and cover stderr expansion in the golden suite | `try-0h23` |
+| D24 | Cyclic config-module default exports hang discovery | Detect wrapper cycles and report the exact project config path | `try-y0sx` |
+| D25 | Timed-out commands settle before asynchronous process-tree termination | Wait for tree termination and surface termination failures | `try-cy53` |
+| D26 | Malformed or unclosed YAML frontmatter escapes located parse handling | Wrap YAML failures with file, line, and cause; reject an opening delimiter without a close | `try-gbwa` |
+| D27 | Capture groups inside a custom pattern shift later wildcard captures | Address every outer wildcard capture by a stable generated name | `try-rxpn` |
+| D28 | Build-version Git tags are interpolated into shell commands | Execute Git with argument arrays and reject non-SemVer tags before reuse | `try-a6zl` |
+| D29 | Package documentation copying depends on POSIX `cp` and `mkdir` | Copy tracked docs through a cross-platform atomic Node script | `try-fo3k` |
+| D30 | Coverage filesystem and verbose-reporter failures are suppressed | Propagate I/O and reporter failures, retain cleanup, and share the LCOV merge implementation | `try-v3ur` |
+| D31 | Executable-looking examples inside outer Markdown fences run as tests | Treat non-executable fences as opaque until the matching CommonMark close | `try-pl28` |
+| D32 | Headings and annotations inside fenced content rename, skip, or focus later tests | Track names and annotations only while scanning top-level Markdown | `try-jftw` |
+| D33 | Stale explicit block offsets can overwrite unrelated Markdown | Require complete, integral, in-range offsets whose source matches the parsed block | `try-frsa` |
+| D34 | Malformed LCOV becomes `NaN`, and merging mutates caller-owned input | Validate numeric records with source-line context and deep-clone all merged values | `try-7x5m` |
+| D35 | Configured or explicitly filtered LCOV merging can omit its required reporter, and merge failures exit successfully | Resolve the effective merge before reporters and fail requested-artifact errors | `try-netv` |
+| D36 | A null, primitive, or array project config reaches object spread and crashes discovery | Warn, then normalize an invalid top-level project config to an empty mapping | `try-mw1s` |
+| D37 | Capture logs match combined output even when stdout and stderr are asserted separately | Record both streams independently and identify each capture’s stream | `try-key1` |
+| D38 | `docs --raw` and `readme --raw` append a byte not present in the source document | Write raw Markdown without a synthetic newline and compare output byte for byte | `try-hgih` |
+| D39 | A process close event with neither an exit code nor a signal is reported as success | Treat the impossible status as an execution error | `try-f5md` |
+| D40 | Embedded custom regex backreferences can bind to tryscript’s wrapper groups | Namespace named groups, offset local references, preserve legacy escapes, and warn on ignored flags or built-in names | `try-ctf6` |
+| D41 | Wildcard-looking path components inside `[ROOT]` or `[CWD]` become active wildcards | Protect resolved paths and make path-token line separators portable | `try-3gvb` |
+| D42 | CRLF carriage returns remain inside continued shell commands | Strip the line terminator before parsing command and expected-output tokens | `try-somq` |
+| D43 | Coverage launches a package-manager shell shim directly, which is not portable to Windows | Resolve the installed c8 JavaScript entry point and run it through the current Node executable without a shell | `try-n1m5` |
+| D44 | Reserved custom-pattern names are ignored by matching but still crash `--expand-all` | Exclude built-in names from expansion with the same shared reserved-name set | `try-ydwi` |
+| D45 | Rewriting a CRLF test block produces mixed line endings and drops the closing fence carriage return | Keep the closing terminator outside source offsets and serialize with the block’s original line ending | `try-sczq` |
+| D46 | Prettier excludes Markdown, but no formatter or CI gate owns maintained docs | Pin `flowmark-rs`, separate generated and byte-exact files through `.flowmarkignore`, auto-fix at commit, and verify the maintained set in CI | `try-38ck` |
+| D47 | Closing a pager or downstream pipe can surface `EPIPE` as a CLI crash | Exit successfully for closed stdout or stderr pipes while rethrowing every other stream error | `try-u241` |
+| D48 | LCOV serialization retains input order for files and branches and has no same-line function tiebreaker | Sort every record type with complete ordinal and numeric comparison chains | `try-9auf` |
+
+The documentation pass makes exact `flowmark-rs==0.3.2` formatting authoritative for the
+18 maintained documents and adds a repository check for local links, H1 structure, and
+the common-doc footer across that same set.
+Product docs, contributor runbooks, architecture, templates, CLI help, and executable
+examples now describe the present behavior.
+Maintained JavaScript tooling receives the same typed promise-safety lint and `tsc`
+floor as TypeScript.
+Generated cross-project snapshots and completed historical specs retain their original
+ownership and chronology.
 
 ## Deferred
 
-- **#44 (startup timing diagnostics)** — a feature, not a fix. Out of scope for a patch
-  release; the per-command duration is already collected in `TestBlockResult.duration`,
-  so a `--timings` summary is a small follow-up.
+- **#44 (startup timing diagnostics)** — a feature, not a fix.
+  Out of scope for a patch release; the per-command duration is already collected in
+  `TestBlockResult.duration`, so a `--timings` summary is a small follow-up.
 - **Runtime major bumps** — `zod` 3→4 (the `z.record` signature changed and would break
   `TestConfigSchema`), `commander` 14→15, `diff` 8→9. Each needs its own compatibility
   pass; none carries a security advisory at the version in use after this release.
 
 ## Dependency and Supply-Chain Review
 
-Reviewed against [supply-chain-hardening](https://github.com/jlevy/supply-chain-hardening)
+Reviewed against
+[supply-chain-hardening](https://github.com/jlevy/supply-chain-hardening)
 (`SUPPLY-CHAIN-SECURITY.md` install rules, `guidelines/hardening-npm.md`).
 
-**Cool-off:** 14 days. Cutoff for this release is **2026-07-26**. Every version selected
-below was published on or before that date; where the newest release is inside the
-window, the newest *eligible* version was pinned instead. No exceptions were taken, so no
-`Reviewed-by:` sign-off is required.
+**Cool-off:** 14 days.
+Cutoff for this review is **2026-07-26**. The initial dependency pass selected only
+versions published on or before that date.
+The final PR audit found new advisories whose only fixes were published after the
+cutoff; those packages remain blocked on the repository’s required human `Reviewed-by:`
+exception before the PR can be declared merge-ready.
 
 Held back by cool-off (newest release too young, pinned lower):
 
@@ -175,31 +284,47 @@ Held back by cool-off (newest release too young, pinned lower):
 | `publint` | 0.3.23 | 2026-08-04 | 0.3.22 | 2026-07-23 |
 | `tsx` | 4.23.11 | 2026-08-07 | 4.23.1 | 2026-07-13 |
 
-**Advisories.** `pnpm audit` reported 43 findings. Two touch the published runtime
-dependency tree; the rest are dev-only (eslint, vitest/vite, changesets, tsdown).
+**Advisories.** `pnpm audit` reported 43 findings.
+Two touch the published runtime dependency tree; the rest are dev-only (eslint,
+vitest/vite, changesets, tsdown).
 
 - `diff` — GHSA-73rr-hh4g-fpgx, DoS in `parsePatch`/`applyPatch`. Patched in 8.0.3.
   Resolved version was 8.0.2, and tryscript calls `createPatch` on every failure diff.
   Bumped to `^8.0.4`.
+
 - `yaml` — advisory against the resolved 2.8.2. Bumped to `^2.9.0`.
 
-- `picomatch` — GHSA-c2c7-rcm5-vvqj (ReDoS via extglob) and GHSA-3v7f-55p6-f55p
-  (method injection in POSIX character classes), both patched in 2.3.2. Reached through
+- `picomatch` — GHSA-c2c7-rcm5-vvqj (ReDoS via extglob) and GHSA-3v7f-55p6-f55p (method
+  injection in POSIX character classes), both patched in 2.3.2. Reached through
   `fast-glob` → `micromatch` → `picomatch`. `micromatch` already allows `^2.3.1`, but
   resolution stuck at 2.3.1 and `pnpm update --depth Infinity` did not move it, so a
-  `micromatch>picomatch` override pins `^2.3.2`. The override is scoped to that path so
+  `micromatch>picomatch` override pins exact version 2.3.2. The override is scoped so
   the unrelated `picomatch` 4.x used by the build tooling is untouched.
 
-After these changes `pnpm audit --prod` reports no known vulnerabilities. The full
-audit (dev included) drops from 43 findings to 30, all in dev-only tooling.
+After the eligible updates and scoped overrides, `pnpm audit --prod` reports no known
+runtime vulnerabilities.
+The full audit is reduced to eight reports across three dev-tool transitive package
+families, all with fresh-only fixes:
+
+| Package family | Exact fixes required | Published | Advisory impact |
+| --- | --- | --- | --- |
+| `brace-expansion` | 5.0.9 | 2026-07-30 | Unbounded expansion DoS |
+| `js-yaml` | 3.15.1, 4.3.1 | 2026-07-31 | Quadratic merge/omap CPU consumption |
+| `nanoid` | 3.3.17 | 2026-08-03 | Zero-size custom generator infinite loop |
+
+Publisher, maintainer, timestamp, tarball URL, and integrity metadata were verified from
+the npm registry before proposing the exception.
+The exact override and audit result will be recorded here after human approval; the
+global 14-day gate will not be relaxed.
 
 **Two verification notes**, both cases where the obvious approach silently did nothing:
 
 - **`minimumReleaseAge` in `.npmrc` does not work.** pnpm 10.34.5 reads the value back
   via `pnpm config get minimumReleaseAge` (returning 20160) but does not apply it during
-  resolution — installing a 6-day-old version succeeded. pnpm 11 ignores the key
-  entirely. Only `pnpm-workspace.yaml` gates on both majors, verified by a install that
-  is refused with `ERR_PNPM_NO_MATURE_MATCHING_VERSION`. The policy therefore lives in
+  resolution — installing a 6-day-old version succeeded.
+  pnpm 11 ignores the key entirely.
+  Only `pnpm-workspace.yaml` gates on both majors, verified by a install that is refused
+  with `ERR_PNPM_NO_MATURE_MATCHING_VERSION`. The policy therefore lives in
   `pnpm-workspace.yaml`, and `.npmrc` carries a comment recording why it is not there.
 - **A `picomatch@<2.3.2` override selector reported success while changing nothing.**
   `pnpm audit` stopped reporting the advisory, but `picomatch@2.3.1` was still the
@@ -209,140 +334,66 @@ audit (dev included) drops from 43 findings to 30, all in dev-only tooling.
 
 **Install-time hardening.** The repo carried no release-age gate; `minimumReleaseAge` is
 now set in `pnpm-workspace.yaml` so the cool-off is enforced by the package manager
-rather than by reviewer discipline. That needs pnpm 10.16+, so `packageManager` moves
-10.11.0 → 10.34.5 (published 2026-07-10, eligible). CI already runs `--frozen-lockfile`,
-so the committed lockfile remains the authority on exact versions. Build scripts stay at
-pnpm's blocking default (`esbuild` and `lefthook` are reported as ignored and are not
-allowlisted) — the build and full test suite pass without them, so there is nothing to
-gain by granting them.
+rather than by reviewer discipline.
+That needs pnpm 10.16+, so `packageManager` moves 10.11.0 → 10.34.5 (published
+2026-07-10, eligible).
+CI already runs `--frozen-lockfile`, so the committed lockfile remains the authority on
+exact versions. Build scripts stay at pnpm’s blocking default (`esbuild` and `lefthook`
+are reported as ignored and are not allowlisted) — the build and full test suite pass
+without them, so there is nothing to gain by granting them.
+
+The Markdown floor uses `flowmark-rs==0.3.2`, published 2026-07-15 with no Python
+dependencies. Local commands invoke that exact release through `uvx`; CI pins uv 0.11.28
+and the signed `astral-sh/setup-uv` v9.0.0 commit, both outside the cool-off window.
+`.flowmarkignore` excludes managed agent instructions, synchronized snapshots, completed
+specs, generated release records, and byte-exact golden fixtures.
+Prettier continues to exclude Markdown, so one formatter owns each file type.
 
 **Two upgrade regressions, both caught and fixed.**
 
 - **Duplicate shebang.** tsdown began preserving the `#!/usr/bin/env node` already in
   `src/bin.ts`, while the config also injected one via `banner`. Two `#!` lines is a
   syntax error — the built CLI failed to start at all, taking out 6 CLI integration
-  tests and the entire golden suite. The redundant `banner` is removed. Note that
-  `pnpm build` reported this only as a `[DUPLICATE_SHEBANG]` warning and still exited 0;
-  the test suite is what turned it into a failure.
+  tests and the entire golden suite.
+  The redundant `banner` is removed.
+  Note that `pnpm build` reported this only as a `[DUPLICATE_SHEBANG]` warning and still
+  exited 0; the test suite is what turned it into a failure.
 - **tsdown 0.22 drops Node 20.** Its engines moved to `^22.18.0 || >=24.11.0`, and it
   calls `Promise.withResolvers`, which does not exist on Node 20. tryscript declares
-  `engines: {"node": ">=20"}` and builds with `target: node20`, so taking 0.22 would have
-  meant the package could no longer be built on the oldest runtime it claims to support.
-  Pinned to **0.21.10** instead — the newest release still on `>=20.19.0`, published
-  2026-04-22 and cool-off eligible. Verified by running the full CI sequence
-  (`format:check`, `lint:check`, `build`, `publint`, `test:coverage`) under an actual
-  Node 20.20.2, the version CI uses.
+  `engines: {"node": ">=20"}` and builds with `target: node20`, so taking 0.22 would
+  have meant the package could no longer be built on the oldest runtime it claims to
+  support. Pinned to **0.21.10** instead — the newest release still on `>=20.19.0`,
+  published 2026-04-22 and cool-off eligible.
+  Verified by running the full CI sequence under Node 20.20.2 and every published
+  package entry point under Node 20.0.0.
 
-This one only surfaced in CI: the local toolchain runs Node 22, where the broken build
-succeeds. Auditing declared `engines` across the installed tree is not sufficient on its
+This one only surfaced on the older CI runtime: newer Node releases let the broken build
+succeed. Auditing declared `engines` across the installed tree is not sufficient on its
 own either — `ast-kit@3.0.0` and `@babel/*@8` also declare `^22.18.0 || >=24.11.0` yet
 build fine on Node 20, so an `engine-strict` gate would fail the build for packages that
-actually work. Running the real build on the oldest supported Node is the check that
+actually work. Running the built artifact on the declared minimum Node is the check that
 distinguishes them.
 
-**Not changed.** Runtime majors are deferred (see above). Dev-dependency majors
-(`eslint` 9→10, `typescript` 5→7, `@types/node` 22→26) are out of scope for a patch
-release and each needs its own pass.
-
-## Round 2: Findings from Senior Review
-
-A full-diff review at head `1944356` raised six further issues, all confirmed by
-reproduction before being fixed. Two were release blockers.
-
-| ID | Sev | Summary | Site |
-| --- | --- | --- | --- |
-| R1 | S1 | Signal numbers hard-coded to Linux values, so B2 reports wrong codes off-Linux | `runner.ts` |
-| R2 | S1 | Auto-executed `npx get-tbd@0.4.2` bypasses the new cool-off gate | `.claude/`, `.codex/` hooks |
-| R3 | S3 | Validation missed `coverage` and nested keys; warning dropped the path | `parser.ts`, `types.ts` |
-| R4 | S2 | `--expand` could not expand a wildcard living only in stderr | `expander.ts` |
-| R5 | S2 | `TestBlock` gained required fields, breaking the public API in a patch | `types.ts` |
-| R6 | S4 | The validator warned on the project's own golden files (stale `bin` key) | tests, docs |
-
-### R1 — Signal numbers are platform-specific
-
-The `SIGNAL_NUMBERS` table used Linux values. `SIGUSR1` is 10 on Linux but 30 on
-macOS, and `SIGBUS` is 7 and 10 respectively, so the shell-compatible code was wrong
-on every platform except the one the table was written on. Worse, unlisted signals
-mapped to `128 + 0`, so a process killed by SIGUSR1 could satisfy an expectation
-of exactly 128.
-
-**Fix:** read `os.constants.signals[signal]` at runtime. An unresolvable signal now
-returns 1 rather than 128, so it cannot be mistaken for a genuine `128 + 0`. Tests
-assert against `os.constants` rather than literals, so they are meaningful on any
-platform, and an end-to-end spawn test keeps the helper aligned with real
-child-process behavior.
-
-### R2 — The cool-off gate did not cover the highest-impact path
-
-Session hooks ran `npx --yes get-tbd@0.4.2` automatically on session start and after
-a push. That version was published 2026-07-30, inside the 14-day window, and `npx`
-resolves outside the pnpm lockfile and `minimumReleaseAge` entirely. The policy
-therefore did not protect the one path that downloads and executes code
-automatically — and the claim that no exceptions were taken was inaccurate.
-
-**Fix:** pinned to `get-tbd@0.4.1` (published 2026-07-18, eligible), verified to read
-this repository's `.tbd` data and run `prime` successfully. No exception is taken, so
-the "no exceptions" claim now holds.
-
-Note this pin is on generated tooling: a future `tbd setup` will rewrite these hooks
-to whatever version is current, which may reintroduce an ineligible pin. A durable
-fix belongs upstream in tbd's hook generation.
-
-### R3 — Validation had gaps and dropped the path
-
-`coverage` was allowlisted by hand but never validated, and nested objects were
-non-strict, so both `{coverage: "wrong"}` and a `dst`-for-`dest` fixture typo
-returned no warnings. The CLI also discarded `ConfigWarning.path`.
-
-**Fix:** one authoritative `FrontmatterSchema` composed from `TestConfigSchema` and
-`CoverageConfigSchema`, strict at every level, replacing the hand-maintained
-allowlist that could drift from the schema. Warnings now carry and print the full
-path.
-
-### R4 — `--expand` coupled the two streams
-
-The loop skipped a block with empty `expectedOutput` and required a stdout expansion
-before evaluating stderr, so a block whose only wildcard was `! [??]` was never
-expanded, as was one with literal stdout plus a stderr wildcard.
-
-**Fix:** expand each stream independently and write an edit when either expands,
-falling back to the block's existing text for the stream that did not.
-
-### R5 — A patch release must not strengthen an exported type
-
-`startOffset`, `endOffset`, and `infoString` were added as **required** fields to the
-exported `TestBlock`, which is accepted by exported helpers like `runBlock`. Existing
-TypeScript consumers constructing a `TestBlock` would stop compiling — a breaking
-change in a patch, contradicting the changeset.
-
-**Fix:** the three fields are optional on the public `TestBlock`; a new
-`ParsedTestBlock` requires them and is what the rewrite path consumes. `asParsedBlock`
-narrows at the boundary and throws a clear error rather than falling back to locating
-blocks by text, which is the ambiguity B1 removed. A compile-time test pins the
-v0.1.7 consumer shape so a patch cannot silently strengthen it again.
-`buildBlock`/`spliceBlocks`/`fenceOf` are no longer exported.
-
-### R6 — The validator warned on the project's own files
-
-`bin` is not in the schema and is unused by the runtime, but two golden files and
-`docs/development.md` still set it, so the "unchanged 124-block suite" was emitting
-warnings. Removed from both files and the guide, and the reference now documents the
-parse-error and bare-`!` semantics. A regression test asserts `bin` is still flagged
-so it cannot quietly return.
-
-## Tracked Separately
-
-- **CJS build is broken on Node 20** — `require('dist/index.cjs')` throws
-  `ERR_REQUIRE_ESM` at `require("strip-ansi")`, reproducible on `main` as well as this
-  branch, so it predates this work and is not counted here. The package advertises a
-  `require` export and `node >=20`, so this needs packed-artifact ESM/CJS smoke tests
-  on the minimum supported Node before the next release. Tracked as `try-8k80`.
+**Version boundaries.** Runtime majors remain deferred (see above).
+The remediation adopts the current production TypeScript 6 and ESLint 10 guideline floor
+and aligns development types with the Node 20 runtime contract.
+TypeScript 7 remains non-production; pnpm 11, npm-check-updates 23, `@types/node` 26,
+and tsdown 0.22 are intentionally deferred because they are major changes or drop the
+supported development runtime.
 
 ## Release Plan
 
 1. Fix B1-B12 with a regression test per fix.
 2. Dependency and hardening changes above; `pnpm audit` clean of runtime findings.
 3. `pnpm precommit` plus golden self-tests green.
-4. Changeset as a **patch** — all changes are fixes, and no documented API changes shape.
+4. Changeset as a **patch** — all changes are fixes, and no documented API changes
+   shape.
 5. Release notes call out B2 and B4 explicitly: both can turn a currently-green suite
    red, and in both cases the green was wrong.
+6. Address every PR review finding, run package smoke tests on Node 20.0.0, obtain any
+   required fresh-security-patch sign-off, and require a clean audit and green CI before
+   marking the PR ready.
+
+<!-- This document follows common-doc-guidelines.md.
+See github.com/jlevy/practical-prose and review guidelines before editing.
+-->

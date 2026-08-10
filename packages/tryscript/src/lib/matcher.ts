@@ -1,5 +1,6 @@
 import stripAnsi from 'strip-ansi';
 import type { WildcardCapture, WildcardCategory } from './types.js';
+import { BUILT_IN_PATTERN_NAMES } from './types.js';
 
 /**
  * Escape special regex characters in a string.
@@ -8,16 +9,393 @@ function escapeRegex(str: string): string {
   return str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
 
-// Marker prefix for patterns (uses Unicode private use chars that won't appear in normal output)
+// Base for temporary markers; compilation lengthens it until it is absent from the input.
 const MARKER = '\uE000';
 
 /**
  * Metadata for a capturing group inside a regex built by `patternToCapturingRegex()`.
  */
-interface CaptureGroupMeta {
+interface CaptureGroupSpec {
   category: WildcardCategory;
   name?: string;
   multiline: boolean;
+}
+
+interface CaptureGroupMeta extends CaptureGroupSpec {
+  captureName: string;
+}
+
+interface ReplacementSpec {
+  regexSource: string;
+  capture: CaptureGroupSpec | null;
+  customPatternName: string | null;
+  occurrence: number;
+}
+
+function countCapturingGroups(source: string): number {
+  let count = 0;
+  let inCharacterClass = false;
+
+  for (let index = 0; index < source.length; index++) {
+    const character = source[index];
+    if (character === '\\') {
+      index++;
+      continue;
+    }
+    if (character === '[') {
+      inCharacterClass = true;
+      continue;
+    }
+    if (character === ']' && inCharacterClass) {
+      inCharacterClass = false;
+      continue;
+    }
+    if (character !== '(' || inCharacterClass) {
+      continue;
+    }
+
+    if (source[index + 1] !== '?') {
+      count++;
+      continue;
+    }
+    if (source[index + 2] === '<' && source[index + 3] !== '=' && source[index + 3] !== '!') {
+      count++;
+    }
+  }
+
+  return count;
+}
+
+function pathToRegex(path: string): string {
+  return path
+    .split(/[\\/]/u)
+    .map((component) => escapeRegex(component))
+    .join('[\\\\/]');
+}
+
+function namespaceNamedGroups(source: string, occurrence: number, patternName: string): string {
+  const renamed = new Map<string, string>();
+  let inCharacterClass = false;
+
+  for (let index = 0; index < source.length; index++) {
+    const character = source[index];
+    if (character === '\\') {
+      index++;
+      continue;
+    }
+    if (character === '[') {
+      inCharacterClass = true;
+      continue;
+    }
+    if (character === ']' && inCharacterClass) {
+      inCharacterClass = false;
+      continue;
+    }
+    if (
+      !inCharacterClass &&
+      source.startsWith('(?<', index) &&
+      source[index + 3] !== '=' &&
+      source[index + 3] !== '!'
+    ) {
+      const nameEnd = source.indexOf('>', index + 3);
+      if (nameEnd !== -1) {
+        const name = source.slice(index + 3, nameEnd);
+        if (!renamed.has(name)) {
+          renamed.set(name, `tryscriptPattern${occurrence}Group${renamed.size}`);
+        }
+        index = nameEnd;
+      }
+    }
+  }
+
+  let result = '';
+  inCharacterClass = false;
+  for (let index = 0; index < source.length;) {
+    const character = source[index]!;
+    if (character === '\\') {
+      if (!inCharacterClass && source.startsWith('\\k<', index)) {
+        const nameEnd = source.indexOf('>', index + 3);
+        if (nameEnd !== -1) {
+          const name = source.slice(index + 3, nameEnd);
+          const replacement = renamed.get(name);
+          if (replacement === undefined) {
+            if (renamed.size > 0) {
+              throw new Error(
+                `Custom pattern [${patternName}] references undefined named group '${name}'`,
+              );
+            }
+            result += escapeRegex(`k<${name}>`);
+            index = nameEnd + 1;
+            continue;
+          }
+          result += `\\k<${replacement}>`;
+          index = nameEnd + 1;
+          continue;
+        }
+      }
+      result += source.slice(index, index + 2);
+      index += 2;
+      continue;
+    }
+    if (character === '[') {
+      inCharacterClass = true;
+    } else if (character === ']' && inCharacterClass) {
+      inCharacterClass = false;
+    }
+    if (
+      !inCharacterClass &&
+      source.startsWith('(?<', index) &&
+      source[index + 3] !== '=' &&
+      source[index + 3] !== '!'
+    ) {
+      const nameEnd = source.indexOf('>', index + 3);
+      if (nameEnd !== -1) {
+        const name = source.slice(index + 3, nameEnd);
+        const replacement = renamed.get(name);
+        if (replacement !== undefined) {
+          result += `(?<${replacement}>`;
+          index = nameEnd + 1;
+          continue;
+        }
+      }
+    }
+    result += character;
+    index++;
+  }
+
+  return result;
+}
+
+function legacyDecimalEscape(rawDigits: string): string {
+  const firstDigit = Number(rawDigits[0]);
+  if (firstDigit >= 8) {
+    return rawDigits;
+  }
+
+  const maximumOctalDigits = firstDigit <= 3 ? 3 : 2;
+  let octalLength = 1;
+  while (
+    octalLength < maximumOctalDigits &&
+    octalLength < rawDigits.length &&
+    /[0-7]/u.test(rawDigits[octalLength]!)
+  ) {
+    octalLength++;
+  }
+
+  const value = Number.parseInt(rawDigits.slice(0, octalLength), 8);
+  const explicitEscape =
+    value <= 0xff
+      ? `\\x${value.toString(16).padStart(2, '0')}`
+      : `\\u${value.toString(16).padStart(4, '0')}`;
+  return explicitEscape + rawDigits.slice(octalLength);
+}
+
+function offsetNumericBackreferences(
+  source: string,
+  offset: number,
+  localCaptureCount: number,
+): string {
+  let result = '';
+  let inCharacterClass = false;
+  for (let index = 0; index < source.length;) {
+    const character = source[index]!;
+    if (character === '[') {
+      inCharacterClass = true;
+      result += character;
+      index++;
+      continue;
+    }
+    if (character === ']' && inCharacterClass) {
+      inCharacterClass = false;
+      result += character;
+      index++;
+      continue;
+    }
+    if (character !== '\\' || inCharacterClass || !/[1-9]/u.test(source[index + 1] ?? '')) {
+      if (character === '\\') {
+        result += source.slice(index, index + 2);
+        index += 2;
+      } else {
+        result += character;
+        index++;
+      }
+      continue;
+    }
+
+    let end = index + 1;
+    while (/\d/u.test(source[end] ?? '')) {
+      end++;
+    }
+    const rawReference = source.slice(index + 1, end);
+    const reference = Number(rawReference);
+    result +=
+      reference <= localCaptureCount
+        ? `\\${reference + offset}`
+        : legacyDecimalEscape(rawReference);
+    index = end;
+  }
+
+  return result;
+}
+
+function compilePattern(
+  expected: string,
+  context: { root: string; cwd: string },
+  customPatterns: Record<string, string | RegExp>,
+  captureWildcards: boolean,
+): { regex: RegExp; groups: CaptureGroupMeta[] } {
+  const replacements = new Map<string, ReplacementSpec>();
+  let markerPrefix = MARKER;
+  while (expected.includes(markerPrefix)) {
+    markerPrefix += MARKER;
+  }
+  let markerIndex = 0;
+  let occurrence = 0;
+
+  const registerReplacement = (
+    regexSource: string,
+    capture: CaptureGroupSpec | null,
+    customPatternName: string | null = null,
+  ): string => {
+    const marker = `${markerPrefix}${markerIndex++}${markerPrefix}`;
+    replacements.set(marker, {
+      regexSource,
+      capture,
+      customPatternName,
+      occurrence: occurrence++,
+    });
+    return marker;
+  };
+
+  const replaceEach = (
+    processed: string,
+    pattern: string | RegExp,
+    regexSource: string,
+    capture: CaptureGroupSpec | null,
+    customPatternName: string | null = null,
+  ): string => {
+    let result = processed;
+    if (typeof pattern === 'string') {
+      while (result.includes(pattern)) {
+        result = result.replace(
+          pattern,
+          registerReplacement(regexSource, capture, customPatternName),
+        );
+      }
+      return result;
+    }
+
+    let match: RegExpExecArray | null;
+    while ((match = pattern.exec(result)) !== null) {
+      const marker = registerReplacement(regexSource, capture, customPatternName);
+      result = result.slice(0, match.index) + marker + result.slice(match.index + match[0].length);
+    }
+    return result;
+  };
+
+  const capture = (spec: CaptureGroupSpec): CaptureGroupSpec | null =>
+    captureWildcards ? spec : null;
+  let processed = expected;
+
+  // A line containing a path token is a portable path expression. Protect its
+  // written separators before wildcard scanning so `/` in the golden also
+  // matches `\` in Windows command output without rewriting captured text.
+  processed = processed
+    .split('\n')
+    .map((line) => {
+      if (!line.includes('[ROOT]') && !line.includes('[CWD]')) {
+        return line;
+      }
+      return line.replace(/[\\/]/gu, () => registerReplacement('[\\\\/]', null));
+    })
+    .join('\n');
+
+  // Protect path values before looking for wildcard-like text inside them.
+  processed = replaceEach(processed, '[ROOT]', pathToRegex(context.root), null);
+  processed = replaceEach(processed, '[CWD]', pathToRegex(context.cwd), null);
+  processed = replaceEach(
+    processed,
+    '[..]',
+    '[^\\n]*',
+    capture({ category: 'generic', multiline: false }),
+  );
+  processed = replaceEach(
+    processed,
+    '[??]',
+    '[^\\n]*',
+    capture({ category: 'unknown', multiline: false }),
+  );
+  processed = replaceEach(
+    processed,
+    /\.\.\.\n/,
+    '(?:[^\\n]*\\n)*',
+    capture({ category: 'generic', multiline: true }),
+  );
+  processed = replaceEach(
+    processed,
+    /\?\?\?\n/,
+    '(?:[^\\n]*\\n)*',
+    capture({ category: 'unknown', multiline: true }),
+  );
+  processed = replaceEach(processed, '[EXE]', process.platform === 'win32' ? '\\.exe' : '', null);
+
+  for (const [name, pattern] of Object.entries(customPatterns)) {
+    if (BUILT_IN_PATTERN_NAMES.has(name)) {
+      continue;
+    }
+    processed = replaceEach(
+      processed,
+      `[${name}]`,
+      pattern instanceof RegExp ? pattern.source : pattern,
+      capture({ category: 'named', name, multiline: false }),
+      name,
+    );
+  }
+
+  const ordered = [...replacements.entries()].sort(
+    (left, right) => processed.indexOf(left[0]) - processed.indexOf(right[0]),
+  );
+  let regexSource = escapeRegex(processed);
+  let precedingCaptureCount = 0;
+  let wildcardCaptureIndex = 0;
+  const groups: CaptureGroupMeta[] = [];
+
+  for (const [marker, spec] of ordered) {
+    let replacementSource = spec.regexSource;
+    if (spec.customPatternName !== null) {
+      replacementSource = namespaceNamedGroups(
+        replacementSource,
+        spec.occurrence,
+        spec.customPatternName,
+      );
+    }
+    const localCaptureCount = countCapturingGroups(replacementSource);
+    if (spec.customPatternName !== null) {
+      const wrapperOffset = spec.capture === null ? 0 : 1;
+      replacementSource = offsetNumericBackreferences(
+        replacementSource,
+        precedingCaptureCount + wrapperOffset,
+        localCaptureCount,
+      );
+      if (spec.capture === null) {
+        replacementSource = `(?:${replacementSource})`;
+      }
+    }
+
+    if (spec.capture !== null) {
+      const meta: CaptureGroupMeta = {
+        ...spec.capture,
+        captureName: `tryscriptCapture${wildcardCaptureIndex++}`,
+      };
+      groups.push(meta);
+      replacementSource = `(?<${meta.captureName}>${replacementSource})`;
+      precedingCaptureCount++;
+    }
+    precedingCaptureCount += localCaptureCount;
+    regexSource = regexSource.replaceAll(escapeRegex(marker), () => replacementSource);
+  }
+
+  return { regex: new RegExp(`^${regexSource}$`, 's'), groups };
 }
 
 /**
@@ -33,86 +411,16 @@ interface CaptureGroupMeta {
  */
 function patternToRegex(
   expected: string,
+  context: { root: string; cwd: string },
   customPatterns: Record<string, string | RegExp> = {},
 ): RegExp {
-  // Build a map of markers to their regex replacements
-  const replacements = new Map<string, string>();
-  let markerIndex = 0;
-
-  const getMarker = (): string => {
-    return `${MARKER}${markerIndex++}${MARKER}`;
-  };
-
-  let processed = expected;
-
-  // Replace [..] with marker
-  const dotdotMarker = getMarker();
-  replacements.set(dotdotMarker, '[^\\n]*');
-  processed = processed.replaceAll('[..]', dotdotMarker);
-
-  // Replace [??] with marker (unknown single-line, same regex as [..])
-  const unknownDotdotMarker = getMarker();
-  replacements.set(unknownDotdotMarker, '[^\\n]*');
-  processed = processed.replaceAll('[??]', unknownDotdotMarker);
-
-  // Replace ... (followed by newline) with marker
-  const ellipsisMarker = getMarker();
-  replacements.set(ellipsisMarker, '(?:[^\\n]*\\n)*');
-  processed = processed.replace(/\.\.\.\n/g, ellipsisMarker);
-
-  // Replace ??? (followed by newline) with marker (unknown multi-line, same regex as ...)
-  const unknownEllipsisMarker = getMarker();
-  replacements.set(unknownEllipsisMarker, '(?:[^\\n]*\\n)*');
-  processed = processed.replace(/\?\?\?\n/g, unknownEllipsisMarker);
-
-  // Replace [EXE] with marker
-  const exeMarker = getMarker();
-  const exe = process.platform === 'win32' ? '\\.exe' : '';
-  replacements.set(exeMarker, exe);
-  processed = processed.replaceAll('[EXE]', exeMarker);
-
-  // Replace custom patterns with markers
-  for (const [name, pattern] of Object.entries(customPatterns)) {
-    const placeholder = `[${name}]`;
-    const patternStr = pattern instanceof RegExp ? pattern.source : pattern;
-    const marker = getMarker();
-    replacements.set(marker, `(${patternStr})`);
-    processed = processed.replaceAll(placeholder, marker);
-  }
-
-  // Escape special regex characters
-  let regex = escapeRegex(processed);
-
-  // Restore markers to their regex replacements. The replacement is passed as a
-  // function so that `$&`, `` $` ``, `$'`, and `$<` inside a custom pattern are
-  // inserted literally instead of being expanded by `replaceAll`.
-  for (const [marker, replacement] of replacements) {
-    regex = regex.replaceAll(escapeRegex(marker), () => replacement);
-  }
-
-  // Match the entire string (dotall mode for . to match newlines if needed)
-  return new RegExp(`^${regex}$`, 's');
-}
-
-/**
- * Pre-process expected output to replace path placeholders with actual paths.
- * This happens BEFORE pattern matching.
- */
-function preprocessPaths(expected: string, context: { root: string; cwd: string }): string {
-  let result = expected;
-  // Normalize paths for comparison (use forward slashes)
-  const normalizedRoot = context.root.replace(/\\/g, '/');
-  const normalizedCwd = context.cwd.replace(/\\/g, '/');
-  result = result.replaceAll('[ROOT]', normalizedRoot);
-  result = result.replaceAll('[CWD]', normalizedCwd);
-  return result;
+  return compilePattern(expected, context, customPatterns, false).regex;
 }
 
 /**
  * Normalize actual output for comparison.
  * - Remove ANSI escape codes (colors, etc.)
  * - Normalize line endings to \n
- * - Normalize paths (Windows backslashes to forward slashes)
  * - Trim trailing whitespace from lines
  * - Ensure single trailing newline
  */
@@ -143,108 +451,15 @@ export function normalizeOutput(output: string): string {
  * Like `patternToRegex()` but wraps each wildcard in a capturing group and
  * returns metadata describing what each group represents.
  *
- * Each occurrence gets a unique marker so that the `groups` array is ordered
- * by position in the string, matching the regex capture group indices.
+ * Each occurrence receives a unique named group, so captures inside custom
+ * regular expressions cannot shift later wildcard values.
  */
 function patternToCapturingRegex(
   expected: string,
+  context: { root: string; cwd: string },
   customPatterns: Record<string, string | RegExp> = {},
 ): { regex: RegExp; groups: CaptureGroupMeta[] } {
-  const replacements = new Map<string, string>();
-  // Maps marker string -> its CaptureGroupMeta (or null for non-capture markers)
-  const markerMeta = new Map<string, CaptureGroupMeta | null>();
-  let markerIndex = 0;
-
-  const getMarker = (): string => {
-    return `${MARKER}${markerIndex++}${MARKER}`;
-  };
-
-  // Replace each occurrence individually to maintain position ordering.
-  const replaceEach = (
-    processed: string,
-    pattern: string | RegExp,
-    regexStr: string,
-    meta: CaptureGroupMeta | null,
-  ): string => {
-    let result = processed;
-    if (typeof pattern === 'string') {
-      while (result.includes(pattern)) {
-        const marker = getMarker();
-        replacements.set(marker, regexStr);
-        markerMeta.set(marker, meta);
-        result = result.replace(pattern, marker);
-      }
-    } else {
-      let m: RegExpExecArray | null;
-      while ((m = pattern.exec(result)) !== null) {
-        const marker = getMarker();
-        replacements.set(marker, regexStr);
-        markerMeta.set(marker, meta);
-        result = result.slice(0, m.index) + marker + result.slice(m.index + m[0].length);
-      }
-    }
-    return result;
-  };
-
-  let processed = expected;
-
-  // [..] — generic single-line
-  processed = replaceEach(processed, '[..]', '([^\\n]*)', {
-    category: 'generic',
-    multiline: false,
-  });
-
-  // [??] — unknown single-line
-  processed = replaceEach(processed, '[??]', '([^\\n]*)', {
-    category: 'unknown',
-    multiline: false,
-  });
-
-  // ... — generic multi-line (must be followed by newline)
-  processed = replaceEach(processed, /\.\.\.\n/, '((?:[^\\n]*\\n)*)', {
-    category: 'generic',
-    multiline: true,
-  });
-
-  // ??? — unknown multi-line (must be followed by newline)
-  processed = replaceEach(processed, /\?\?\?\n/, '((?:[^\\n]*\\n)*)', {
-    category: 'unknown',
-    multiline: true,
-  });
-
-  // [EXE] — no capture
-  const exe = process.platform === 'win32' ? '\\.exe' : '';
-  processed = replaceEach(processed, '[EXE]', exe, null);
-
-  // Custom named patterns
-  for (const [name, pattern] of Object.entries(customPatterns)) {
-    const placeholder = `[${name}]`;
-    const patternStr = pattern instanceof RegExp ? pattern.source : pattern;
-    processed = replaceEach(processed, placeholder, `(${patternStr})`, {
-      category: 'named',
-      name,
-      multiline: false,
-    });
-  }
-
-  // Sort markers by their position in the processed string so that
-  // the groups array matches the left-to-right capture group order.
-  const sortedEntries = [...replacements.entries()].sort((a, b) => {
-    return processed.indexOf(a[0]) - processed.indexOf(b[0]);
-  });
-
-  let regex = escapeRegex(processed);
-  const groups: CaptureGroupMeta[] = [];
-  for (const [marker, replacement] of sortedEntries) {
-    const meta = markerMeta.get(marker);
-    if (meta) {
-      groups.push(meta);
-    }
-    // Function replacement: see `patternToRegex()` for why.
-    regex = regex.replaceAll(escapeRegex(marker), () => replacement);
-  }
-
-  return { regex: new RegExp(`^${regex}$`, 's'), groups };
+  return compilePattern(expected, context, customPatterns, true);
 }
 
 /**
@@ -264,8 +479,7 @@ export function matchOutput(
     return true;
   }
 
-  const preprocessed = preprocessPaths(normalizedExpected, context);
-  const regex = patternToRegex(preprocessed, customPatterns);
+  const regex = patternToRegex(normalizedExpected, context, customPatterns);
   return regex.test(normalizedActual);
 }
 
@@ -286,19 +500,18 @@ export function matchAndCapture(
     return { captures: [] };
   }
 
-  const preprocessed = preprocessPaths(normalizedExpected, context);
-  const { regex, groups } = patternToCapturingRegex(preprocessed, customPatterns);
+  const { regex, groups } = patternToCapturingRegex(normalizedExpected, context, customPatterns);
   const match = regex.exec(normalizedActual);
 
   if (!match) {
     return null;
   }
 
-  const captures: WildcardCapture[] = groups.map((meta, i) => ({
+  const captures: WildcardCapture[] = groups.map((meta) => ({
     category: meta.category,
-    name: meta.name,
+    ...(meta.name === undefined ? {} : { name: meta.name }),
     multiline: meta.multiline,
-    captured: match[i + 1] ?? '',
+    captured: match.groups?.[meta.captureName] ?? '',
   }));
 
   return { captures };

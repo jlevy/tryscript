@@ -74,6 +74,17 @@ export function reportFile(result: TestFileResult, options: ReporterOptions): vo
     if (blockResult.passed) {
       if (!options.quiet) {
         console.error(`  ${statusIcon.pass} ${name}`);
+        if (options.verbose) {
+          const output = blockResult.actualOutput.trimEnd();
+          if (output) {
+            console.error(
+              output
+                .split('\n')
+                .map((line) => `    ${line}`)
+                .join('\n'),
+            );
+          }
+        }
       }
     } else {
       console.error(`  ${statusIcon.fail} ${name}`);
@@ -110,7 +121,7 @@ export function reportFile(result: TestFileResult, options: ReporterOptions): vo
 /**
  * Report final summary.
  */
-export function reportSummary(summary: TestRunSummary, _options: ReporterOptions): void {
+export function reportSummary(summary: TestRunSummary): void {
   const parts: string[] = [];
 
   if (summary.totalPassed > 0) {

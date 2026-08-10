@@ -14,10 +14,11 @@ software development.
 [optional footer(s)]
 ```
 
-- First line short, ideally 72 characters or less
-- Use imperative mood ("Add feature" not “Added feature”)
-- No scope by default; only use when disambiguation is needed (e.g., `fix(parser):`)
-- For breaking changes: add `!` before `:` AND include `BREAKING CHANGE:` in the footer
+- Keep the first line at 72 characters or fewer when practical.
+- Use the imperative mood: “Add feature,” not “Added feature.”
+- Omit the scope unless it disambiguates the change, as in `fix(parser):`.
+- For a breaking change, add `!` before `:` and include `BREAKING CHANGE:` in the
+  footer.
 
 ## Types
 
@@ -61,7 +62,8 @@ fix: Handle empty issue list gracefully
 fix(api): Return 404 for missing resources
 docs: Update CLI usage examples
 docs: Fix typo in API reference
-style: Format with prettier
+docs: Format maintained Markdown with Flowmark
+style: Format code with Prettier
 refactor: Extract validation logic to separate module
 test: Add golden tests for sync command
 chore: Update dependencies
@@ -72,3 +74,7 @@ ops: Update issue status for auth feature
 ops: Sync beads with remote
 process: Add TDD guidelines for agent workflows
 ```
+
+<!-- This document follows common-doc-guidelines.md.
+See github.com/jlevy/practical-prose and review guidelines before editing.
+-->

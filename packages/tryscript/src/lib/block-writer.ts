@@ -1,4 +1,4 @@
-import type { ParsedTestBlock, TestBlock } from './types.js';
+import type { TestBlock } from './types.js';
 
 /** Pieces of a console block to serialize back into a test file. */
 export interface BlockParts {
@@ -14,29 +14,6 @@ export interface BlockParts {
   exitCode: number;
 }
 
-/**
- * Narrow a block to one carrying the source bookkeeping a rewrite needs.
- *
- * `parseTestFile` always populates these, so this only fires for a hand-built block
- * passed straight to a rewrite -- in which case failing loudly beats falling back to
- * searching by text, which is the ambiguity that made rewrites target the wrong
- * duplicate block in the first place.
- */
-export function asParsedBlock(block: TestBlock): ParsedTestBlock {
-  if (
-    typeof block.startOffset !== 'number' ||
-    typeof block.endOffset !== 'number' ||
-    typeof block.infoString !== 'string'
-  ) {
-    const where = block.name ?? `line ${block.lineNumber}`;
-    throw new Error(
-      `Cannot rewrite block (${where}): it is missing source offsets. ` +
-        'Blocks passed to --update/--expand must come from parseTestFile().',
-    );
-  }
-  return block as ParsedTestBlock;
-}
-
 /** The opening fence of a block, preserving its original backtick count. */
 export function fenceOf(block: TestBlock): string {
   return '`'.repeat(/^(`+)/.exec(block.rawContent)?.[1]?.length ?? 3);
@@ -49,32 +26,33 @@ export function fenceOf(block: TestBlock): string {
  * silently become a ```console one, and re-emits `!` stderr lines so a block that
  * asserted stdout and stderr separately keeps doing so after a rewrite.
  */
-export function buildBlock(block: ParsedTestBlock, parts: BlockParts): string {
+export function buildBlock(block: TestBlock, parts: BlockParts): string {
   const fence = fenceOf(block);
+  const lineEnding = block.rawContent.includes('\r\n') ? '\r\n' : '\n';
 
-  const commandLines = block.command.split('\n').map((line, i) => {
-    return i === 0 ? `$ ${line}` : `> ${line}`;
-  });
+  const commandLines = block.command
+    .replace(/\r\n?/gu, '\n')
+    .split('\n')
+    .map((line, i) => (i === 0 ? `$ ${line}` : `> ${line}`));
 
-  const lines: string[] = [`${fence}${block.infoString}`, ...commandLines];
+  const lines: string[] = [`${fence}${block.infoString ?? 'console'}`, ...commandLines];
 
-  const trimmedOutput = parts.output.trimEnd();
+  const trimmedOutput = parts.output.replace(/\r\n?/gu, '\n').trimEnd();
   if (trimmedOutput) {
-    lines.push(trimmedOutput);
+    lines.push(...trimmedOutput.split('\n'));
   }
 
   if (parts.stderr !== undefined) {
-    const trimmedStderr = parts.stderr.trimEnd();
-    if (trimmedStderr) {
-      // A blank stderr line is written as a bare `!`; `! ` would depend on trailing
-      // whitespace that editors and formatters strip.
-      lines.push(...trimmedStderr.split('\n').map((line) => (line ? `! ${line}` : '!')));
-    }
+    const trimmedStderr = parts.stderr.replace(/\r\n?/gu, '\n').trimEnd();
+    // A blank stderr line is written as a bare `!`; `! ` would depend on trailing
+    // whitespace that editors and formatters strip. An empty string is intentional:
+    // it preserves an explicit assertion that stderr must be empty.
+    lines.push(...trimmedStderr.split('\n').map((line) => (line ? `! ${line}` : '!')));
   }
 
   lines.push(`? ${parts.exitCode}`, fence);
 
-  return lines.join('\n');
+  return lines.join(lineEnding);
 }
 
 /**
@@ -82,17 +60,65 @@ export function buildBlock(block: ParsedTestBlock, parts: BlockParts): string {
  *
  * Rewrites are applied in descending offset order so earlier offsets stay valid.
  * Locating blocks by offset rather than by searching for their text is what makes
- * repeated, byte-identical blocks update in place instead of swapping outputs.
+ * repeated, byte-identical parsed blocks update in place instead of swapping outputs.
+ * Legacy programmatic blocks may omit offsets; those use ordered content lookup and
+ * fail explicitly if their source is stale.
  */
 export function spliceBlocks(
   content: string,
-  edits: { block: ParsedTestBlock; replacement: string }[],
+  edits: { block: TestBlock; replacement: string }[],
 ): string {
   let result = content;
-  const ordered = [...edits].sort((a, b) => b.block.startOffset - a.block.startOffset);
+  let fallbackSearchOffset = 0;
+  const resolved = edits.flatMap(({ block, replacement }) => {
+    const hasStartOffset = block.startOffset !== undefined;
+    const hasEndOffset = block.endOffset !== undefined;
+    if (hasStartOffset !== hasEndOffset) {
+      throw new Error(
+        `Cannot rewrite the test block from line ${block.lineNumber}; ` +
+          'its source-offset metadata is incomplete.',
+      );
+    }
 
-  for (const { block, replacement } of ordered) {
-    result = result.slice(0, block.startOffset) + replacement + result.slice(block.endOffset);
+    if (block.startOffset !== undefined && block.endOffset !== undefined) {
+      const offsetsAreValid =
+        Number.isInteger(block.startOffset) &&
+        Number.isInteger(block.endOffset) &&
+        block.startOffset >= 0 &&
+        block.startOffset <= block.endOffset &&
+        block.endOffset <= content.length;
+      const sourceMatches =
+        offsetsAreValid && content.slice(block.startOffset, block.endOffset) === block.rawContent;
+      if (!sourceMatches) {
+        throw new Error(
+          `Cannot rewrite the test block from line ${block.lineNumber}; ` +
+            'its source offsets are invalid or stale for the target file.',
+        );
+      }
+      return [{ startOffset: block.startOffset, endOffset: block.endOffset, replacement }];
+    }
+
+    let startOffset = content.indexOf(block.rawContent, fallbackSearchOffset);
+    if (startOffset === -1) {
+      startOffset = content.indexOf(block.rawContent);
+    }
+    if (startOffset === -1) {
+      throw new Error(
+        `Cannot locate the test block from line ${block.lineNumber}; ` +
+          'the parsed file content is stale or does not match the target file.',
+      );
+    }
+
+    const endOffset = startOffset + block.rawContent.length;
+    fallbackSearchOffset = endOffset;
+    return [{ startOffset, endOffset, replacement }];
+  });
+  const ordered = resolved.sort(
+    (a, b) => b.startOffset - a.startOffset || b.endOffset - a.endOffset,
+  );
+
+  for (const { startOffset, endOffset, replacement } of ordered) {
+    result = result.slice(0, startOffset) + replacement + result.slice(endOffset);
   }
 
   return result;

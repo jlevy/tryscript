@@ -14,7 +14,7 @@ $ node $TRYSCRIPT_TEST_DIR/../dist/bin.mjs run --capture-log captures.yaml targe
 PASS [..]target.tryscript.md
   ✓ Simple echo
 
-1 unknown wildcard(s) found (??? or [??]). These are temporary and should be expanded. Use --expand to fill them in.
+Warning: 1 unknown wildcard found (??? or [??]). Run with --expand, then review the replacement before committing.
 1 passed [..]
 Capture log written to captures.yaml
 ? 0

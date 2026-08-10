@@ -12,7 +12,6 @@ export type { TryscriptConfig } from './lib/config.js';
 export type {
   TestConfig,
   TestBlock,
-  ParsedTestBlock,
   TestFile,
   TestBlockResult,
   TestFileResult,
@@ -28,9 +27,6 @@ export type {
 // Core functions (for programmatic use)
 export { parseTestFile, validateConfig, TestParseError } from './lib/parser.js';
 export type { ConfigWarning } from './lib/parser.js';
-// `buildBlock`/`spliceBlocks`/`fenceOf` are deliberately not exported: they are
-// rewrite internals with no external use case, and exporting them would add
-// compatibility obligations for a shape that exists to serve the parser.
 export { runBlock, createExecutionContext, cleanupExecutionContext } from './lib/runner.js';
 export type { ExecutionContext } from './lib/runner.js';
 export { matchOutput, normalizeOutput, matchAndCapture } from './lib/matcher.js';

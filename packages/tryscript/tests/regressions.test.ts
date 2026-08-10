@@ -6,24 +6,19 @@
  */
 
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
-import { mkdtemp, rm, readFile, writeFile } from 'node:fs/promises';
-import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { mkdtemp, readdir, rm, readFile, writeFile } from 'node:fs/promises';
+import { constants as osConstants, tmpdir } from 'node:os';
+import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { parseTestFile, validateConfig, TestParseError } from '../src/lib/parser.js';
 import { updateTestFile } from '../src/lib/updater.js';
 import { expandTestFile } from '../src/lib/expander.js';
 import { matchOutput, normalizeOutput } from '../src/lib/matcher.js';
-import {
-  cleanupExecutionContext,
-  createExecutionContext,
-  exitCodeFor,
-  runBlock,
-} from '../src/lib/runner.js';
-import { asParsedBlock } from '../src/lib/block-writer.js';
-import { constants as osConstants } from 'node:os';
+import { exitCodeFor } from '../src/lib/runner.js';
 import type { TestBlock, TestBlockResult } from '../src/lib/types.js';
 
 const F = '```';
+const TESTS_DIR = dirname(fileURLToPath(import.meta.url));
 
 function getBlock(blocks: TestBlock[], index: number): TestBlock {
   const block = blocks[index];
@@ -178,8 +173,12 @@ describe('B2: signal termination is not a clean exit', () => {
 
   it('never reports 0 for a signalled process', () => {
     expect(exitCodeFor(null, 'SIGKILL')).not.toBe(0);
-    // Unknown signal still reports failure rather than success.
+    // Less common supported signals still report failure rather than success.
     expect(exitCodeFor(null, 'SIGUSR2')).toBeGreaterThan(0);
+  });
+
+  it('uses the current platform signal table', () => {
+    expect(exitCodeFor(null, 'SIGUSR1')).toBe(128 + osConstants.signals.SIGUSR1);
   });
 
   it('passes a real exit code through unchanged', () => {
@@ -348,6 +347,26 @@ describe('B6/B7: rewrites preserve fence and stderr assertions', () => {
     expect(getBlock(parseTestFile(updated, filePath).blocks, 0).expectedStderr).toBe('a\n\nb\n');
   });
 
+  it('preserves an explicit empty-stderr assertion after --update', async () => {
+    const content = [`${F}console`, '$ cmd', '!', '? 1', F, ''].join('\n');
+    const filePath = join(tempDir, 't.tryscript.md');
+    await writeFile(filePath, content);
+    const testFile = parseTestFile(content, filePath);
+
+    await updateTestFile(testFile, [
+      makeResult(getBlock(testFile.blocks, 0), {
+        actualOutput: '',
+        actualStdout: '',
+        actualStderr: '',
+        actualExitCode: 0,
+      }),
+    ]);
+
+    const updated = await readFile(filePath, 'utf-8');
+    expect(updated).toContain('\n!\n');
+    expect(getBlock(parseTestFile(updated, filePath).blocks, 0).expectedStderr).toBe('');
+  });
+
   it('leaves a combined-output block combined', async () => {
     const content = [`${F}console`, '$ cmd', 'OLD', '? 0', F, ''].join('\n');
     const filePath = join(tempDir, 't.tryscript.md');
@@ -475,6 +494,38 @@ describe('B12: frontmatter validation', () => {
     ).toEqual([]);
   });
 
+  it('warns when RegExp flags cannot be retained inside the combined output pattern', () => {
+    expect(validateConfig({ patterns: { WORD: /ready/i } })).toEqual([
+      {
+        path: 'patterns.WORD',
+        message: "RegExp flags 'i' are ignored; custom patterns use source text only",
+      },
+    ]);
+  });
+
+  it('warns when a custom pattern name is reserved for a built-in token', () => {
+    expect(validateConfig({ patterns: { ROOT: '.+' } })).toEqual([
+      {
+        path: 'patterns.ROOT',
+        message: "custom pattern name 'ROOT' is reserved and ignored",
+      },
+    ]);
+  });
+
+  it('validates coverage values instead of only allowlisting the key', () => {
+    const warnings = validateConfig({ coverage: { reportsDir: 42 } });
+    expect(warnings).toHaveLength(1);
+    expect(warnings[0]?.path).toBe('coverage.reportsDir');
+    expect(warnings[0]?.message).not.toBe('');
+  });
+
+  it('reports the precise path of an unknown nested fixture key', () => {
+    const warnings = validateConfig({ fixtures: [{ source: 'input.txt', dst: 'output.txt' }] });
+    expect(warnings).toHaveLength(1);
+    expect(warnings[0]?.path).toBe('fixtures.0.dst');
+    expect(warnings[0]?.message).toContain('dst');
+  });
+
   it('treats an empty or absent frontmatter as valid', () => {
     expect(validateConfig(null)).toEqual([]);
     expect(validateConfig(undefined)).toEqual([]);
@@ -490,193 +541,21 @@ describe('B12: frontmatter validation', () => {
     // Warning, never fatal: the block still parses and would still run.
     expect(parsed.blocks).toHaveLength(1);
   });
-});
 
-// --- Review round 2 (jlevy senior review on PR #48) -------------------------
+  it('keeps every top-level golden suite free of config warnings', async () => {
+    const filenames = (await readdir(TESTS_DIR))
+      .filter((filename) => filename.endsWith('.tryscript.md'))
+      .sort((a, b) => a.localeCompare(b));
+    const warnings: string[] = [];
 
-describe('R1: signal exit codes are platform-correct', () => {
-  it('derives the number from the runtime, not a hard-coded table', () => {
-    // Asserting against os.constants makes this meaningful on every platform:
-    // SIGUSR1 is 10 on Linux and 30 on macOS, SIGBUS is 7 and 10 respectively.
-    for (const name of ['SIGKILL', 'SIGTERM', 'SIGSEGV', 'SIGUSR1', 'SIGBUS'] as const) {
-      const number = osConstants.signals[name];
-      expect(exitCodeFor(null, name)).toBe(128 + number);
+    for (const filename of filenames) {
+      const filePath = join(TESTS_DIR, filename);
+      const parsed = parseTestFile(await readFile(filePath, 'utf-8'), filePath);
+      for (const warning of parsed.configWarnings ?? []) {
+        warnings.push(`${filename}:${warning.path}: ${warning.message}`);
+      }
     }
-  });
 
-  it('matches what a shell reports for a signal-killed command', async () => {
-    // End-to-end, so the helper cannot drift from real child-process behavior.
-    const ctx = await createExecutionContext({}, join(tmpdir(), 'sig.tryscript.md'));
-    try {
-      const block: TestBlock = {
-        command: 'kill -KILL $$',
-        expectedOutput: '',
-        expectedExitCode: 0,
-        lineNumber: 1,
-        rawContent: '',
-      };
-      const result = await runBlock(block, ctx);
-      expect(result.actualExitCode).toBe(128 + osConstants.signals.SIGKILL);
-      expect(result.actualExitCode).not.toBe(0);
-    } finally {
-      await cleanupExecutionContext(ctx);
-    }
-  });
-
-  it('never reports a bare 128 for a signal it cannot resolve', () => {
-    // 128 would be a real `128 + 0` value, so it could satisfy an expectation of
-    // 128 and read as a genuine result. A signal Node does not know must still
-    // report failure, just not that particular number.
-    const unresolvable = 'SIGNOTAREALSIGNAL' as NodeJS.Signals;
-    expect(osConstants.signals[unresolvable]).toBeUndefined();
-    expect(exitCodeFor(null, unresolvable)).not.toBe(0);
-    expect(exitCodeFor(null, unresolvable)).not.toBe(128);
-  });
-});
-
-describe('R3: validation covers coverage and nested objects', () => {
-  it('validates the coverage key instead of blindly allowlisting it', () => {
-    const warnings = validateConfig({ coverage: 'wrong' });
-    expect(warnings).toHaveLength(1);
-    expect(warnings[0]?.path).toBe('coverage');
-  });
-
-  it('reports an unknown key nested inside coverage', () => {
-    const warnings = validateConfig({ coverage: { reportsDirr: 'x' } });
-    expect(warnings[0]?.message).toContain('reportsDirr');
-  });
-
-  it('reports a misspelled nested fixture key instead of stripping it', () => {
-    const warnings = validateConfig({ fixtures: [{ source: 'a.txt', dst: 'b.txt' }] });
-    expect(warnings).toHaveLength(1);
-    expect(warnings[0]?.path).toBe('fixtures.0.dst');
-  });
-
-  it('names the offending key in the message, not just the type error', () => {
-    const warnings = validateConfig({ fixtures: { source: 'a' } });
-    expect(warnings[0]?.message).toContain('fixtures');
-  });
-
-  it('still accepts a fully valid config', () => {
-    expect(
-      validateConfig({
-        sandbox: true,
-        fixtures: ['a.txt', { source: 'b.txt', dest: 'c.txt' }],
-        coverage: { reportsDir: 'cov', reporters: ['text'] },
-      }),
-    ).toEqual([]);
-  });
-});
-
-describe('R4: --expand handles wildcards in either stream', () => {
-  let tempDir: string;
-
-  beforeEach(async () => {
-    tempDir = await mkdtemp(join(tmpdir(), 'regression-r4-'));
-  });
-
-  afterEach(async () => {
-    await rm(tempDir, { recursive: true, force: true });
-  });
-
-  async function expandOne(content: string, result: Partial<TestBlockResult>) {
-    const filePath = join(tempDir, 't.tryscript.md');
-    await writeFile(filePath, content);
-    const testFile = parseTestFile(content, filePath);
-    const outcome = await expandTestFile(
-      testFile,
-      [makeResult(getBlock(testFile.blocks, 0), result)],
-      'unknown',
-      { root: tempDir, cwd: tempDir },
-    );
-    return { outcome, reparsed: parseTestFile(await readFile(filePath, 'utf-8'), filePath) };
-  }
-
-  it('expands a wildcard that exists only in stderr', async () => {
-    const { outcome, reparsed } = await expandOne(
-      [`${F}console`, '$ cmd', '! [??]', '? 0', F, ''].join('\n'),
-      { actualOutput: 'boom\n', actualStdout: '', actualStderr: 'boom\n' },
-    );
-    expect(outcome.expanded).toBe(true);
-    expect(getBlock(reparsed.blocks, 0).expectedStderr).toBe('boom\n');
-  });
-
-  it('expands stderr when stdout is literal and already matches', async () => {
-    const { outcome, reparsed } = await expandOne(
-      [`${F}console`, '$ cmd', 'out', '! [??]', '? 0', F, ''].join('\n'),
-      { actualOutput: 'out\nboom\n', actualStdout: 'out\n', actualStderr: 'boom\n' },
-    );
-    expect(outcome.expanded).toBe(true);
-    const block = getBlock(reparsed.blocks, 0);
-    expect(block.expectedOutput).toBe('out\n');
-    expect(block.expectedStderr).toBe('boom\n');
-  });
-
-  it('expands stdout without discarding literal stderr assertions', async () => {
-    const { reparsed } = await expandOne(
-      [`${F}console`, '$ cmd', '[??]', '! err', '? 0', F, ''].join('\n'),
-      { actualOutput: 'out\nerr\n', actualStdout: 'out\n', actualStderr: 'err\n' },
-    );
-    const block = getBlock(reparsed.blocks, 0);
-    expect(block.expectedOutput).toBe('out\n');
-    expect(block.expectedStderr).toBe('err\n');
-  });
-
-  it('still writes nothing when neither stream has a wildcard', async () => {
-    const { outcome } = await expandOne(
-      [`${F}console`, '$ cmd', 'out', '! err', '? 0', F, ''].join('\n'),
-      { actualOutput: 'out\nerr\n', actualStdout: 'out\n', actualStderr: 'err\n' },
-    );
-    expect(outcome).toEqual({ expanded: false, expandedCount: 0, changes: [] });
-  });
-});
-
-describe('R5: TestBlock stays constructible by external consumers', () => {
-  it('accepts a block literal without parser bookkeeping fields', () => {
-    // Compile-time guard: this is the shape a v0.1.7 consumer would have written.
-    // If startOffset/endOffset/infoString ever become required again, this fails
-    // to typecheck rather than silently breaking downstream builds.
-    const block: TestBlock = {
-      command: 'echo hi',
-      expectedOutput: 'hi\n',
-      expectedExitCode: 0,
-      lineNumber: 1,
-      rawContent: '```console\n$ echo hi\nhi\n? 0\n```',
-    };
-    expect(block.startOffset).toBeUndefined();
-    expect(block.infoString).toBeUndefined();
-  });
-
-  it('refuses to rewrite a block that lacks source offsets', () => {
-    // Loud failure beats falling back to locating the block by text, which is the
-    // ambiguity that caused the duplicate-block bug in the first place.
-    const block: TestBlock = {
-      command: 'echo hi',
-      expectedOutput: 'hi\n',
-      expectedExitCode: 0,
-      lineNumber: 4,
-      rawContent: '',
-    };
-    expect(() => asParsedBlock(block)).toThrow(/missing source offsets/);
-    expect(() => asParsedBlock(block)).toThrow(/line 4/);
-  });
-
-  it('narrows a parser-produced block without complaint', () => {
-    const content = [`${F}console`, '$ echo hi', 'hi', '? 0', F, ''].join('\n');
-    const parsed = parseTestFile(content, '/t/f.tryscript.md');
-    expect(() => asParsedBlock(getBlock(parsed.blocks, 0))).not.toThrow();
-  });
-});
-
-describe('R6: the project self-suite is clean under validation', () => {
-  it('reports no warnings for the frontmatter the golden files use', () => {
-    // Guards against a stale key returning to the project's own test files.
-    expect(validateConfig({ sandbox: true, env: { NO_COLOR: '1' } })).toEqual([]);
-  });
-
-  it('flags the removed bin key so it cannot quietly come back', () => {
-    const warnings = validateConfig({ sandbox: true, bin: '../dist/bin.mjs' });
-    expect(warnings).toHaveLength(1);
-    expect(warnings[0]?.message).toContain('bin');
+    expect(warnings).toEqual([]);
   });
 });

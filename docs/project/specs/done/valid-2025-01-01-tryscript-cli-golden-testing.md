@@ -5,7 +5,7 @@
 This is a validation spec for the tryscript CLI golden testing implementation,
 including core functionality and markform pattern backfill.
 
-**Feature Plan:** [plan-2025-01-01-tryscript-cli-golden-testing.md](../plan-2025-01-01-tryscript-cli-golden-testing.md)
+**Feature Plan:** [plan-2025-01-01-tryscript-cli-golden-testing.md](plan-2025-01-01-tryscript-cli-golden-testing.md)
 
 ## Stage 4: Validation Stage
 

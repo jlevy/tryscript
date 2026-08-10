@@ -1,276 +1,120 @@
-# Publishing (npm)
-
-> **Template note**: This is a sample publishing workflow for npm packages.
-> Replace `OWNER` with your GitHub username/org, `REPO` with your repository name, and
-> `PACKAGE` with your package name when adapting for your project.
-
-This project uses [Changesets](https://github.com/changesets/changesets) for version
-management and tag-based releases with OIDC trusted publishing to npm.
-
-For release notes format and guidelines, see
-@docs/general/agent-guidelines/release-notes-guidelines.md.
-
-## One-Time Setup
-
-Before the first release, complete these steps:
-
-### 1. Manual First Publish
-
-The package must exist on npm before OIDC can be configured.
-Run from the package directory:
-
-```bash
-cd packages/PACKAGE
-npm publish --access public
-```
-
-This will prompt for web-based authentication in your browser.
-
-### 2. Configure OIDC Trusted Publishing on npm
-
-1. Go to https://www.npmjs.com/package/PACKAGE/access
-
-2. Under “Publishing access”, click “Add a trusted publisher”
-
-3. Select **GitHub Actions** as the publisher
-
-4. Fill in the form:
-   - **Organization or user**: `OWNER`
-   - **Repository**: `REPO`
-   - **Workflow filename**: `release.yml`
-   - **Environment name**: Leave blank
-
-5. For **Publishing access**, select **“Require two-factor authentication and disallow
-   tokens (recommended)”**
-
-6. Click “Set up connection”
-
-### 3. Verify Repository is Public
-
-OIDC trusted publishing requires a public GitHub repository.
-
-### 4. Verify npm Version
-
-OIDC publishing requires npm 11.5.1 or later.
-Update if needed:
-
-```bash
-npm install -g npm@latest
-```
-
-## During Development
-
-Merge PRs to `main` without creating changesets.
-Changesets are created only at release time.
-
-## Release Workflow
-
-Follow these steps to publish a new version.
-
-### Step 1: Prepare
-
-```bash
-git checkout main
-git pull
-git status  # Must be clean
-```
-
-### Step 2: Determine Version
-
-Review changes since last release:
-
-```bash
-git log $(git describe --tags --abbrev=0 2>/dev/null || echo "HEAD~20")..HEAD --oneline
-```
-
-Choose version bump:
-
-- `patch` (0.1.0 → 0.1.1): Bug fixes, docs, internal changes
-- `minor` (0.1.0 → 0.2.0): New features, non-breaking changes
-- `major` (0.1.0 → 1.0.0): Breaking changes
-
-### Step 3: Create Changeset
-
-Run the interactive changeset command:
-
-```bash
-pnpm changeset
-```
-
-This prompts for package selection, bump type (patch/minor/major), and a summary.
-
-Commit:
-
-```bash
-git add .changeset
-git commit -m "chore: add changeset for vX.X.X"
-```
-
-### Step 4: Version Packages
-
-Run changesets to bump version and update CHANGELOG:
-
-```bash
-pnpm changeset version
-```
-
-Review and commit:
-
-```bash
-git diff  # Verify package.json and CHANGELOG.md
-git add .
-git commit -m "chore: release PACKAGE vX.X.X"
-```
-
-### Step 5: Write Release Notes
-
-**Before pushing**, write release notes following
-@docs/general/agent-guidelines/release-notes-guidelines.md.
-
-```bash
-# Review changes since last release
-git log $(git describe --tags --abbrev=0 2>/dev/null || echo "HEAD~20")..HEAD --oneline
-
-# Write release notes to release-notes.md or prepare for PR body
-```
-
-### Step 6: Push and Tag
-
-**Option A: Direct git push (local development)**
-
-```bash
-git push
-git tag vX.X.X
-git push --tags
-```
-
-**Option B: Via PR and GitHub API (restricted environments)**
-
-When direct push to main is restricted:
-
-```bash
-# Push to feature branch
-git push -u origin <branch-name>
-
-# Create and merge PR (use release notes in body)
-gh pr create -R OWNER/REPO --base main --head <branch-name> \
-  --title "chore: release PACKAGE vX.X.X" \
-  --body-file release-notes.md
-gh pr merge <pr-number> -R OWNER/REPO --merge
-
-# Get merge commit SHA and create tag
-MERGE_SHA=$(gh pr view <pr-number> -R OWNER/REPO --json mergeCommit -q '.mergeCommit.oid')
-gh api repos/OWNER/REPO/git/refs -X POST \
-  -f ref="refs/tags/vX.X.X" \
-  -f sha="$MERGE_SHA"
-```
-
-### Step 7: Update GitHub Release
-
-After the release workflow completes:
-
-```bash
-# Wait for release workflow
-gh run list -R OWNER/REPO --limit 3
-
-# Update release notes
-gh release edit vX.X.X -R OWNER/REPO --notes-file release-notes.md
-```
-
-### Step 8: Verify
-
-```bash
-gh release view vX.X.X -R OWNER/REPO
-```
-
-## Quick Reference
-
-### Local Development (direct push)
-
-```bash
-git checkout main && git pull
-pnpm changeset  # Interactive: select package, bump type, summary
-git add .changeset && git commit -m "chore: add changeset for v0.2.0"
-pnpm changeset version
-git add . && git commit -m "chore: release PACKAGE v0.2.0"
-
-# Write release notes (see release-notes-guidelines.md)
-git push && git tag v0.2.0 && git push --tags
-
-# Update GitHub release after workflow completes
-gh release edit v0.2.0 -R OWNER/REPO --notes-file release-notes.md
-```
-
-### Restricted Environments (via PR and API)
-
-```bash
-pnpm changeset  # Interactive: select package, bump type, summary
-git add .changeset && git commit -m "chore: add changeset for v0.2.0"
-pnpm changeset version
-git add . && git commit -m "chore: release PACKAGE v0.2.0"
-
-# Write release notes, push to branch
-git push -u origin <branch-name>
-
-# Create PR, merge, tag via API
-gh pr create -R OWNER/REPO --base main --head <branch-name> \
-  --title "chore: release PACKAGE v0.2.0" --body-file release-notes.md
-gh pr merge <pr-number> -R OWNER/REPO --merge
-MERGE_SHA=$(gh pr view <pr-number> -R OWNER/REPO --json mergeCommit -q '.mergeCommit.oid')
-gh api repos/OWNER/REPO/git/refs -X POST -f ref="refs/tags/v0.2.0" -f sha="$MERGE_SHA"
-
-# Update GitHub release after workflow completes
-gh release edit v0.2.0 -R OWNER/REPO --notes-file release-notes.md
-```
-
-## How OIDC Publishing Works
-
-This project uses npm’s trusted publishing via OIDC (OpenID Connect):
-
-- **No tokens to manage**: GitHub Actions presents an OIDC identity to npm
-- **No secrets to rotate**: npm issues a one-time credential for each workflow run
-- **Provenance attestation**: Published packages include signed build provenance
-
-The release workflow (`.github/workflows/release.yml`) triggers on `v*` tags and
-publishes automatically without requiring an `NPM_TOKEN` secret.
-
-**Required workflow permissions**: The release workflow must include `id-token: write`
-permission to generate OIDC tokens:
+# npm Trusted Publishing Runbook Template
+
+> Replace `OWNER`, `REPOSITORY`, `PACKAGE`, and `X.Y.Z` before adopting this template.
+> Align every command with the repository’s package manager, branch protection, and
+> release workflow.
+
+This pattern uses Changesets for versioning and a tag-triggered GitHub Actions workflow
+for npm trusted publishing.
+OIDC provides a short-lived publish identity, so the repository does not store a
+long-lived npm write token.
+
+## Preconditions
+
+- The package already exists on npm.
+  A maintainer performs the initial publish through an interactive,
+  two-factor-authenticated session.
+- The repository uses GitHub-hosted runners.
+- The release runtime satisfies npm’s current trusted-publishing requirements.
+- Dependency scripts are disabled unless each required script has been reviewed and
+  allowlisted.
+- Every third-party action is pinned to a reviewed full commit SHA outside the
+  repository’s dependency cool-off window.
+
+Use the authoritative
+[npm trusted-publishing guide](https://docs.npmjs.com/trusted-publishers/) when
+configuring or troubleshooting this workflow.
+
+## npm Configuration
+
+Configure the package’s trusted publisher with:
+
+| Field | Value |
+| --- | --- |
+| Provider | GitHub Actions |
+| Organization or user | `OWNER` |
+| Repository | `REPOSITORY` |
+| Workflow filename | `release.yml` |
+| Environment | The protected release environment, or empty |
+| Allowed action | `npm publish` |
+
+After testing OIDC publishing, require two-factor authentication and disallow
+traditional write tokens in the package settings.
+
+## Workflow Requirements
+
+The release job needs the OIDC permission and only the repository permissions required
+for its release artifacts:
 
 ```yaml
 permissions:
-  contents: read
-  id-token: write  # Required for OIDC trusted publishing
+  contents: write # Use read when a separate job creates the GitHub release.
+  id-token: write
 ```
 
-## GitHub Releases
+The workflow should:
 
-The release workflow automatically creates a GitHub Release when a tag is pushed:
+1. check out the tagged commit;
+2. install the frozen lockfile;
+3. run formatting, lint, type, build, package, test, and audit gates;
+4. publish `PACKAGE` through OIDC; and
+5. create a GitHub release from the version’s changelog entry.
 
-- **Release name**: Matches the tag (e.g., `v0.2.0`)
-- **Release notes**: Initially extracted from CHANGELOG; update with formatted notes
-- **Pre-release flag**: Automatically set for versions containing `-` (e.g.,
-  `1.0.0-beta.1`)
+GitHub documents the meaning of
+[`id-token: write`](https://docs.github.com/en/actions/reference/security/oidc#required-permission).
 
-After pushing a tag:
+## Prepare a Release
 
-1. Verify the release appears at: `https://github.com/OWNER/REPO/releases`
-2. Update the release with formatted notes (Step 7 above)
+```bash
+git switch main
+git pull --ff-only
+git status --short
+pnpm changeset
+pnpm changeset version
+git diff
+pnpm verify
+```
 
-## Troubleshooting
+Confirm the SemVer bump, consumed changesets, package manifest, and changelog before
+committing the release preparation.
+Push it directly only when repository policy allows; otherwise merge it through the
+normal pull-request process.
 
-**Release workflow not running?**
+## Tag and Publish
 
-- Ensure tag format is `v*` (e.g., `v0.2.0`)
-- Check tag was pushed: `git ls-remote --tags origin`
+After the version commit is present on the remote default branch:
 
-**npm publish failing with 401/403?**
+```bash
+git fetch origin main --tags
+git tag --list vX.Y.Z
+git tag -a vX.Y.Z -m "PACKAGE vX.Y.Z"
+git push origin vX.Y.Z
+gh run list --workflow release.yml --limit 3
+gh run watch <run-id> --exit-status
+```
 
-- Verify OIDC is configured: https://www.npmjs.com/package/PACKAGE/access
-- Check repository is listed under “Trusted Publishing”
-- Ensure the repository is public
+The tag-list command must return no existing tag.
+Never move a tag for a package version that may have been published.
 
-**First publish?**
+## Verify
 
-- OIDC requires the package to already exist on npm
-- Do a manual `npm publish --access public` first
+```bash
+npm view PACKAGE@X.Y.Z version dist.integrity dist.tarball
+gh release view vX.Y.Z --repo OWNER/REPOSITORY
+```
+
+Confirm the npm provenance record and compare the GitHub release notes with the matching
+changelog section.
+
+## Failure Rules
+
+- Fix verification failures before publishing.
+- If npm publishing succeeded, keep the version and tag immutable.
+- If only GitHub release creation failed, repair the release for the existing tag.
+- If the version already exists on npm, prepare a new patch release.
+- If OIDC fails, compare every trusted-publisher field, workflow filename, runner type,
+  allowed action, and permission with npm’s current guide.
+
+<!-- This document follows common-doc-guidelines.md.
+See github.com/jlevy/practical-prose and review guidelines before editing.
+-->

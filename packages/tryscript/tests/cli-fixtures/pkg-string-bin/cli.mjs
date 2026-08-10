@@ -1,3 +1,4 @@
 #!/usr/bin/env node
-/* eslint-disable no-undef */
-console.log('simple-cli v2.0.0');
+import { stdout } from 'node:process';
+
+stdout.write('simple-cli v2.0.0\n');

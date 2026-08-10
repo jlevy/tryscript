@@ -1,15 +1,7 @@
 import { pathToFileURL } from 'node:url';
 import { existsSync } from 'node:fs';
 import { resolve } from 'node:path';
-import type { TestConfig, CoverageConfig } from './types.js';
-
-/** Fixture configuration for copying files to sandbox directory */
-export interface Fixture {
-  /** Source path (resolved relative to test file) */
-  source: string;
-  /** Destination path (resolved relative to sandbox dir) */
-  dest?: string;
-}
+import type { TestConfig, CoverageConfig, ResolvedCoverageConfig } from './types.js';
 
 export interface TryscriptConfig {
   /** Working directory for commands (default: test file directory) */
@@ -17,7 +9,7 @@ export interface TryscriptConfig {
   /** Run in isolated sandbox: true = empty temp, path = copy to temp */
   sandbox?: boolean | string;
   /** Fixtures to copy to sandbox directory before tests */
-  fixtures?: (string | Fixture)[];
+  fixtures?: TestConfig['fixtures'];
   /** Script to run before first test block */
   before?: string;
   /** Script to run after all test blocks */
@@ -29,17 +21,12 @@ export interface TryscriptConfig {
   /** Coverage configuration (used with --coverage flag) */
   coverage?: CoverageConfig;
   /**
-   * Directories to prepend to PATH (resolved relative to test file).
+   * Directories to prepend to PATH (relative entries resolve from the test file).
    * Makes executables in these directories available by name in commands.
    * Supports env var expansion: $VAR or ${VAR} syntax.
    */
   path?: string[];
 }
-
-/** Resolved coverage config with required fields (except optional mergeLcov) */
-export type ResolvedCoverageConfig = Omit<Required<CoverageConfig>, 'mergeLcov'> & {
-  mergeLcov?: string;
-};
 
 /** Default coverage configuration values. */
 export const DEFAULT_COVERAGE_CONFIG: ResolvedCoverageConfig = {
@@ -59,7 +46,7 @@ export const DEFAULT_COVERAGE_CONFIG: ResolvedCoverageConfig = {
  * Resolve coverage options by merging user config with defaults.
  */
 export function resolveCoverageConfig(config?: CoverageConfig): ResolvedCoverageConfig {
-  return {
+  const resolved: ResolvedCoverageConfig = {
     reportsDir: config?.reportsDir ?? DEFAULT_COVERAGE_CONFIG.reportsDir,
     reporters: config?.reporters ?? DEFAULT_COVERAGE_CONFIG.reporters,
     include: config?.include ?? DEFAULT_COVERAGE_CONFIG.include,
@@ -70,26 +57,52 @@ export function resolveCoverageConfig(config?: CoverageConfig): ResolvedCoverage
     allowExternal: config?.allowExternal ?? DEFAULT_COVERAGE_CONFIG.allowExternal,
     src: config?.src ?? DEFAULT_COVERAGE_CONFIG.src,
     monocart: config?.monocart ?? DEFAULT_COVERAGE_CONFIG.monocart,
-    mergeLcov: config?.mergeLcov,
   };
+
+  return config?.mergeLcov === undefined ? resolved : { ...resolved, mergeLcov: config.mergeLcov };
 }
 
 const CONFIG_FILES = ['tryscript.config.ts', 'tryscript.config.js', 'tryscript.config.mjs'];
 
 /**
  * Load config file using dynamic import.
- * Supports both TypeScript (via tsx/ts-node) and JavaScript configs.
+ * Supports TypeScript through tsx and JavaScript through Node.js.
  */
-export async function loadConfig(baseDir: string): Promise<TryscriptConfig> {
+export async function loadConfig(baseDir: string): Promise<unknown> {
   for (const filename of CONFIG_FILES) {
     const configPath = resolve(baseDir, filename);
     if (existsSync(configPath)) {
       const configUrl = pathToFileURL(configPath).href;
-      const module = (await import(configUrl)) as { default?: TryscriptConfig } | TryscriptConfig;
-      return (module as { default?: TryscriptConfig }).default ?? (module as TryscriptConfig);
+      const module = filename.endsWith('.ts')
+        ? await importTypeScriptConfig(configPath)
+        : ((await import(configUrl)) as unknown);
+      return unwrapDefaultExport(module, configPath);
     }
   }
   return {};
+}
+
+async function importTypeScriptConfig(configPath: string): Promise<unknown> {
+  const { require: requireTypeScript } = await import('tsx/cjs/api');
+  return requireTypeScript(configPath, import.meta.url) as unknown;
+}
+
+function unwrapDefaultExport(imported: unknown, configPath: string): unknown {
+  let current = imported;
+  const visited = new Set<object>();
+  while (typeof current === 'object' && current !== null && 'default' in current) {
+    if (visited.has(current)) {
+      throw new Error(`Config module '${configPath}' contains cyclic default exports`);
+    }
+    visited.add(current);
+
+    const defaultExport: unknown = current.default;
+    if (defaultExport === undefined) {
+      break;
+    }
+    current = defaultExport;
+  }
+  return current;
 }
 
 /**
@@ -97,15 +110,38 @@ export async function loadConfig(baseDir: string): Promise<TryscriptConfig> {
  * Frontmatter takes precedence over config file.
  */
 export function mergeConfig(base: TryscriptConfig, frontmatter: TestConfig): TryscriptConfig {
-  return {
+  const merged: TryscriptConfig = {
     ...base,
-    ...frontmatter,
     env: { ...base.env, ...frontmatter.env },
     patterns: { ...base.patterns, ...frontmatter.patterns },
     fixtures: [...(base.fixtures ?? []), ...(frontmatter.fixtures ?? [])],
     // Frontmatter paths have higher priority, so they come first
     path: [...(frontmatter.path ?? []), ...(base.path ?? [])],
   };
+
+  if (frontmatter.cwd !== undefined) {
+    merged.cwd = frontmatter.cwd;
+  }
+  if (frontmatter.sandbox !== undefined) {
+    merged.sandbox = frontmatter.sandbox;
+  }
+  if (frontmatter.before !== undefined) {
+    merged.before = frontmatter.before;
+  }
+  if (frontmatter.after !== undefined) {
+    merged.after = frontmatter.after;
+  }
+  if (frontmatter.timeout !== undefined) {
+    merged.timeout = frontmatter.timeout;
+  }
+  if (frontmatter.tests !== undefined) {
+    merged.tests = frontmatter.tests;
+  }
+  if (frontmatter.coverage !== undefined) {
+    merged.coverage = frontmatter.coverage;
+  }
+
+  return merged;
 }
 
 /**

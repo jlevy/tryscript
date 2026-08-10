@@ -1,5 +1,11 @@
 # Plan Spec: Wildcard Expansion and Capture Log
 
+**Status:** Completed in pull request #41 and released in tryscript v0.1.7.
+
+This file preserves the implementation plan as a historical record. Its unchecked
+planning boxes describe the original work breakdown; current behavior is documented in
+the [tryscript reference](../../../tryscript-reference.md#wildcard-expansion).
+
 ## Purpose
 
 This is a technical design doc for the wildcard expansion feature (`--expand`) and
@@ -72,11 +78,10 @@ scaffolding. This makes the intent explicit and enables targeted expansion.
 
 ### Related Docs
 
-- [Elision patterns in development.md](../../development.md#elision-patterns)
-- [Elision patterns in tryscript-reference.md](../../tryscript-reference.md#elision-patterns)
+- [Elision patterns in development.md](../../../development.md#elision-patterns)
+- [Elision patterns in tryscript-reference.md](../../../tryscript-reference.md#elision-patterns)
 - [Root README — elision pattern mentions](../../../../README.md)
-- [Package README — elision pattern mentions](../../../../packages/tryscript/README.md)
-- [Coverage plan spec](../done/plan-2026-01-04-builtin-coverage-support.md)
+- [Coverage plan spec](plan-2026-01-04-builtin-coverage-support.md)
 
 ## Summary of Task
 
@@ -1486,3 +1491,7 @@ These two files have near-identical content. Both need:
 4. **New syntax adoption**: Agents and users need to learn to use `???` instead of `...`
    for scaffolding. Mitigation: document the workflow clearly; the warning when `???` is
    present provides guidance.
+
+<!-- This document follows common-doc-guidelines.md.
+See github.com/jlevy/practical-prose and review guidelines before editing.
+-->

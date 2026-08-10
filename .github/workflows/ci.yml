@@ -6,44 +6,100 @@ on:
     branches: [main]
 
 permissions:
-  contents: write
-  pull-requests: write
+  contents: read
 
 jobs:
   test:
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
-      - uses: pnpm/action-setup@v4
+      - uses: pnpm/action-setup@0ebf47130e4866e96fce0953f49152a61190b271 # v6.0.9
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
           node-version: 20
           cache: pnpm
 
+      - uses: astral-sh/setup-uv@c771a70e6277c0a99b617c7a806ffedaca235ff9 # v9.0.0
+        with:
+          version: '0.11.28'
+
       - run: pnpm install --frozen-lockfile
-      - run: pnpm format:check
-      - run: pnpm lint:check
+      - run: pnpm audit --audit-level=moderate
+      - run: pnpm ci:quality
       - run: pnpm build
       - run: pnpm publint
       - run: pnpm --filter tryscript test:coverage
 
-      # Post coverage report as PR comment (always runs so devs see coverage even on failure)
-      # Uses merged coverage from tryscript (vitest + tryscript tests combined)
+      - name: Verify minimum Node 20 runtime compatibility
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 20.0.0
+      - run: pnpm --filter tryscript test:package
+
+      - name: Upload pull-request coverage data
+        if: github.event_name == 'pull_request'
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: pull-request-coverage
+          path: |
+            packages/tryscript/coverage-tryscript/coverage-summary.json
+            packages/tryscript/coverage/coverage-final.json
+          if-no-files-found: error
+          retention-days: 1
+
+  coverage:
+    name: Comment on pull-request coverage
+    if: github.event_name == 'pull_request'
+    needs: test
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Download pull-request coverage data
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: pull-request-coverage
+          path: packages/tryscript
+
       - name: Coverage Report
-        uses: davelosert/vitest-coverage-report-action@v2
-        if: always() && github.event_name == 'pull_request'
+        uses: davelosert/vitest-coverage-report-action@8b157684c6a6b259b97d45e72b44242865c0f6a5 # v2.12.2
         with:
           json-summary-path: packages/tryscript/coverage-tryscript/coverage-summary.json
           json-final-path: packages/tryscript/coverage/coverage-final.json
           file-coverage-mode: changes
 
-      # Generate and commit coverage badges (main branch only)
-      # Uses merged coverage from tryscript (vitest + tryscript tests combined)
+  badges:
+    name: Update coverage badges
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    needs: test
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - uses: pnpm/action-setup@0ebf47130e4866e96fce0953f49152a61190b271 # v6.0.9
+
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 20
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm build
+      - run: pnpm --filter tryscript test:coverage
+
       - name: Coverage Badges
-        uses: jpb06/coverage-badges-action@v1.4.6
-        if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+        uses: jpb06/coverage-badges-action@6bebba3f008cb03c2be0ff9b148c663df30cde4b # v1.4.11
         with:
           coverage-summary-path: packages/tryscript/coverage-tryscript/coverage-summary.json
           output-folder: ./badges
@@ -52,7 +108,6 @@ jobs:
 
       # Update badge links to point to this run, then commit all changes
       - name: Update Badge Links
-        if: github.ref == 'refs/heads/main' && github.event_name == 'push'
         run: |
           ./scripts/update-badge-links.sh
           git config --global user.name "${{ github.actor }}"

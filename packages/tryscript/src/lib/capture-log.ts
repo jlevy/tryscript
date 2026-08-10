@@ -17,11 +17,13 @@ const BLOCK_ORDER = manualKeyOrder([
   'actual_exit_code',
   'expected_output',
   'actual_output',
+  'expected_stderr',
+  'actual_stderr',
   'captures',
   'passed',
 ]);
 
-const CAPTURE_ORDER = manualKeyOrder(['category', 'name', 'multiline', 'matched']);
+const CAPTURE_ORDER = manualKeyOrder(['category', 'name', 'stream', 'multiline', 'matched']);
 
 /**
  * Sort comparator for `yaml.stringify`'s `sortMapEntries`.
@@ -36,11 +38,13 @@ const BLOCK_KEYS = new Set([
   'actual_exit_code',
   'expected_output',
   'actual_output',
+  'expected_stderr',
+  'actual_stderr',
   'captures',
   'passed',
 ]);
 
-const CAPTURE_KEYS = new Set(['category', 'name', 'multiline', 'matched']);
+const CAPTURE_KEYS = new Set(['category', 'name', 'stream', 'multiline', 'matched']);
 
 export function captureLogSortMapEntries(
   a: { key: { value: string } },
@@ -72,7 +76,15 @@ interface CaptureLogBlock {
   actual_exit_code: number;
   expected_output: string;
   actual_output: string;
-  captures: { category: string; name?: string; multiline: boolean; matched: string }[];
+  expected_stderr?: string;
+  actual_stderr?: string;
+  captures: {
+    category: string;
+    name?: string;
+    stream?: 'stdout' | 'stderr';
+    multiline: boolean;
+    matched: string;
+  }[];
   passed: boolean;
 }
 
@@ -103,20 +115,43 @@ export function buildCaptureLogDoc(
     const patterns =
       typeof customPatterns === 'function' ? customPatterns(fr.file) : customPatterns;
     const blocks = fr.results.map((r) => {
-      const captureResult = matchAndCapture(r.actualOutput, r.block.expectedOutput, ctx, patterns);
-      const captures = (captureResult?.captures ?? []).map((c) => ({
-        category: c.category,
-        ...(c.name ? { name: c.name } : {}),
-        multiline: c.multiline,
-        matched: c.captured,
-      }));
+      const separateStderr = r.block.expectedStderr !== undefined;
+      const actualOutput = separateStderr ? (r.actualStdout ?? '') : r.actualOutput;
+      const outputCaptures =
+        matchAndCapture(actualOutput, r.block.expectedOutput, ctx, patterns)?.captures ?? [];
+      const stderrCaptures = separateStderr
+        ? (matchAndCapture(r.actualStderr ?? '', r.block.expectedStderr ?? '', ctx, patterns)
+            ?.captures ?? [])
+        : [];
+      const captures = [
+        ...outputCaptures.map((capture) => ({
+          category: capture.category,
+          ...(capture.name ? { name: capture.name } : {}),
+          ...(separateStderr ? { stream: 'stdout' as const } : {}),
+          multiline: capture.multiline,
+          matched: capture.captured,
+        })),
+        ...stderrCaptures.map((capture) => ({
+          category: capture.category,
+          ...(capture.name ? { name: capture.name } : {}),
+          stream: 'stderr' as const,
+          multiline: capture.multiline,
+          matched: capture.captured,
+        })),
+      ];
       return {
         name: r.block.name,
         command: r.block.command,
         expected_exit_code: r.block.expectedExitCode,
         actual_exit_code: r.actualExitCode,
         expected_output: r.block.expectedOutput,
-        actual_output: r.actualOutput,
+        actual_output: actualOutput,
+        ...(r.block.expectedStderr === undefined
+          ? {}
+          : {
+              expected_stderr: r.block.expectedStderr,
+              actual_stderr: r.actualStderr ?? '',
+            }),
         captures,
         passed: r.passed,
       };

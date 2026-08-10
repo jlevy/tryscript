@@ -1448,7 +1448,7 @@ especially valuable for CLIs with many subcommands.
 - [Modern TypeScript CLI Patterns](research-modern-typescript-cli-patterns.md) —
   Equivalent patterns for TypeScript CLIs
 
-- [Modern TypeScript Monorepo Package](research-modern-typescript-monorepo-package.md) —
+- [Modern TypeScript Monorepo Patterns](research-modern-typescript-monorepo-patterns.md) —
   Build tooling, package exports, CI/CD
 
 ### Example Projects

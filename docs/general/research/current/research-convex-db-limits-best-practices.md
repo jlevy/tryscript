@@ -20,12 +20,6 @@ verification and cross-references)
 
 **Notation**: Combinations like “✅ 🔒” mean “Verified Hard Limit”
 
-**Related Research**:
-
-- [research-convex-backend-limits-implementation.md](../../../project/research/current/research-convex-backend-limits-implementation.md)
-  — Deep dive into source code implementation of limits and configurability for
-  self-hosted deployments
-
 * * *
 
 ## Executive Summary
@@ -1372,12 +1366,6 @@ requirements apply beyond OCC conflict handling:
 - **Write-through pattern**: Write results to DB inside actions, return only IDs to
   avoid re-processing on retry
 
-**See Also**:
-- [research-durable-workflows-agent-conversations.md](../../../project/research/current/research-durable-workflows-agent-conversations.md)
-  § “Idempotency Requirements for Workflow Steps” for idempotency patterns
-- [plan-2026-01-09-durable-workflows-agent-conversations-v3.md](../../../project/specs/active/plan-2026-01-09-durable-workflows-agent-conversations-v3.md)
-  § “Idempotency Contract” for implementation-ready details
-
 **🛠️ OCC Configuration (Self-Hosted)**:
 
 The OCC retry behavior is configurable via environment variables:
@@ -1891,12 +1879,6 @@ The workflow orchestrator runs in V8 and calls Node.js actions, which is a valid
 cross-runtime pattern.
 But if those Node.js actions then call other Node.js actions, you recreate the
 problematic nested same-runtime pattern.
-
-**See Also**:
-- [research-durable-workflows-agent-conversations.md](../../../project/research/current/research-durable-workflows-agent-conversations.md)
-  § “Nested Action Timeout Issue” for detailed analysis
-- [plan-2026-01-09-durable-workflows-agent-conversations-v3.md](../../../project/specs/active/plan-2026-01-09-durable-workflows-agent-conversations-v3.md)
-  § “Leaf Action Requirement” for implementation guidance
 
 **Best Practices**:
 

@@ -78,6 +78,33 @@ describe('buildCaptureLogDoc', () => {
     const doc = buildCaptureLogDoc([fr], () => ({ root: '/t', cwd: '/t' }));
     expect(doc.files[0]!.blocks[0]!.captures).toEqual([]);
   });
+
+  it('records separate stdout and stderr values and captures', () => {
+    const block = makeBlock({
+      expectedOutput: 'stdout [??]\n',
+      expectedStderr: 'stderr [??]\n',
+    });
+    const result = makeResult(block, {
+      actualOutput: 'stdout 42\nstderr 99\n',
+      actualStdout: 'stdout 42\n',
+      actualStderr: 'stderr 99\n',
+    });
+    const fr = makeFileResult([block], [result]);
+
+    const doc = buildCaptureLogDoc([fr], () => ({ root: '/test', cwd: '/test' }));
+    const logBlock = doc.files[0]!.blocks[0]!;
+
+    expect(logBlock).toMatchObject({
+      expected_output: 'stdout [??]\n',
+      actual_output: 'stdout 42\n',
+      expected_stderr: 'stderr [??]\n',
+      actual_stderr: 'stderr 99\n',
+    });
+    expect(logBlock.captures).toMatchObject([
+      { category: 'unknown', stream: 'stdout', matched: '42' },
+      { category: 'unknown', stream: 'stderr', matched: '99' },
+    ]);
+  });
 });
 
 describe('capture log YAML key ordering', () => {

@@ -6,62 +6,122 @@ on:
       - 'v*'
 
 permissions:
-  contents: write
-  pull-requests: write
-  id-token: write # Required for OIDC trusted publishing
+  contents: read
 
 jobs:
-  release:
+  verify:
+    name: Verify and pack
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
 
-      - uses: pnpm/action-setup@v4
+      - uses: pnpm/action-setup@0ebf47130e4866e96fce0953f49152a61190b271 # v6.0.9
 
-      - uses: actions/setup-node@v6
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
           node-version: 24
           cache: pnpm
-          registry-url: 'https://registry.npmjs.org'
+
+      - uses: astral-sh/setup-uv@c771a70e6277c0a99b617c7a806ffedaca235ff9 # v9.0.0
+        with:
+          version: '0.11.28'
+
+      - name: Verify tag matches package version
+        run: |
+          package_version=$(node -p "require('./packages/tryscript/package.json').version")
+          if [ "$GITHUB_REF_NAME" != "v${package_version}" ]; then
+            echo "Error: tag $GITHUB_REF_NAME does not match package version ${package_version}" >&2
+            exit 1
+          fi
 
       - run: pnpm install --frozen-lockfile
 
-      - name: Build and validate
-        run: pnpm build && pnpm publint
+      - name: Verify release
+        run: pnpm verify
 
-      # Publish with OIDC trusted publishing (no NPM_TOKEN needed)
+      - name: Pack verified release artifact
+        run: |
+          mkdir -p "$RUNNER_TEMP/tryscript-release"
+          pnpm --filter tryscript pack --pack-destination "$RUNNER_TEMP/tryscript-release"
+
+      - name: Upload verified release artifact
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: tryscript-package
+          path: ${{ runner.temp }}/tryscript-release/*.tgz
+          if-no-files-found: error
+          retention-days: 1
+          compression-level: 0
+
+  publish:
+    name: Publish verified artifact
+    needs: verify
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 24
+          registry-url: 'https://registry.npmjs.org'
+
+      - name: Download verified release artifact
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: tryscript-package
+          path: ${{ runner.temp }}/tryscript-release
+
+      # No repository build or dependency code runs in the OIDC-authorized job.
       - name: Publish to npm
-        run: pnpm -r publish --access public --no-git-checks
-        env:
-          NPM_CONFIG_PROVENANCE: true
+        run: |
+          shopt -s nullglob
+          release_packages=("$RUNNER_TEMP/tryscript-release/"*.tgz)
+          if [ "${#release_packages[@]}" -ne 1 ]; then
+            echo "Error: expected one verified package, found ${#release_packages[@]}" >&2
+            exit 1
+          fi
+          package_version=$(tar -xOf "${release_packages[0]}" package/package.json | node -p "JSON.parse(require('fs').readFileSync(0, 'utf8')).version")
+          if [ "$GITHUB_REF_NAME" != "v${package_version}" ]; then
+            echo "Error: tag $GITHUB_REF_NAME does not match packed version ${package_version}" >&2
+            exit 1
+          fi
+          npm publish "${release_packages[0]}" --access public --provenance
 
-      # Extract version from tag and get changelog section
+  release:
+    name: Create GitHub release
+    needs: publish
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
       - name: Extract release notes
-        id: release_notes
         run: |
           VERSION="${GITHUB_REF_NAME#v}"
-          echo "version=$VERSION" >> $GITHUB_OUTPUT
-
-          # Extract changelog section for this version
-          # Matches from "## $VERSION" until the next "## " header
-          NOTES=$(awk -v ver="$VERSION" '
+          awk -v ver="$VERSION" '
             /^## / { if (found) exit; if ($2 == ver) found=1; next }
             found { print }
-          ' packages/tryscript/CHANGELOG.md)
-
-          # Use delimiter for multiline output
-          echo "notes<<EOF" >> $GITHUB_OUTPUT
-          echo "$NOTES" >> $GITHUB_OUTPUT
-          echo "EOF" >> $GITHUB_OUTPUT
+          ' packages/tryscript/CHANGELOG.md > "$RUNNER_TEMP/release-notes.md"
+          if [ ! -s "$RUNNER_TEMP/release-notes.md" ]; then
+            echo "Error: no changelog section found for ${VERSION}" >&2
+            exit 1
+          fi
 
       - name: Create GitHub Release
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@3d0d9888cb7fd7b750713d6e236d1fcb99157228 # v3.0.2
         with:
-          name: v${{ steps.release_notes.outputs.version }}
-          body: ${{ steps.release_notes.outputs.notes }}
+          name: ${{ github.ref_name }}
+          body_path: ${{ runner.temp }}/release-notes.md
           draft: false
-          prerelease: ${{ contains(steps.release_notes.outputs.version, '-') }}
+          prerelease: ${{ contains(github.ref_name, '-') }}
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

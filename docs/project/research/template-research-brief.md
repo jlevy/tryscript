@@ -1,156 +1,67 @@
-# Research Brief: [Topic Title]
+# Research Brief: [Topic]
 
-**Last Updated**: YYYY-MM-DD
+- **Status:** draft | in progress | complete
+- **Last reviewed:** YYYY-MM-DD
+- **Related work:** [specification, architecture document, or bead]
 
-**Status**: [Draft | In Progress | Complete]
+## Decision Summary
 
-**Related**:
+**Question:** [The decision or uncertainty this research addresses]
 
-- [Link to related feature specs, architecture docs, or other research]
+**Recommendation:** [One concise conclusion, or “No recommendation yet”]
 
-* * *
+**Confidence:** low | medium | high, because [brief evidence-based reason]
 
-## Executive Summary
+## Scope and Questions
 
-[2-3 paragraphs summarizing the research purpose, key questions being investigated, and main findings/recommendations]
+**In scope:** [systems, versions, environments, or use cases]
 
-**Research Questions**:
+**Out of scope:** [nearby questions intentionally excluded]
 
 1. [Primary research question]
-
 2. [Secondary research question]
 
-3. [Additional questions...]
+## Method and Sources
 
-* * *
+[Describe the search, source-code inspection, experiments, benchmarks, or data analysis. State important limitations. Prefer primary sources and record versions and dates when the evidence can change.]
 
-## Research Methodology
+## Evidence and Findings
 
-### Approach
+### [Finding Category]
 
-[Describe how the research was conducted - literature review, web search, experimentation, analysis, etc.]
+**Finding:** [Specific fact or observed result]
 
-### Sources
+**Evidence:** [Citation, reproducible command, measurement, or code location]
 
-[List types of sources consulted - documentation, academic papers, blog posts, code repositories, etc.]
+**Implication:** [How this finding affects the decision]
 
-* * *
+## Alternatives
 
-## Research Findings
-
-### [Category 1]
-
-#### [Subtopic 1.1]
-
-**Status**: [✅ Complete | ⏳ In Progress | 🔍 Researching]
-
-**Details**:
-
-- [Key point]
-
-- [Key point]
-
-- [Key point]
-
-**Assessment**: [Brief evaluation of this approach/technology/method]
-
-* * *
-
-#### [Subtopic 1.2]
-
-[Continue pattern...]
-
-* * *
-
-### [Category 2]
-
-[Continue pattern...]
-
-* * *
-
-## Comparative Analysis
-
-[If applicable: Compare different approaches, technologies, or solutions]
-
-| Criteria | Option A | Option B | Option C |
+| Alternative | Benefits | Costs and Risks | Fit |
 | --- | --- | --- | --- |
-| [Criterion] | [Value] | [Value] | [Value] |
-| [Criterion] | [Value] | [Value] | [Value] |
+| [Option A] | [Evidence-based benefits] | [Tradeoffs] | [When it fits] |
+| [Option B] | [Evidence-based benefits] | [Tradeoffs] | [When it fits] |
 
-**Strengths/Weaknesses Summary**:
+## Recommendation
 
-- **Option A**: [Brief assessment]
+[Explain the recommended approach, why it best fits the stated constraints, and what would invalidate the choice. Distinguish evidence from inference.]
 
-- **Option B**: [Brief assessment]
+## Risks and Open Questions
 
-- **Option C**: [Brief assessment]
+- [Unresolved question, consequence, owner, and next evidence needed]
+- [Risk and mitigation]
 
-* * *
-
-## Best Practices
-
-[Compile industry best practices discovered during research]
-
-1. **[Practice Name]**: [Description and rationale]
-
-2. **[Practice Name]**: [Description and rationale]
-
-3. [Continue...]
-
-* * *
-
-## Open Research Questions
-
-[Questions that remain unanswered or require further investigation]
-
-1. **[Question]**: [Why this matters, next steps to answer]
-
-2. **[Question]**: [Why this matters, next steps to answer]
-
-* * *
-
-## Recommendations
-
-### Summary
-
-[High-level recommendation based on research findings]
-
-### Recommended Approach
-
-[Detailed description of the recommended approach/solution/technology]
-
-**Rationale**:
-
-- [Key reason]
-
-- [Key reason]
-
-- [Key reason]
-
-### Alternative Approaches
-
-[Brief description of viable alternatives and when they might be appropriate]
-
-* * *
+Track follow-up work in beads rather than leaving unowned action items here.
 
 ## References
 
-[List of sources consulted during research]
+- [Primary source with descriptive link text]
+- [Repository source or experiment artifact]
 
-- [Source 1]
+## Appendix
 
-- [Source 2]
+[Optional supporting data that would interrupt the main decision narrative. Remove this section when it is not needed.]
 
-- [Source 3]
-
-* * *
-
-## Appendices
-
-### Appendix A: [Topic]
-
-[Detailed supplementary information]
-
-### Appendix B: [Topic]
-
-[Additional data, code examples, or documentation]
+<!-- This document follows common-doc-guidelines.md.
+See github.com/jlevy/practical-prose and review guidelines before editing.
+-->

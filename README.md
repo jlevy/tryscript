@@ -1,43 +1,31 @@
 # tryscript
 
 [![Follow @ojoshe on X](https://img.shields.io/badge/follow_%40ojoshe-black?logo=x&logoColor=white)](https://x.com/ojoshe)
-[![CI](https://github.com/jlevy/tryscript/actions/workflows/ci.yml/badge.svg)](https://github.com/jlevy/tryscript/actions/runs/22267456765)
-[![Coverage](https://raw.githubusercontent.com/jlevy/tryscript/main/badges/packages/tryscript/coverage-total.svg)](https://github.com/jlevy/tryscript/actions/runs/22267456765)
+[![CI](https://github.com/jlevy/tryscript/actions/workflows/ci.yml/badge.svg)](https://github.com/jlevy/tryscript/actions/workflows/ci.yml)
+[![Coverage](https://raw.githubusercontent.com/jlevy/tryscript/main/badges/packages/tryscript/coverage-total.svg)](https://github.com/jlevy/tryscript/actions/workflows/ci.yml)
 [![npm version](https://img.shields.io/npm/v/tryscript)](https://www.npmjs.com/package/tryscript)
 
-**Powerful, agent-friendly testing of CLI applications via golden tests**
+**Golden tests for CLI applications, written in Markdown.**
 
-> [!NOTE]
-> 100% of the code and specs in this repository were written by Claude Code.
-> The design and management and prompting was by me ([jlevy](https://github.com/jlevy)) supported by  the workflows, agent rules,
-> and other research docs in [tbd](https://github.com/jlevy/tbd).
-> 
-> I find the code quality higher than most agent-written code I've
-> seen because of the spec-driven process.
-> You can review the architecture doc and all of the specs all of the specs in [docs/project](docs/project).
-> The general research, guideline, and rules docs I use are in [docs/general](docs/general).
+Tryscript runs shell commands embedded in Markdown, captures their output, and compares
+it with readable expected results.
+The test files double as executable documentation for humans and coding agents.
 
-## Why?
-
-Write CLI tests as Markdown. tryscript runs commands, captures output, and compares against expected results:
-
-- Tests are clear and maintainable for agents and humans: tests become documentation; documentation becomes tests
-- Inner state and working can be exposed for greater test coverage at no extra cost
-- Things are quick to implement or test using arbitrary shell commands
-
-This began as a TypeScript port of [trycmd](https://github.com/assert-rs/trycmd) but I (well, Claude and friends)
-have since enhanced it to be more agent-friendly and self-documenting as a CLI.
-
-For a bit more philosophy on why golden tests are so useful, you (or your friendly agent)
-should read [tbd](https://github.com/jlevy/tbd)’s guidelines doc:
+## Quick Start
 
 ```bash
-npx --yes get-tbd@latest guidelines golden-testing-guidelines
+pnpm add -D tryscript
+pnpm exec tryscript run 'tests/**/*.tryscript.md'
 ```
 
-## What It Does
+When an intentional behavior change makes a golden result stale, review the new behavior
+and update the file:
 
-An example test:
+```bash
+pnpm exec tryscript run --update 'tests/**/*.tryscript.md'
+```
+
+## Test File Example
 
 ````markdown
 ---
@@ -84,91 +72,108 @@ $ my-cli process data.json > output.txt && grep "success" output.txt
 ```
 ````
 
-The `[..]` matches any text on that line. The `...` matches zero or more lines. These "elision patterns" let tests handle dynamic output gracefully. Any shell command works - pipes, redirects, environment variables, etc.
+The `[..]` pattern matches any text on one line.
+The `...` pattern matches zero or more lines.
+Commands run in a real shell, so pipes, redirects, environment variables, and other
+shell features work directly.
 
-### Wildcard Categories
+## Why tryscript
 
-Tryscript supports three categories of wildcards, in order of preference:
+- **Readable tests:** Commands and expected results stay together in valid Markdown.
+- **Process-level coverage:** Tests exercise the installed CLI and its shell behavior,
+  not only internal functions.
+- **Controlled variation:** Named and generic patterns keep dynamic output readable
+  without discarding the stable parts of a result.
+- **Reviewable updates:** `--update` and `--expand` rewrite only the relevant expected
+  output after the author reviews the executed command.
 
-1. **Named patterns** (`[HASH]`, `[VERSION]`, `[CWD]`, etc.) -- Typed dynamic values with specific meaning. Preferred when the output has a known structure.
-2. **Unknown wildcards** (`[??]`, `???`) -- Temporary placeholders for output you haven't filled in yet. Intended to be expanded with `--expand` before finalizing tests.
-3. **Generic wildcards** (`[..]`, `...`) -- Intentional omission of unpredictable or irrelevant output. Use when the exact value doesn't matter for the test.
-
-Use `--expand` to automatically fill in unknown wildcards with actual output after a successful run.
-
-## Quick Start
+Tryscript began as a TypeScript port of [trycmd](https://github.com/assert-rs/trycmd),
+with additional workflows for agent-authored tests and executable documentation.
+For more background on golden tests, see tbd’s pinned guidance:
 
 ```bash
-# Install
-pnpm add -D tryscript
-
-# For coverage support (optional)
-pnpm add -D c8
-
-# For accurate line counts when merging with vitest (optional)
-pnpm add -D c8 monocart-coverage-reports
-
-# Run tests
-npx tryscript run tests/
-
-# Update expected output when behavior changes
-npx tryscript run --update tests/
+npx --yes get-tbd@0.4.1 guidelines golden-testing-guidelines
 ```
 
-## Features
+## Wildcard Categories
 
-- **Markdown format** - Tests are readable documentation
-- **Elision patterns** - Handle variable output: `[..]`, `...`, `[??]`, `???`, `[CWD]`, `[ROOT]`, `[EXE]`
-- **Wildcard expansion** - Fill in `[??]`/`???` placeholders with actual output via `--expand`
-- **Custom patterns** - Define regex patterns for timestamps, versions, UUIDs
-- **Update mode** - Regenerate expected output with `--update`
-- **Sandbox mode** - Isolate tests in temp directories
-- **Code coverage** - Track coverage from subprocess execution with `--coverage` (experimental; use `--coverage-monocart` for best accuracy)
+Use the most specific pattern that fits the output:
+
+1. **Named patterns** (`[HASH]`, `[VERSION]`, `[CWD]`): typed dynamic values with a
+   specific meaning.
+2. **Unknown wildcards** (`[??]`, `???`): temporary placeholders to replace with
+   `--expand` before finalizing a test.
+3. **Generic wildcards** (`[..]`, `...`): intentional omissions for output whose exact
+   value is irrelevant or unpredictable.
 
 ## CLI Reference
 
+| Command | Purpose |
+| --- | --- |
+| `tryscript run [files...]` | Run Markdown golden tests |
+| `tryscript coverage <commands...>` | Run commands with merged V8 coverage |
+| `tryscript docs` | Print the syntax reference |
+| `tryscript readme` | Print this README |
+| `tryscript --help` | Print all commands and global options |
+
+Common `run` options:
+
+| Option | Purpose |
+| --- | --- |
+| `--update` | Replace expected output with actual output |
+| `--expand` | Replace unknown wildcards (`???` and `[??]`) with actual output |
+| `--expand-generic` | Replace unknown and generic wildcards |
+| `--expand-all` | Replace all wildcards, including named patterns |
+| `--capture-log <path>` | Write wildcard captures to a YAML file |
+| `--fail-fast` | Stop after the first failure |
+| `--filter <pattern>` | Run named tests matching a regular expression |
+| `--verbose` | Include captured output for passing tests |
+| `--coverage` | Collect V8 coverage with an installed `c8` package |
+
+Coverage support is experimental.
+Install its optional dependencies before using it:
+
 ```bash
-tryscript run [files...]          # Run golden tests
-tryscript coverage <commands...>  # Run commands with merged coverage
-tryscript docs                    # Show syntax quick reference
-tryscript readme                  # Show this documentation
-tryscript --help                  # Show all options
+pnpm add -D c8
+
+# Add monocart when merging tryscript and Vitest coverage.
+pnpm add -D monocart-coverage-reports
 ```
 
-For complete syntax reference, run `tryscript docs` or see the [reference documentation](https://github.com/jlevy/tryscript/blob/main/docs/tryscript-reference.md).
+## Documentation
 
-### Common Options
+- [Syntax and configuration reference](https://github.com/jlevy/tryscript/blob/main/docs/tryscript-reference.md)
+- [Language architecture](https://github.com/jlevy/tryscript/blob/main/docs/project/architecture/current/arch-tryscript-language.md)
+- [Development guide](https://github.com/jlevy/tryscript/blob/main/docs/development.md)
+- [Documentation map](https://github.com/jlevy/tryscript/blob/main/docs/docs-overview.md)
 
-| Option | Description |
-| --- | --- |
-| `--update` | Update test files with actual output |
-| `--expand` | Expand unknown wildcards (`???`/`[??]`) with actual output |
-| `--expand-generic` | Expand unknown + generic wildcards |
-| `--expand-all` | Expand all wildcards (including named patterns) |
-| `--capture-log <path>` | Write wildcard capture log to YAML file |
-| `--fail-fast` | Stop on first failure |
-| `--filter <regex>` | Filter tests by name |
-| `--verbose` | Show detailed output |
-| `--coverage` | Collect code coverage (requires c8) |
-| `--coverage-monocart` | Use monocart for accurate line counts (requires monocart-coverage-reports) |
-| `--coverage-exclude-node-modules` | Exclude node_modules from coverage (default: true) |
-| `--coverage-exclude <pattern>` | Exclude patterns from coverage |
+## Project Notes
 
-> **Note**: Coverage features are experimental. See the [reference documentation](packages/tryscript/docs/tryscript-reference.md#code-coverage) for details on merged coverage, monocart integration, and sourcemap requirements.
+Claude Code produced the implementation and specifications under Joshua Levy’s design,
+prompting, and review, using [tbd](https://github.com/jlevy/tbd) workflows.
+The [project documentation](https://github.com/jlevy/tryscript/tree/main/docs/project)
+records the architecture and implementation decisions; the
+[general documentation](https://github.com/jlevy/tryscript/tree/main/docs/general)
+contains the shared Speculate-era research and guidance used during development.
 
 ## Development
 
 ```bash
-# Clone and install
 git clone https://github.com/jlevy/tryscript.git
 cd tryscript
 pnpm install
-
-# Build and test
-pnpm build
-pnpm test
+pnpm exec lefthook install
+pnpm verify
 ```
+
+See the
+[development guide](https://github.com/jlevy/tryscript/blob/main/docs/development.md)
+for toolchain requirements, individual checks, and release links.
 
 ## License
 
 MIT
+
+<!-- This document follows common-doc-guidelines.md.
+See github.com/jlevy/practical-prose and review guidelines before editing.
+-->

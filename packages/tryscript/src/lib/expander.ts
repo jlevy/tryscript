@@ -1,10 +1,10 @@
 import { writeFile } from 'atomically';
-import { asParsedBlock, buildBlock, spliceBlocks } from './block-writer.js';
+import { buildBlock, spliceBlocks } from './block-writer.js';
 import { matchAndCapture, normalizeOutput } from './matcher.js';
+import { BUILT_IN_PATTERN_NAMES } from './types.js';
 import type {
   ExpandLevel,
   ExpansionResult,
-  ParsedTestBlock,
   TestFile,
   TestBlockResult,
   WildcardCategory,
@@ -23,6 +23,10 @@ export function shouldExpandCategory(category: WildcardCategory, level: ExpandLe
       return category === 'unknown' || category === 'generic';
     case 'all':
       return true;
+    default: {
+      const exhaustiveLevel: never = level;
+      throw new Error(`Unsupported expansion level: ${String(exhaustiveLevel)}`);
+    }
   }
 }
 
@@ -75,13 +79,11 @@ export function expandExpectedOutput(
   for (const wt of WILDCARD_TOKENS) {
     let searchFrom = 0;
     if (typeof wt.token === 'string') {
-      while (true) {
-        const pos = output.indexOf(wt.token, searchFrom);
-        if (pos === -1) {
-          break;
-        }
+      let pos = output.indexOf(wt.token, searchFrom);
+      while (pos !== -1) {
         tokenPositions.push({ pos, length: wt.token.length });
         searchFrom = pos + wt.token.length;
+        pos = output.indexOf(wt.token, searchFrom);
       }
     } else {
       const re = new RegExp(wt.token.source, 'g');
@@ -95,15 +97,16 @@ export function expandExpectedOutput(
   // Find positions of named custom pattern tokens.
   if (customPatterns) {
     for (const name of Object.keys(customPatterns)) {
+      if (BUILT_IN_PATTERN_NAMES.has(name)) {
+        continue;
+      }
       const placeholder = `[${name}]`;
       let searchFrom = 0;
-      while (true) {
-        const pos = output.indexOf(placeholder, searchFrom);
-        if (pos === -1) {
-          break;
-        }
+      let pos = output.indexOf(placeholder, searchFrom);
+      while (pos !== -1) {
         tokenPositions.push({ pos, length: placeholder.length });
         searchFrom = pos + placeholder.length;
+        pos = output.indexOf(placeholder, searchFrom);
       }
     }
   }
@@ -146,7 +149,7 @@ export async function expandTestFile(
   customPatterns?: Record<string, string | RegExp>,
 ): Promise<{ expanded: boolean; expandedCount: number; changes: string[] }> {
   const changes: string[] = [];
-  const edits: { block: ParsedTestBlock; replacement: string }[] = [];
+  const edits: { block: (typeof file.blocks)[number]; replacement: string }[] = [];
   let totalExpanded = 0;
 
   // Map by block identity so expansion works correctly with --filter/<!-- only -->
@@ -164,44 +167,51 @@ export async function expandTestFile(
     const separateStderr = block.expectedStderr !== undefined;
     const actualForOutput = separateStderr ? (result.actualStdout ?? '') : result.actualOutput;
 
-    // Expand each stream independently: a block whose only wildcard lives in its
-    // stderr assertion must still be expanded, and so must one whose stdout is
-    // literal. Coupling them would make either case silently do nothing.
-    const outputExpansion = block.expectedOutput
-      ? expandExpectedOutput(block.expectedOutput, actualForOutput, context, level, customPatterns)
-      : null;
+    const expansion = expandExpectedOutput(
+      block.expectedOutput,
+      actualForOutput,
+      context,
+      level,
+      customPatterns,
+    );
 
-    const stderrExpansion = separateStderr
-      ? expandExpectedOutput(
-          block.expectedStderr ?? '',
-          result.actualStderr ?? '',
-          context,
-          level,
-          customPatterns,
-        )
-      : null;
+    if (!expansion) {
+      continue;
+    }
 
-    const expandedCount =
-      (outputExpansion?.expandedCount ?? 0) + (stderrExpansion?.expandedCount ?? 0);
-    if (expandedCount === 0) {
+    let expandedStderr: string | undefined;
+    let stderrExpandedCount = 0;
+    if (separateStderr) {
+      const stderrExpansion = expandExpectedOutput(
+        block.expectedStderr ?? '',
+        result.actualStderr ?? '',
+        context,
+        level,
+        customPatterns,
+      );
+      if (!stderrExpansion) {
+        continue;
+      }
+      expandedStderr = stderrExpansion.expandedOutput;
+      stderrExpandedCount = stderrExpansion.expandedCount;
+    }
+
+    const blockExpandedCount = expansion.expandedCount + stderrExpandedCount;
+    if (blockExpandedCount === 0) {
       continue;
     }
 
     edits.push({
-      block: asParsedBlock(block),
-      replacement: buildBlock(asParsedBlock(block), {
-        // Fall back to the block's existing text for a stream that did not expand,
-        // so writing one stream never discards the other.
-        output: outputExpansion?.expandedOutput ?? block.expectedOutput,
-        stderr: separateStderr
-          ? (stderrExpansion?.expandedOutput ?? block.expectedStderr)
-          : undefined,
-        exitCode: block.expectedExitCode ?? result.actualExitCode,
+      block,
+      replacement: buildBlock(block, {
+        output: expansion.expandedOutput,
+        ...(expandedStderr === undefined ? {} : { stderr: expandedStderr }),
+        exitCode: block.expectedExitCode,
       }),
     });
 
     changes.push(block.name ?? `Line ${block.lineNumber}`);
-    totalExpanded += expandedCount;
+    totalExpanded += blockExpandedCount;
   }
 
   if (edits.length === 0) {

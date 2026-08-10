@@ -2,64 +2,82 @@ import js from '@eslint/js';
 import tseslint from 'typescript-eslint';
 import prettier from 'eslint-config-prettier';
 
-// Type-aware ESLint configuration using flat config.
-// Uses TypeScript's project service for precise, cross-project type information.
+const typedSourceFiles = ['**/*.{ts,tsx,mts,cts}'];
+const typedScriptFiles = ['scripts/**/*.mjs', 'packages/*/scripts/**/*.mjs'];
+const typedFiles = [...typedSourceFiles, ...typedScriptFiles];
+const sourceFiles = ['**/*.{js,jsx,mjs,cjs,ts,tsx,mts,cts}'];
 
-// Apply type-checked configs only to TypeScript files
-const typedRecommended = tseslint.configs.recommendedTypeChecked.map((cfg) => ({
-  ...cfg,
-  files: ['**/*.ts', '**/*.tsx'],
+const typedStrict = tseslint.configs.strictTypeChecked.map((config) => ({
+  ...config,
+  files: typedSourceFiles,
   languageOptions: {
-    ...(cfg.languageOptions ?? {}),
+    ...(config.languageOptions ?? {}),
     parserOptions: {
-      ...(cfg.languageOptions?.parserOptions ?? {}),
+      ...(config.languageOptions?.parserOptions ?? {}),
       projectService: true,
       tsconfigRootDir: import.meta.dirname,
     },
   },
 }));
 
-const typedStylistic = tseslint.configs.stylisticTypeChecked.map((cfg) => ({
-  ...cfg,
-  files: ['**/*.ts', '**/*.tsx'],
+const typedStylistic = tseslint.configs.stylisticTypeChecked.map((config) => ({
+  ...config,
+  files: typedSourceFiles,
   languageOptions: {
-    ...(cfg.languageOptions ?? {}),
+    ...(config.languageOptions ?? {}),
     parserOptions: {
-      ...(cfg.languageOptions?.parserOptions ?? {}),
+      ...(config.languageOptions?.parserOptions ?? {}),
       projectService: true,
+      tsconfigRootDir: import.meta.dirname,
+    },
+  },
+}));
+
+const scriptStrict = tseslint.configs.strictTypeChecked.map((config) => ({
+  ...config,
+  files: typedScriptFiles,
+  languageOptions: {
+    ...(config.languageOptions ?? {}),
+    parserOptions: {
+      ...(config.languageOptions?.parserOptions ?? {}),
+      project: './tsconfig.scripts.json',
+      tsconfigRootDir: import.meta.dirname,
+    },
+  },
+}));
+
+const scriptStylistic = tseslint.configs.stylisticTypeChecked.map((config) => ({
+  ...config,
+  files: typedScriptFiles,
+  languageOptions: {
+    ...(config.languageOptions ?? {}),
+    parserOptions: {
+      ...(config.languageOptions?.parserOptions ?? {}),
+      project: './tsconfig.scripts.json',
       tsconfigRootDir: import.meta.dirname,
     },
   },
 }));
 
 export default [
-  // Global ignores
   {
     ignores: ['**/dist/**', '**/node_modules/**', '**/.pnpm-store/**', 'eslint.config.*'],
   },
-
-  // Base JS rules
   js.configs.recommended,
-
-  // Type-aware TypeScript rules
-  ...typedRecommended,
+  ...typedStrict,
   ...typedStylistic,
-
-  // Prettier config must be last to override conflicting rules
+  ...scriptStrict,
+  ...scriptStylistic,
   prettier,
-
-  // TypeScript-specific rules
   {
-    files: ['**/*.ts', '**/*.tsx'],
+    files: sourceFiles,
     rules: {
-      // === Code Style ===
-      // Enforce curly braces for all control statements (prevents bugs)
       curly: ['error', 'all'],
-      // Consistent brace style: opening on same line, closing on new line
-      'brace-style': ['error', '1tbs', { allowSingleLine: false }],
-
-      // === Unused Variables ===
-      // Allow underscore prefix for intentionally unused vars/args
+    },
+  },
+  {
+    files: typedFiles,
+    rules: {
       '@typescript-eslint/no-unused-vars': [
         'error',
         {
@@ -68,22 +86,18 @@ export default [
           caughtErrorsIgnorePattern: '^_',
         },
       ],
-
-      // === Promise Safety (Critical for Node.js) ===
-      // Catch unhandled promises (common source of silent failures)
       '@typescript-eslint/no-floating-promises': 'error',
-      // Prevent passing promises where void is expected (e.g., event handlers)
       '@typescript-eslint/no-misused-promises': [
         'error',
         { checksVoidReturn: { attributes: false } },
       ],
-      // Catch awaiting non-promise values
       '@typescript-eslint/await-thenable': 'error',
-      // Prevent confusing void expressions in unexpected places
       '@typescript-eslint/no-confusing-void-expression': 'error',
-
-      // === Type Import Consistency ===
-      // Enforce `import type` for type-only imports (better tree-shaking)
+      '@typescript-eslint/no-non-null-assertion': 'off',
+      '@typescript-eslint/restrict-template-expressions': [
+        'error',
+        { allowNumber: true, allowBoolean: true },
+      ],
       '@typescript-eslint/consistent-type-imports': [
         'error',
         {
@@ -92,11 +106,7 @@ export default [
           disallowTypeAnnotations: true,
         },
       ],
-      // Prevent side effects in type-only imports
       '@typescript-eslint/no-import-type-side-effects': 'error',
-
-      // === Restricted Patterns ===
-      // Forbid inline import() type expressions (prefer proper imports)
       'no-restricted-syntax': [
         'error',
         {
@@ -107,26 +117,13 @@ export default [
       ],
     },
   },
-
-  // === File-Specific Overrides ===
-  // Relax rules for test files where dynamic behavior is expected
   {
-    files: ['**/*.test.ts', '**/*.spec.ts', '**/tests/**/*.ts'],
-    rules: {
-      '@typescript-eslint/no-explicit-any': 'off',
-      '@typescript-eslint/no-unsafe-assignment': 'off',
-      '@typescript-eslint/no-unsafe-member-access': 'off',
-      '@typescript-eslint/no-unsafe-call': 'off',
-    },
-  },
-
-  // Node.js scripts (ESM)
-  {
-    files: ['scripts/**/*.mjs'],
+    files: typedScriptFiles,
     languageOptions: {
       globals: {
         console: 'readonly',
         process: 'readonly',
+        URL: 'readonly',
       },
     },
   },

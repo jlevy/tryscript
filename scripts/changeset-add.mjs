@@ -10,9 +10,10 @@
  *   node scripts/changeset-add.mjs major 1.0.0 "Breaking API changes"
  */
 
-import { writeFileSync, mkdirSync } from 'node:fs';
+import { mkdir } from 'node:fs/promises';
 import { join } from 'node:path';
 import { randomBytes } from 'node:crypto';
+import { writeFile } from 'atomically';
 
 const [, , bump, version, summary] = process.argv;
 
@@ -48,10 +49,9 @@ ${summary}
 const changesetDir = join(process.cwd(), '.changeset');
 const filepath = join(changesetDir, filename);
 
-// Ensure .changeset directory exists
-mkdirSync(changesetDir, { recursive: true });
+await mkdir(changesetDir, { recursive: true });
 
-writeFileSync(filepath, content);
+await writeFile(filepath, content);
 
 console.log(`Created changeset: .changeset/${filename}`);
 console.log(`  Package: tryscript`);

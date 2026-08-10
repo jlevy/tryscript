@@ -20,9 +20,7 @@ export const colors = {
   info: (s: string) => pc.cyan(s),
 };
 
-/**
- * Status indicators with emoji.
- */
+/** Status indicators for test results and rewrites. */
 export const status = {
   pass: pc.green('✓'),
   fail: pc.red('✗'),
@@ -45,25 +43,15 @@ export function withColoredHelp<T extends Command>(cmd: T): T {
 }
 
 /**
- * Format a duration in milliseconds for display.
- */
-export function formatDuration(ms: number): string {
-  if (ms < 1000) {
-    return `${ms}ms`;
-  }
-  return `${(ms / 1000).toFixed(2)}s`;
-}
-
-/**
  * Log a warning message to stderr.
  */
 export function logWarn(message: string): void {
-  console.error(colors.warn(message));
+  console.error(colors.warn(`Warning: ${message}`));
 }
 
 /**
  * Log an error message to stderr.
  */
 export function logError(message: string): void {
-  console.error(colors.error(message));
+  console.error(colors.error(`Error: ${message}`));
 }

@@ -1,73 +1,57 @@
-# Feature Validation: [Feature or Task Title]
+# Validation Spec: [Feature or Task]
 
-## Purpose
+- **Status:** planned | in progress | complete
+- **Plan spec:** [plan filename]
+- **Implementation spec:** [implementation filename]
+- **Date:** YYYY-MM-DD
 
-This is a validation spec, used to list post-testing validation that must be performed
-by the user to confirm the feature implementation and testing is adequate
+## Validation Goal
 
-It should be updated during the development process, then kept as a record for later
-context once implementation is complete.
+[State what must be true for the implementation to be accepted, including supported environments and important failure behavior.]
 
-**Feature Plan:** [plan-YYYY-MM-DD-feature-description.md]
+## Acceptance-Criteria Coverage
 
-**Implementation Plan:** [impl-YYYY-MM-DD-feature-description.md]
+| Acceptance Criterion | Evidence | Status |
+| --- | --- | --- |
+| [Observable requirement] | [Automated test, artifact, or manual check] | pending |
 
-## Stage 4: Validation Stage
+## Automated Validation
 
-> AGENT INSTRUCTIONS:
-> 
-> Review all implementation and testing done to date and fill in the sections below with
-> automated validation that has been done and remaining manual validatin needed.
+| Layer | Command or Check | Coverage | Result |
+| --- | --- | --- | --- |
+| Unit | `[command]` | [Logic and edge cases] | pending |
+| Integration | `[command]` | [Boundary and failure paths] | pending |
+| End to end | `[command]` | [User workflow and environment] | pending |
+| Quality | `[command]` | [Format, lint, types, build, audit] | pending |
 
-## Validation Planning
+Record the final command, environment, date, and result.
+Link large logs or reports instead of pasting them.
 
-## Automated Validation (Testing Performed)
+## Manual Validation
 
-> Describe the testing already performed and any additional testing needed to validate
-> this feature is working end to end and reviewable by the user.
+Include only behavior that cannot be verified reliably in automation.
 
-### Unit Testing
+1. **Setup:** [exact environment and data]
+2. **Action:** [specific user action]
+3. **Expected result:** [observable content, state, and styling]
 
-> List all unit testing that’s been done and add any additional unit tests needed.
+Use screenshots for visual work and record platform or browser details.
+If no manual validation is needed, state “None; all acceptance criteria are automated.”
 
-### Integration and End-to-End Testing
+## Failures, Gaps, and Follow-Up
 
-> List all integration testing and end-to-end testing that’s been done and add any
-> additional unit tests needed.
+| Item | Impact | Resolution or Bead |
+| --- | --- | --- |
+| [Failure or untested edge] | [Release consequence] | [Fix, owner, or bead ID] |
 
-### Manual Testing Needed
+## Final Assessment
 
-> Describe the steps the user should take to validate this feature is working as
-> expected.
-> 
-> Give a detailed list of manual validation steps the user must perform to confirm the
-> all code and features implemented in these specs.
-> 
-> Do NOT include tests that are already automated and included and have been validated
-> as part of the implementation plan.
-> 
-> Include all aspects of workflows that the user should test, or aspects that may be new
-> to the user and they should see to be completely current on the system:
-> 
-> - Any new backend workflows that need a sanity check or manual inspection
->
-> - Exact CLI commands that the user should validate and also confirm the output and
->   styling are correct
->
-> - Sanity checking database state or file state, especially if the user has not seen
->   these
->
-> - All visual or UX changes to any web or GUI interfaces.
->
-> - The most common workflows involving these UX changes
-> 
-> When done:
-> 
-> - Ask the user to do a full post-implementation review, including the acceptance
->   testing above.
->
-> - Ask for any further updates or revisions needed.
->
-> - Add all feedback and requests for revisions below.
->
-> - Add new Phase above and revise the implementation if necessary.
+- **Result:** pass | fail | blocked
+- **Reviewed by:** [name]
+- **Evidence date:** YYYY-MM-DD
+
+[Explain the result and any release conditions in one concise paragraph.]
+
+<!-- This document follows common-doc-guidelines.md.
+See github.com/jlevy/practical-prose and review guidelines before editing.
+-->

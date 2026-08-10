@@ -1,51 +1,75 @@
-# Human and Agent Development Docs
+# Documentation Map
 
-This folder holds docs and rules for use by humans and LLMs/agents.
+Use this map to find the shortest path to the documentation for a task.
+The [README](../README.md) introduces the product; this file covers contributor,
+architecture, planning, and reference material.
 
-Any filenames like @docs/general/agent-rules/python-rules.md are paths from the root of
-this repository.
+## Product Documentation
 
-## Documentation Layout
+- [tryscript reference](tryscript-reference.md): syntax, configuration, commands, and
+  coverage behavior for CLI users
+- [Language architecture](project/architecture/current/arch-tryscript-language.md):
+  parser, execution, matching, and rewrite design for maintainers
 
-All project and development documentation is organized in `docs/`, which follow the
-Speculate project structure:
+The build copies the root README and the tryscript reference into the published package.
+Edit their source files above, not the ignored copies under `packages/tryscript/`.
+Flowmark owns formatting for the 18 maintained documents selected by `.flowmarkignore`;
+Prettier deliberately excludes Markdown so the formatters cannot churn each other’s
+output.
 
-### `docs/development.md` — Essential development docs
+## Contributor Documentation
 
-- `development.md` — Environment setup and basic developer workflows (building,
-  formatting, linting, testing, committing, etc.)
+- [Development guide](development.md): prerequisites, repository commands, tests, hooks,
+  and tbd issue tracking
+- [Supply-chain policy](../SUPPLY-CHAIN-SECURITY.md): dependency, installer, and
+  repository trust requirements
+- [Commit conventions](commit-conventions.md): commit types and message format
+- [Publishing runbook](publishing.md): versioning, tag creation, npm trusted publishing,
+  and release verification
 
-Always read `development.md` first!
-Other docs give background but it includes essential project developer docs.
+Start with the development guide before changing code.
 
-### `docs/general/` — Cross-project rules and templates
+## Project Records
 
-General rules that apply to all projects:
+Project-specific material follows the Speculate directory structure:
 
-- @docs/general/agent-rules/ — General rules for development best practices (general,
-  pre-commit, TypeScript, Convex)
+- `project/specs/active/`: work that is currently in progress
+- `project/specs/done/`: completed plans and validation records retained as history
+- `project/specs/future/`: accepted work that has not started
+- `project/specs/paused/`: work intentionally paused
+- `project/architecture/current/`: maintained descriptions of the current design
+- `project/research/current/`: project-specific technical investigations
 
-- @docs/general/agent-shortcuts/ — Reusable task prompts for agents
+Active work is tracked in tbd beads.
+Each active workstream should point to one governing spec; completed specs belong in
+`done/` even when their original checklists are retained for historical context.
 
-- @docs/general/agent-guidelines/ — Guidelines and notes on development practices
+## Shared Reference Material
 
-- @docs/general/agent-setup/ — Setup guides for tools (GitHub CLI, beads, etc.)
+`general/` contains the cross-project rules, shortcuts, templates, and research snapshot
+inherited from Speculate.
+These files preserve their upstream ownership and cadence.
+Repository instructions in `AGENTS.md` and guidance loaded from the installed tbd
+version take precedence when a checked-in snapshot names an older tool or workflow.
 
-### `docs/project/` — Project-specific documentation
+The main groups are:
 
-Project-specific specifications, architecture, and research docs:
+- `general/agent-rules/`: language and engineering rules
+- `general/agent-guidelines/`: testing and release guidance
+- `general/agent-shortcuts/`: reusable workflow prompts
+- `general/agent-setup/`: tool setup references
+- `general/research/current/`: point-in-time research briefs
 
-- @docs/project/specs/ — Change specifications for features and bugfixes:
+## Executable Markdown
 
-  - `active/` — Currently in-progress specifications
+Files ending in `.tryscript.md` under `packages/tryscript/tests/` are executable tests,
+not general documentation.
+Their prose and expected terminal output are part of the test contract.
+Run `pnpm test` after editing them.
+They are excluded from Flowmark because their bytes are executable fixtures.
+The example in [`examples/`](../examples/my-cli.tryscript.md) is both user documentation
+and an integration-test input.
 
-  - `done/` — Completed specifications (historic)
-
-  - `future/` — Planned specifications
-
-  - `paused/` — Temporarily paused specifications
-
-- @docs/project/architecture/ — System design references and long-lived architecture
-  docs (templates and output go here)
-
-- @docs/project/research/ — Research notes and technical investigations
+<!-- This document follows common-doc-guidelines.md.
+See github.com/jlevy/practical-prose and review guidelines before editing.
+-->

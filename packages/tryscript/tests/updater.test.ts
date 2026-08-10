@@ -4,7 +4,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { updateTestFile } from '../src/lib/updater.js';
 import { parseTestFile } from '../src/lib/parser.js';
-import type { TestBlock, TestBlockResult } from '../src/lib/types.js';
+import type { TestBlock, TestBlockResult } from '../src/index.js';
 
 function getBlock(blocks: TestBlock[], index: number): TestBlock {
   const block = blocks[index];
@@ -23,6 +23,108 @@ describe('updateTestFile', () => {
 
   afterEach(async () => {
     await rm(tempDir, { recursive: true, force: true });
+  });
+
+  it('updates a legacy TestBlock without source-offset metadata', async () => {
+    const rawContent = '```console\n$ echo old\nold\n? 0\n```';
+    const filePath = join(tempDir, 'legacy.tryscript.md');
+    await writeFile(filePath, rawContent);
+    const block: TestBlock = {
+      command: 'echo old',
+      expectedOutput: 'old\n',
+      expectedExitCode: 0,
+      lineNumber: 1,
+      rawContent,
+    };
+
+    await updateTestFile({ path: filePath, config: {}, blocks: [block], rawContent }, [
+      {
+        block,
+        passed: false,
+        actualOutput: 'new\n',
+        actualExitCode: 0,
+        duration: 1,
+      },
+    ]);
+
+    expect(await readFile(filePath, 'utf-8')).toBe('```console\n$ echo old\nnew\n? 0\n```');
+  });
+
+  it('rejects a legacy block that cannot be located in the file', async () => {
+    const fileContent = '```console\n$ echo current\ncurrent\n? 0\n```';
+    const rawContent = '```console\n$ echo stale\nstale\n? 0\n```';
+    const filePath = join(tempDir, 'stale.tryscript.md');
+    await writeFile(filePath, fileContent);
+    const block: TestBlock = {
+      command: 'echo stale',
+      expectedOutput: 'stale\n',
+      expectedExitCode: 0,
+      lineNumber: 1,
+      rawContent,
+    };
+
+    await expect(
+      updateTestFile({ path: filePath, config: {}, blocks: [block], rawContent: fileContent }, [
+        {
+          block,
+          passed: false,
+          actualOutput: 'new\n',
+          actualExitCode: 0,
+          duration: 1,
+        },
+      ]),
+    ).rejects.toThrow(/cannot locate.*block/i);
+    expect(await readFile(filePath, 'utf-8')).toBe(fileContent);
+  });
+
+  it('rejects stale explicit source offsets without modifying the file', async () => {
+    const fileContent = 'prefix\n```console\n$ echo current\ncurrent\n? 0\n```\nsuffix\n';
+    const filePath = join(tempDir, 'stale-offsets.tryscript.md');
+    await writeFile(filePath, fileContent);
+    const testFile = parseTestFile(fileContent, filePath);
+    const block = getBlock(testFile.blocks, 0);
+    block.startOffset = (block.startOffset ?? 0) + 1;
+    block.endOffset = (block.endOffset ?? 0) + 1;
+
+    await expect(
+      updateTestFile(testFile, [
+        {
+          block,
+          passed: false,
+          actualOutput: 'replacement\n',
+          actualExitCode: 0,
+          duration: 1,
+        },
+      ]),
+    ).rejects.toThrow(/source offsets.*stale/i);
+    expect(await readFile(filePath, 'utf-8')).toBe(fileContent);
+  });
+
+  it('rejects incomplete explicit source-offset metadata', async () => {
+    const rawContent = '```console\n$ echo current\ncurrent\n? 0\n```';
+    const filePath = join(tempDir, 'partial-offsets.tryscript.md');
+    await writeFile(filePath, rawContent);
+    const block: TestBlock = {
+      command: 'echo current',
+      expectedOutput: 'current\n',
+      expectedExitCode: 0,
+      lineNumber: 1,
+      rawContent,
+      startOffset: 0,
+    };
+
+    await expect(
+      updateTestFile({ path: filePath, config: {}, blocks: [block], rawContent }, [
+        {
+          block,
+          passed: false,
+          actualOutput: 'replacement\n',
+          actualExitCode: 0,
+          duration: 1,
+        },
+      ]),
+    ).rejects.toThrow(/source-offset metadata.*incomplete/i);
+    expect(await readFile(filePath, 'utf-8')).toBe(rawContent);
   });
 
   it('does not modify passing tests', async () => {
@@ -86,6 +188,39 @@ wrong output
     const newContent = await readFile(filePath, 'utf-8');
     expect(newContent).toContain('hello');
     expect(newContent).not.toContain('wrong output');
+  });
+
+  it('preserves CRLF throughout a rewritten block', async () => {
+    const content = [
+      '# Test',
+      '',
+      '```console',
+      '$ echo hello',
+      'wrong output',
+      '? 0',
+      '```',
+      '',
+    ].join('\r\n');
+    const filePath = join(tempDir, 'crlf.tryscript.md');
+    await writeFile(filePath, content);
+    const testFile = parseTestFile(content, filePath);
+    const block = getBlock(testFile.blocks, 0);
+
+    await updateTestFile(testFile, [
+      {
+        block,
+        passed: false,
+        actualOutput: 'first\r\nsecond\r\n',
+        actualExitCode: 0,
+        duration: 10,
+      },
+    ]);
+
+    expect(await readFile(filePath, 'utf-8')).toBe(
+      ['# Test', '', '```console', '$ echo hello', 'first', 'second', '? 0', '```', ''].join(
+        '\r\n',
+      ),
+    );
   });
 
   it('updates exit code when different', async () => {
