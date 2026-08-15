@@ -1,0 +1,90 @@
+---
+type: is
+id: is-01kzm4z425gqmnfts7k93dqrbt
+title: "Address PR #48 senior review and release readiness"
+kind: task
+status: in_progress
+priority: 1
+version: 80
+spec_path: docs/project/specs/active/spec-v0.2.0-stability-review.md
+labels:
+  - pr-review
+  - pr-48
+dependencies: []
+child_order_hints:
+  - is-01kzm4zm7843vjksngg5qayc9v
+  - is-01kzm4zmj7kmnskbbzr0xbxd03
+  - is-01kzm4zmx26ss3gjv9thnngd7k
+  - is-01kzm4zn7spqgv40cm9a52ppne
+  - is-01kzm4znjgknmde2jzbrm96y9f
+  - is-01kzm4znx9amjgx01vfsf9xh7v
+  - is-01kzm4zp80zbf7494ykg148tzd
+  - is-01kzm4zpjvynrppn2856rvt7b1
+  - is-01kzm4zpxpezbhmnvna33t04da
+  - is-01kzm51rhms10ysys54pzr5fxq
+  - is-01kzm5gm6263jn55z3mznrkp6g
+  - is-01kzm5gmh9075es1bdk047qpj7
+  - is-01kzm5jstjk7b2xxrc1y0y4dz7
+  - is-01kzm625fvjernyrktdk55dv8e
+  - is-01kzm69kdypd2ndv3tz6q955je
+  - is-01kzm69kkx56e1sy8y1wyvz5rs
+  - is-01kzm69kssfthpmtqjkd65pcyf
+  - is-01kzm69kzj8zqb8kms7vy0rwf6
+  - is-01kzm78acd7hhyrn7rx8h26exs
+  - is-01kzm85g8zf1ys6p4d0cy3ck3v
+  - is-01kzm8d0zxp871633srgvg0nvr
+  - is-01kzm8j5mjtt1erpser5215a9p
+  - is-01kzm8qm9jwwx6vc08gmhvkdpk
+  - is-01kzm8qmg5f85v6d13p6yhprb3
+  - is-01kzm9bz9exwjzdekvqt1zp0nv
+  - is-01kzm9edrk8y727k6ssfx49n2b
+  - is-01kzm9h1c0t2wa5qt39g3aqtqr
+  - is-01kzm9rff3vgbrz4se61cchtfb
+  - is-01kzm9vzpmtne531tb8cvgnjry
+  - is-01kzm9ywxpjd27awptxedr46p2
+  - is-01kzma4a8j8zvev6zh4bynjhx8
+  - is-01kzma6xz8yvkde60zan7wx682
+  - is-01kzma8n174k4ez85714488zbz
+  - is-01kzmafm3q6vgrm2zejm20nday
+  - is-01kzmahtddxss4nd5v0p7dqkab
+  - is-01kzmam68nsxtkh0n19paqrxnn
+  - is-01kzmaqzh6mgtwebdsskmc7yxc
+  - is-01kzmas5kk0ajkxdqt3xhbbdc2
+  - is-01kzmavn4pcw7ge4hqqb5pejk3
+  - is-01kzmb04tfb9vqg5v7sp0ertga
+  - is-01kzmbycwtb8bbjer5td84ak92
+  - is-01kzmbyd3phv09dbxt1p8tn8ra
+  - is-01kzmbydaqkc2bztmxhwswhqyn
+  - is-01kzmbydhnp7k05rgee2fcjs7d
+  - is-01kzmbydtcxecged68cnwakeqa
+  - is-01kzmbye1ccwyk21jtv66rssv2
+  - is-01kzmbye8mff0rnxnt8mgxdf66
+  - is-01kzmbyehngdpcq2tss1ft56v9
+  - is-01kzmbyerkxcys18z8qz98zdzw
+  - is-01kzmcpejjza5fnq7vybyvrxet
+  - is-01kzmd4sr2p69khjspjnqf023w
+  - is-01kzmd4sz9jxw4j56e7dgmh207
+  - is-01kzmd4t6e7j65ah8dnsgwd9vv
+  - is-01kzmdr9zf2tah2pry99f9j0e9
+  - is-01kzmdra6z3qk2jr3jbtg238jw
+  - is-01kzmdradx4q8x3ajdw7pmj0xy
+  - is-01kzmdran8pksjx0wy9nn33m04
+  - is-01kzmdraw88g8d5jfytntnh9fd
+  - is-01kzmdrb3h4fh38mg5zffrrgqf
+  - is-01kzmdrbany0pxtjbmtv97ma0x
+  - is-01kzmet9kyh3yt0vmq5jy2f8pz
+  - is-01kzmfhpbfrzt1ngjan7a3n7m3
+  - is-01kzmg01vqnp0wftrf99pt5266
+  - is-01kzmg32dwjca907b7yj53r72c
+  - is-01kzmgnp3abzyhapfcv8xt8143
+  - is-01kzmh15r3fzsqsnrrqw4maeg9
+  - is-01kzmh15yx67v33scs9cx9pdtn
+  - is-01kzmjbfsx05ar64ent41jh900
+  - is-01kzmjbfzm38kbkzc5gbcxwhyd
+  - is-01kzmjbg5a2yft7dkv1vnxbn7b
+  - is-01kzmjbgaxptrbyyeeyh66v256
+  - is-01kzmjbggkegj3rvbbaxw1h771
+created_at: 2026-08-09T20:55:56.228Z
+updated_at: 2026-08-10T01:12:47.766Z
+---
+Parent tracker for every finding in the full senior engineering review of https://github.com/jlevy/tryscript/pull/48. Completion requires one disposition per finding, local quality gates, pushed fixes, green CI, and a merge-ready PR.
