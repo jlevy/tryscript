@@ -1,5 +1,5 @@
 #!/bin/bash
-# Automated GitHub CLI setup for Codex sessions
+# Automated GitHub CLI setup for agent sessions
 # This script runs on SessionStart to ensure gh CLI is available and authenticated
 #
 # Supply-chain policy (see SUPPLY-CHAIN-SECURITY.md): the gh version is PINNED to
@@ -67,7 +67,7 @@ if command -v gh &> /dev/null; then
 else
     echo "[gh] CLI not found, installing pinned v${GH_VERSION}..."
 
-    INSTALL_TMP_DIR=$(mktemp -d "${TMPDIR:-/tmp}/tryscript-gh.XXXXXX")
+    INSTALL_TMP_DIR=$(mktemp -d "${TMPDIR:-/tmp}/tbd-gh.XXXXXX")
     trap cleanup EXIT
 
     # Detect platform
@@ -170,6 +170,9 @@ if [ -n "${GH_TOKEN:-}" ]; then
             echo "[gh] (keep HTTPS_PROXY set; never disable TLS verification):"
             echo '[gh]   export NO_PROXY="'"${GITHUB_DIRECT_HOSTS}"'${NO_PROXY:+,$NO_PROXY}"'
             echo '[gh]   export no_proxy="$NO_PROXY"'
+            echo "[gh] Agent harnesses often reset shell state between tool calls; if the"
+            echo "[gh] exports do not stick, prefix each command instead:"
+            echo '[gh]   NO_PROXY="'"${GITHUB_DIRECT_HOSTS}"'" no_proxy="'"${GITHUB_DIRECT_HOSTS}"'" gh <command>'
             echo "[gh] Details: tbd shortcut setup-github-cli (Proxied Remote Sessions)"
         else
             echo "[gh] WARNING: GH_TOKEN is set but could not be verified on any channel"

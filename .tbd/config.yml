@@ -1,11 +1,15 @@
-tbd_format: f06
-tbd_version: 0.4.2
+tbd_format: f07
+tbd_version: 0.6.5
+tbd_fallback_version: 0.6.5
 # tbd_upgrades: tbd versions that have run `tbd setup` in this repo (oldest first);
 # tbd_version above is the most recent. Informational; updated automatically by setup.
+# tbd_fallback_version is the one exact registry fallback for format-incompatible launchers.
 tbd_upgrades:
   - version: 0.1.3
   - version: 0.4.2
     at: 2026-08-09T18:26:30.412Z
+  - version: 0.6.5
+    at: 2026-08-15T00:05:05.996Z
 display:
   id_prefix: try
 sync:
@@ -63,9 +67,11 @@ docs_cache:
     shortcuts/standard/revise-all-architecture-docs.md: internal:shortcuts/standard/revise-all-architecture-docs.md
     shortcuts/standard/revise-architecture-doc.md: internal:shortcuts/standard/revise-architecture-doc.md
     shortcuts/standard/setup-github-cli.md: internal:shortcuts/standard/setup-github-cli.md
+    shortcuts/standard/setup-linear.md: internal:shortcuts/standard/setup-linear.md
     shortcuts/standard/suggest-upstream-improvements.md: internal:shortcuts/standard/suggest-upstream-improvements.md
     shortcuts/standard/sync-failure-recovery.md: internal:shortcuts/standard/sync-failure-recovery.md
     shortcuts/standard/update-specs-status.md: internal:shortcuts/standard/update-specs-status.md
+    shortcuts/standard/watch-beads.md: internal:shortcuts/standard/watch-beads.md
     shortcuts/standard/welcome-user.md: internal:shortcuts/standard/welcome-user.md
     guidelines/backward-compatibility-rules.md: internal:guidelines/backward-compatibility-rules.md
     guidelines/bun-monorepo-patterns.md: internal:guidelines/bun-monorepo-patterns.md
