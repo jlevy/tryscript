@@ -6,7 +6,6 @@ CLAUDE.md
 docs/general/
 
 # Generated, historical, and release-tool-owned Markdown
-.changeset/
 docs/project/specs/done/
 packages/tryscript/CHANGELOG.md
 packages/tryscript/README.md

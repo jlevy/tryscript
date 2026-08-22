@@ -1,5 +1,30 @@
 # tryscript
 
+## Unreleased
+
+### Features
+
+- Expand `$VAR` and `${VAR}` in `env:` front matter values, matching what `path:`
+  entries already did. Front matter can now name one exact executable instead of
+  relying on a `PATH` lookup that may resolve a different build:
+
+  ```yaml
+  env:
+    TOOL: $TRYSCRIPT_GIT_ROOT/target/debug/tool$TRYSCRIPT_EXE
+  ```
+
+  `$$` produces a literal `$`, so a value that has to keep one, such as a password or a
+  `sed` expression, is not substituted away.
+
+- Add `TRYSCRIPT_EXE`, the platform executable suffix: `.exe` on Windows and empty
+  elsewhere. It keeps a binary path in front matter portable across platforms.
+
+### Fixes
+
+- Expand variables in a single pass. A `${VAR}` whose value itself contained `$NAME` was
+  expanded a second time, so a `path:` entry could resolve somewhere other than the
+  directory it named.
+
 ## 0.2.0
 
 ### Minor Changes

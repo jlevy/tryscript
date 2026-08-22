@@ -17,5 +17,4 @@ minimumReleaseAge: 20160
 # artifacts, publisher continuity, lifecycle scripts, and CI. Reviewed-by: jlevy.
 minimumReleaseAgeExclude:
   - brace-expansion@5.0.9 # GHSA-rgw5-rvv9-x895 / CVE-2026-69152
-  - 'js-yaml@3.15.1 || 4.3.1' # GHSA-5p4m-2wfm-xmqj
   - nanoid@3.3.18 # GHSA-2v37-7h3g-55p8 / CVE-2026-67213

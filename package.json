@@ -29,16 +29,11 @@
     "verify": "pnpm ci:quality && pnpm build && pnpm publint && pnpm test && pnpm audit --audit-level=moderate",
     "tryscript": "pnpm --filter tryscript tryscript",
     "prepare": "lefthook install",
-    "changeset": "changeset",
-    "changeset:add": "node scripts/changeset-add.mjs",
-    "version-packages": "changeset version",
-    "release": "pnpm build && pnpm publint && changeset publish",
     "upgrade:check": "ncu --cooldown 14 --format group",
     "upgrade": "ncu --cooldown 14 --target minor -u && pnpm install && pnpm test",
     "upgrade:major": "ncu --cooldown 14 --target latest --interactive --format group"
   },
   "devDependencies": {
-    "@changesets/cli": "2.31.1",
     "@eslint/js": "10.0.1",
     "@types/node": "20.19.43",
     "atomically": "2.1.0",
@@ -57,8 +52,6 @@
     "overrides": {
       "minimatch@9.0.7>brace-expansion": "5.0.9",
       "minimatch@10.2.5>brace-expansion": "5.0.9",
-      "read-yaml-file>js-yaml": "3.15.1",
-      "@changesets/parse>js-yaml": "4.3.1",
       "postcss>nanoid": "3.3.18",
       "micromatch>picomatch": "2.3.2",
       "minimatch@>=9.0.0 <9.0.7": "9.0.7",

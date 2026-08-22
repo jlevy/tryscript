@@ -28,7 +28,7 @@ IMPORTANT: You MUST read ./docs/development.md and ./docs/docs-overview.md for p
 - If push fails, resolve and retry until it succeeds
 
 
-<!-- BEGIN TBD INTEGRATION format=f07 surface=agents-md -->
+<!-- BEGIN TBD INTEGRATION format=f08 surface=agents-md -->
 ## tbd
 
 This repository uses **tbd** for git-native issue tracking (beads), spec-driven

@@ -1,15 +1,15 @@
 # Publishing tryscript
 
-Tryscript uses Changesets for package versioning and a tag-triggered GitHub Actions
-workflow for npm publishing.
+Tryscript versions its single published package by hand and publishes through a
+tag-triggered GitHub Actions workflow.
 The workflow verifies the repository, publishes through npm trusted publishing, and
-creates the GitHub release from the generated changelog.
+creates the GitHub release from the changelog section matching the tag.
 
 ## Release Contract
 
 - Release preparation happens on `main` in a clean checkout.
-- `pnpm version-packages` consumes pending changesets, updates
-  `packages/tryscript/package.json`, and writes `packages/tryscript/CHANGELOG.md`.
+- Release preparation bumps the version in `packages/tryscript/package.json` and adds
+  the matching `## X.Y.Z` section to `packages/tryscript/CHANGELOG.md`.
 - A `v*` tag triggers `.github/workflows/release.yml`.
 - A read-only job runs `pnpm verify`, uses `npm pack` to create one publisher-compatible
   tarball, and uploads that verified artifact.
@@ -25,10 +25,10 @@ creates the GitHub release from the generated changelog.
 - A published version and its Git tag are immutable.
   A correction receives a new patch version.
 
-See the [Changesets documentation](https://github.com/changesets/changesets) for the
-versioning model and
-[npm trusted publishing](https://docs.npmjs.com/trusted-publishers/) for the registry
-authentication model.
+The repository publishes one package, so versioning is a single decision per release
+rather than a per-pull-request declaration.
+See [npm trusted publishing](https://docs.npmjs.com/trusted-publishers/) for the
+registry authentication model.
 
 ## Trusted Publisher Configuration
 
@@ -66,20 +66,17 @@ git status --short
 
 Stop if the checkout has uncommitted changes or local commits not present on the remote.
 
-### 2. Review Pending Changesets
+### 2. Review the Commits Since the Last Tag
 
 ```bash
-ls .changeset/*.md
 git log "$(git describe --tags --abbrev=0)"..HEAD --oneline
 ```
 
-Each user-visible change needs one accurate Changeset summary.
-Do not add a duplicate when the merged pull request already supplied one.
-If a release has no appropriate changeset, create one non-interactively:
-
-```bash
-pnpm changeset:add minor 0.2.0 "Add validation APIs and harden CLI test results"
-```
+Read the commit subjects and the diffs behind anything user-visible.
+The changelog describes the difference between the last released version and this one,
+not the path taken to get there: a defect introduced and fixed on a branch since the
+last tag never reached users and is part of the change that introduced it, not a
+separate fix.
 
 Choose the bump from the public compatibility impact:
 
@@ -89,20 +86,30 @@ Choose the bump from the public compatibility impact:
 | `minor` | Backward-compatible features |
 | `major` | Breaking public API or file-format changes |
 
-The version argument to `changeset:add` documents the intended target; Changesets
-calculates the actual version from the package state and all pending changesets.
+### 3. Set the Version and Write the Changelog
 
-### 3. Apply the Version
+Set the new version in `packages/tryscript/package.json`, then head
+`packages/tryscript/CHANGELOG.md` with the matching section:
 
-```bash
-pnpm version-packages
-git diff -- packages/tryscript/package.json packages/tryscript/CHANGELOG.md .changeset
+```markdown
+## 0.2.1
+
+### Features
+
+- ...
+
+### Fixes
+
+- ...
 ```
+
+Rename an existing `## Unreleased` heading to the release version rather than adding a
+second section. The heading must read exactly `## X.Y.Z`, because the release workflow
+extracts that section verbatim for the GitHub release.
 
 Confirm that:
 
-- the package version is the intended SemVer version;
-- consumed changeset files were removed;
+- the package version is the intended SemVer version and matches the changelog heading;
 - the changelog describes user-visible behavior in present tense; and
 - fixes that can turn a false pass into a real failure are called out explicitly.
 
@@ -115,7 +122,7 @@ v0.1.7 corpus differs only in reviewed tryscript CLI snapshots.
 ```bash
 pnpm verify
 pnpm --filter tryscript test:coverage
-git add packages/tryscript/package.json packages/tryscript/CHANGELOG.md .changeset
+git add packages/tryscript/package.json packages/tryscript/CHANGELOG.md
 git commit -m "chore: release tryscript v0.2.0"
 git push
 ```
