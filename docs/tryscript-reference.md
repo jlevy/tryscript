@@ -317,8 +317,7 @@ error. Put behavior that needs a golden assertion in its own `console` block.
 
 ## Environment Variables
 
-Use `env` to set variables.
-The **shell** handles `$VAR` expansion:
+Use `env` to set variables:
 
 ```yaml
 env:
@@ -333,6 +332,31 @@ $ $CLI --version
 
 Environment variables are shell inputs, not output-matching patterns.
 
+### Variable Expansion in `env` and `path`
+
+Tryscript expands `$VAR` and `${VAR}` in `env` values and `path` entries before the
+command runs, using the same rules for both:
+
+- Names resolve against the built-in variables below first, then the process
+  environment.
+- An undefined name expands to the empty string.
+- `$$` produces a literal `$`. Use it whenever a value must keep a `$`, such as a
+  password or a `sed` expression, since an unescaped `$name` would otherwise be
+  substituted away.
+- Values are substituted once and never rescanned, so a variable whose value itself
+  contains `$VAR` keeps that text.
+- Expansion resolves against the built-in variables and the process environment only,
+  not against sibling `env` entries: given `PREFIX: /opt/tool`, a sibling
+  `BIN: $PREFIX/bin/tool` expands to `/bin/tool`, not `/opt/tool/bin/tool`.
+
+Expanding `env` is what lets front matter name an exact executable, which `path` alone
+cannot do because `path` only prepends to the inherited `PATH`:
+
+```yaml
+env:
+  TOOL: $TRYSCRIPT_GIT_ROOT/target/debug/tool$TRYSCRIPT_EXE
+```
+
 ### Built-in Environment Variables
 
 Tryscript sets these environment variables for test commands:
@@ -346,6 +370,7 @@ Tryscript sets these environment variables for test commands:
 | `TRYSCRIPT_GIT_ROOT` | Absolute path to directory containing nearest `.git` (if found) |
 | `TRYSCRIPT_PROJECT_ROOT` | Most specific of `PACKAGE_ROOT` or `GIT_ROOT` (deepest path) |
 | `TRYSCRIPT_PACKAGE_BIN` | Absolute path to `node_modules/.bin` directory (if exists) |
+| `TRYSCRIPT_EXE` | Executable suffix: `.exe` on Windows, empty elsewhere |
 
 Project-root variables keep tests portable across project types:
 
@@ -354,6 +379,10 @@ Project-root variables keep tests portable across project types:
 - **`TRYSCRIPT_PROJECT_ROOT`:** The deeper of the package and Git roots.
 - **`TRYSCRIPT_PACKAGE_BIN`:** The package root’s `node_modules/.bin` directory, when
   present.
+
+`TRYSCRIPT_EXE` keeps a binary path portable: it is `.exe` on Windows and empty
+elsewhere, so `$TRYSCRIPT_GIT_ROOT/target/debug/tool$TRYSCRIPT_EXE` names the same build
+on every platform.
 
 Example using `TRYSCRIPT_PROJECT_ROOT`:
 

@@ -57,6 +57,40 @@ describe('createExecutionContext', () => {
     expect(ctx.timeout).toBe(5000);
   });
 
+  it('expands env vars in `env:` values, as it already does in `path:`', async () => {
+    ctx = await createExecutionContext(
+      { env: { TOOL: '$TRYSCRIPT_GIT_ROOT/target/debug/tool', PLAIN: 'literal' } },
+      TEST_FILE,
+    );
+    // The two fields have to agree about what `$VAR` means. While they disagreed, a
+    // test could name a directory by absolute path but never a file, so selecting an
+    // exact binary meant an external wrapper setting the variable beforehand.
+    expect(ctx.env.TOOL).toBe(`${ctx.env.TRYSCRIPT_GIT_ROOT}/target/debug/tool`);
+    expect(ctx.env.TOOL).not.toContain('$TRYSCRIPT_GIT_ROOT');
+    expect(ctx.env.PLAIN).toBe('literal');
+  });
+
+  it('exposes TRYSCRIPT_EXE so front matter can name a binary portably', async () => {
+    ctx = await createExecutionContext({}, TEST_FILE);
+    expect(ctx.env.TRYSCRIPT_EXE).toBe(process.platform === 'win32' ? '.exe' : '');
+  });
+
+  it('names an exact binary from `env:` using both provided variables', async () => {
+    ctx = await createExecutionContext(
+      { env: { TOOL: '$TRYSCRIPT_GIT_ROOT/target/debug/tool$TRYSCRIPT_EXE' } },
+      TEST_FILE,
+    );
+    const exe = process.platform === 'win32' ? '.exe' : '';
+    expect(ctx.env.TOOL).toBe(`${ctx.env.TRYSCRIPT_GIT_ROOT}/target/debug/tool${exe}`);
+  });
+
+  it('keeps a literal `$` in an `env:` value when escaped', async () => {
+    // Expanding `env:` makes every value a candidate for substitution, so an
+    // unescaped `$ssw0rd` would expand away and silently truncate the value.
+    ctx = await createExecutionContext({ env: { PASSWORD: 'p$$ssw0rd' } }, TEST_FILE);
+    expect(ctx.env.PASSWORD).toBe('p$ssw0rd');
+  });
+
   it('sets NO_COLOR by default', async () => {
     ctx = await createExecutionContext({}, TEST_FILE);
     expect(ctx.env.NO_COLOR).toBe('1');

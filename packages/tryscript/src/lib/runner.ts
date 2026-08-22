@@ -192,6 +192,10 @@ export async function createExecutionContext(
       ...(projectRoot && { TRYSCRIPT_PROJECT_ROOT: projectRoot }),
       ...(packageBin && { TRYSCRIPT_PACKAGE_BIN: packageBin }),
       TRYSCRIPT_TEST_DIR: testDir,
+      // `.exe` on Windows, empty elsewhere. Front matter that names a built binary by
+      // path needs this to stay portable; without it the only portable way to reach an
+      // executable is a bare name, which is a PATH lookup the test cannot control.
+      TRYSCRIPT_EXE: process.platform === 'win32' ? '.exe' : '',
     };
 
     // Create expander with tryscript env vars taking precedence
@@ -210,6 +214,18 @@ export async function createExecutionContext(
     }
     pathParts.push(process.env.PATH ?? '');
 
+    // Expand env vars in `env:` values, exactly as `path:` entries are expanded above.
+    // Without this the two fields disagree about what `$TRYSCRIPT_GIT_ROOT` means: one
+    // resolves it, the other passes the literal through. A test could therefore name a
+    // directory by absolute path but never a file, so selecting one exact binary meant
+    // an external wrapper setting the variable before tryscript ran -- and a bare name
+    // on PATH, which `path:` only prepends to, can silently resolve somewhere else.
+    const expandedEnv = config.env
+      ? Object.fromEntries(
+          Object.entries(config.env).map(([key, value]) => [key, expandEnvVars(value)]),
+        )
+      : undefined;
+
     const ctx: ExecutionContext = {
       tempDir,
       testDir,
@@ -217,10 +233,10 @@ export async function createExecutionContext(
       sandbox,
       env: {
         ...process.env,
-        ...config.env,
+        ...expandedEnv,
         ...coverageEnv,
         // Disable colors by default for deterministic output
-        NO_COLOR: config.env?.NO_COLOR ?? '1',
+        NO_COLOR: expandedEnv?.NO_COLOR ?? '1',
         FORCE_COLOR: '0',
         // Provide test directory for portable test commands
         TRYSCRIPT_TEST_DIR: testDir,
