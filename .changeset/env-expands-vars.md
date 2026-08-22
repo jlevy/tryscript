@@ -20,3 +20,8 @@ env:
 ```
 
 `TRYSCRIPT_EXE` is `.exe` on Windows and empty elsewhere, so that line stays portable.
+
+Because `env:` values are arbitrary strings rather than paths, `$$` now expands to a
+literal `$` in both `env:` and `path:`, so a value that has to keep a `$` is not
+substituted away. Expansion is also single-pass: a variable whose value contains `$VAR`
+keeps that text instead of expanding a second time.

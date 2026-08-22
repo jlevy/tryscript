@@ -174,10 +174,17 @@ their roots exist:
 - `TRYSCRIPT_GIT_ROOT`
 - `TRYSCRIPT_PROJECT_ROOT`
 - `TRYSCRIPT_PACKAGE_BIN`
+- `TRYSCRIPT_EXE` (`.exe` on Windows, empty elsewhere)
 
 Configured `path` entries expand built-in and process environment variables, preserve
 absolute entries according to the host platform, resolve relative entries from the test
 file directory, and precede the process `PATH`.
+
+Configured `env` values expand through the same expander, so `$VAR` means the same thing
+in both fields. Expansion is single-pass and treats `$$` as a literal `$`, which matters
+more for `env` than for `path` because its values are arbitrary strings rather than
+paths. Names resolve against the built-in variables and the process environment, not
+against sibling `env` entries.
 
 The command timeout defaults to 30 seconds.
 A timeout kills the spawned process tree and settles only after the termination request

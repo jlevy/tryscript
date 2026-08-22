@@ -75,6 +75,22 @@ describe('createExecutionContext', () => {
     expect(ctx.env.TRYSCRIPT_EXE).toBe(process.platform === 'win32' ? '.exe' : '');
   });
 
+  it('names an exact binary from `env:` using both provided variables', async () => {
+    ctx = await createExecutionContext(
+      { env: { TOOL: '$TRYSCRIPT_GIT_ROOT/target/debug/tool$TRYSCRIPT_EXE' } },
+      TEST_FILE,
+    );
+    const exe = process.platform === 'win32' ? '.exe' : '';
+    expect(ctx.env.TOOL).toBe(`${ctx.env.TRYSCRIPT_GIT_ROOT}/target/debug/tool${exe}`);
+  });
+
+  it('keeps a literal `$` in an `env:` value when escaped', async () => {
+    // Expanding `env:` makes every value a candidate for substitution, so an
+    // unescaped `$ssw0rd` would expand away and silently truncate the value.
+    ctx = await createExecutionContext({ env: { PASSWORD: 'p$$ssw0rd' } }, TEST_FILE);
+    expect(ctx.env.PASSWORD).toBe('p$ssw0rd');
+  });
+
   it('sets NO_COLOR by default', async () => {
     ctx = await createExecutionContext({}, TEST_FILE);
     expect(ctx.env.NO_COLOR).toBe('1');
