@@ -1,6 +1,6 @@
 # tryscript
 
-## Unreleased
+## 0.2.1
 
 ### Features
 
