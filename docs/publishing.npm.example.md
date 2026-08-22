@@ -4,10 +4,11 @@
 > Align every command with the repository’s package manager, branch protection, and
 > release workflow.
 
-This pattern uses Changesets for versioning and a tag-triggered GitHub Actions workflow
-for npm trusted publishing.
-OIDC provides a short-lived publish identity, so the repository does not store a
-long-lived npm write token.
+This pattern uses hand-set versions and a tag-triggered GitHub Actions workflow for npm
+trusted publishing. A repository publishing several interdependent packages should add
+Changesets for versioning; for a single package its per-pull-request ceremony rarely
+pays off. OIDC provides a short-lived publish identity, so the repository does not store
+a long-lived npm write token.
 
 ## Preconditions
 
@@ -69,13 +70,14 @@ GitHub documents the meaning of
 git switch main
 git pull --ff-only
 git status --short
-pnpm changeset
-pnpm changeset version
+git log "$(git describe --tags --abbrev=0)"..HEAD --oneline
+# Set the new version in the package manifest, then add the matching
+# `## X.Y.Z` section to CHANGELOG.md.
 git diff
 pnpm verify
 ```
 
-Confirm the SemVer bump, consumed changesets, package manifest, and changelog before
+Confirm the SemVer bump, the package manifest, and the changelog heading before
 committing the release preparation.
 Push it directly only when repository policy allows; otherwise merge it through the
 normal pull-request process.

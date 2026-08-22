@@ -4,6 +4,5 @@ pnpm-lock.yaml
 *.min.js
 *.min.css
 coverage
-.changeset
 # Flowmark owns Markdown; do not run competing formatters over it.
 *.md

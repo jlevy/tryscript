@@ -68,7 +68,6 @@ tryscript/
       tests/             # Self-tests (.tryscript.md) and unit tests
       docs/              # Generated package documentation (ignored)
   docs/                  # Project documentation
-  .changeset/            # Version management
   .github/workflows/     # CI/CD
 ```
 
@@ -155,10 +154,12 @@ pnpm verify        # Format check, lint, types, build, package smoke, tests, aud
 
 ### Releases
 
-User-visible changes need a Changeset, either in their pull request or during release
-preparation.
-See the [publishing runbook](publishing.md) for versioning, tagging, trusted
-publishing, and release verification.
+Releases are cut from `main` by hand: bump the package version, write the matching
+`## X.Y.Z` section in `packages/tryscript/CHANGELOG.md` from the commits since the last
+tag, then push a `v*` tag.
+Conventional commit subjects are what make that section straightforward to assemble, so
+keep them accurate. See the [publishing runbook](publishing.md) for versioning, tagging,
+trusted publishing, and release verification.
 
 ## CLI Usage
 
