@@ -5,10 +5,10 @@ title: "Deferred to a minor release: preserve named patterns on --update (gh#49)
 kind: feature
 status: open
 priority: 3
-version: 1
+version: 2
 labels: []
 dependencies: []
 created_at: 2026-10-04T22:13:00.410Z
-updated_at: 2026-10-04T22:13:00.410Z
+updated_at: 2026-10-04T22:20:03.678Z
 ---
 Changes --update rewrite semantics and adds options; needs design, not a patch-release change.
