@@ -187,12 +187,8 @@ function checkRequires(planned: PlannedFile[], projectConfig: unknown, quiet: bo
     const sessions = entry.blocksToRun.filter((block) => !block.skip).length;
     const requires = entry.config.requires ?? [];
     if (sessions > 0 && requires.length > 0) {
-      targets.push({
-        filePath: entry.filePath,
-        requires,
-        pathEntries: composeSessionEnvironment(entry.config, entry.filePath).pathEntries,
-        sessions,
-      });
+      const { pathEntries, cwd } = composeSessionEnvironment(entry.config, entry.filePath);
+      targets.push({ filePath: entry.filePath, requires, pathEntries, cwd, sessions });
     }
   }
 

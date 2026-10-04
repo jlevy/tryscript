@@ -28,7 +28,8 @@ export interface TryscriptConfig {
   path?: string[];
   /**
    * Commands that must resolve on each test file's composed PATH before any session
-   * runs. Project and frontmatter lists are combined.
+   * runs. Project and frontmatter lists are combined. Checked by `tryscript run`; the
+   * programmatic API (`createExecutionContext`, `runBlock`) does not check it.
    */
   requires?: string[];
 }

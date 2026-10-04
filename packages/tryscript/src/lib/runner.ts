@@ -126,6 +126,16 @@ export interface SessionEnvironment {
   expandEnvVars: (value: string) => string;
   /** PATH elements in lookup order: config `path:` entries, then the inherited PATH. */
   pathEntries: string[];
+  /**
+   * Working directory the sessions will run in, or `null` for a sandbox, whose temporary
+   * directory does not exist until the execution context is created.
+   */
+  cwd: string | null;
+}
+
+/** `cwd:` resolved from the test file's directory, or that directory when unset. */
+function unsandboxedCwd(config: TryscriptConfig, testDir: string): string {
+  return config.cwd ? resolve(testDir, config.cwd) : testDir;
 }
 
 /**
@@ -194,7 +204,13 @@ export function composeSessionEnvironment(
     pathParts.push(...process.env.PATH.split(delimiter));
   }
 
-  return { tryscriptEnvVars, expandEnvVars, pathEntries: pathParts };
+  const sandboxed = config.sandbox === true || typeof config.sandbox === 'string';
+  return {
+    tryscriptEnvVars,
+    expandEnvVars,
+    pathEntries: pathParts,
+    cwd: sandboxed ? null : unsandboxedCwd(config, testDir),
+  };
 }
 
 /**
@@ -231,12 +247,8 @@ export async function createExecutionContext(
       await cp(srcPath, tempDir, { recursive: true });
       cwd = tempDir;
       sandbox = true;
-    } else if (config.cwd) {
-      // Run in specified directory (relative to test file)
-      cwd = resolve(testDir, config.cwd);
     } else {
-      // Default: run in test file directory
-      cwd = testDir;
+      cwd = unsandboxedCwd(config, testDir);
     }
 
     // Copy additional fixtures to sandbox (only if sandbox enabled)

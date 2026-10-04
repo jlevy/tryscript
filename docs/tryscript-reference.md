@@ -457,6 +457,9 @@ Key behavior:
 
 - Every required command is looked up before the first session of the run, using the
   same PATH each file’s sessions get, including its `path` entries.
+- A relative or empty element inherited in PATH is read from the session’s working
+  directory, as the shell reads it.
+  In a sandbox, whose directory does not exist yet, such elements are not searched.
 - If any command is missing, the run stops before running anything and names the
   command, the test file, and every directory searched.
 - Entries must be bare command names; a path is rejected.
@@ -465,6 +468,7 @@ Key behavior:
   does not model.
 - Project config and frontmatter lists are combined.
 - The `resolved` lines go to stderr and are omitted with `--quiet`.
+- The check is part of `tryscript run`; the programmatic API does not perform it.
 
 ### Using `node_modules/.bin`
 

@@ -3,7 +3,7 @@
  */
 
 import { accessSync, constants, statSync } from 'node:fs';
-import { extname, join } from 'node:path';
+import { extname, join, posix, win32 } from 'node:path';
 
 /** Windows default when PATHEXT is unset, matching cmd.exe. */
 const DEFAULT_PATHEXT = '.COM;.EXE;.BAT;.CMD';
@@ -12,6 +12,25 @@ export interface ResolveOptions {
   platform?: NodeJS.Platform;
   /** PATHEXT value; used only on Windows. */
   pathext?: string;
+}
+
+/**
+ * The directories a shell searches for a PATH, in order. A relative or empty element is
+ * read from the session's working directory, as the shell reads it; when that directory
+ * is not known yet (a sandbox), such elements are left out.
+ */
+export function searchDirectories(
+  pathEntries: string[],
+  cwd: string | null,
+  options: ResolveOptions = {},
+): string[] {
+  const paths = (options.platform ?? process.platform) === 'win32' ? win32 : posix;
+  return pathEntries.flatMap((entry) => {
+    if (entry !== '' && paths.isAbsolute(entry)) {
+      return [entry];
+    }
+    return cwd === null ? [] : [paths.resolve(cwd, entry)];
+  });
 }
 
 /** True when `name` can be looked up on PATH: non-empty and without a path separator. */
@@ -49,17 +68,15 @@ function isExecutableFile(candidate: string, windows: boolean): boolean {
 }
 
 /**
- * Find the file a shell would run for `name`, searching `pathEntries` in order.
- *
- * Empty entries are skipped rather than read as the working directory, so a match is
- * always a directory the PATH names. On Windows, a name without a PATHEXT extension is
- * tried with each extension in turn.
+ * Find the file a shell would run for `name`, searching `directories` in order (see
+ * `searchDirectories`). On Windows, a name without a PATHEXT extension is tried with
+ * each extension in turn.
  *
  * @returns The matching path, or `undefined` when no entry has it.
  */
 export function resolveCommand(
   name: string,
-  pathEntries: string[],
+  directories: string[],
   options: ResolveOptions = {},
 ): string | undefined {
   const windows = (options.platform ?? process.platform) === 'win32';
@@ -75,10 +92,7 @@ export function resolveCommand(
     ? [...(hasKnownExtension ? [name] : []), ...extensions.map((ext) => `${name}${ext}`)]
     : [name];
 
-  for (const dir of pathEntries) {
-    if (dir === '') {
-      continue;
-    }
+  for (const dir of directories) {
     for (const candidate of candidates) {
       const path = join(dir, candidate);
       if (isExecutableFile(path, windows)) {
@@ -117,6 +131,8 @@ export interface RequiresTarget {
   requires: string[];
   /** PATH elements its sessions will search, in order. */
   pathEntries: string[];
+  /** The sessions' working directory, or `null` for a sandbox. */
+  cwd: string | null;
   /** Number of sessions (blocks) that will run. */
   sessions: number;
 }
@@ -148,13 +164,10 @@ export function preflightRequires(
 
   for (const target of targets) {
     for (const command of target.requires) {
-      const path = resolveCommand(command, target.pathEntries, options);
+      const directories = searchDirectories(target.pathEntries, target.cwd, options);
+      const path = resolveCommand(command, directories, options);
       if (path === undefined) {
-        failures.push({
-          filePath: target.filePath,
-          command,
-          searched: target.pathEntries.filter((dir) => dir !== ''),
-        });
+        failures.push({ filePath: target.filePath, command, searched: directories });
         continue;
       }
       const key = `${command}\0${path}`;

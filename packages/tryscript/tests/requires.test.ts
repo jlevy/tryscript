@@ -24,6 +24,7 @@ import {
   preflightRequires,
   requiresProblem,
   resolveCommand,
+  searchDirectories,
 } from '../src/lib/requires.js';
 
 const posixOnly = process.platform === 'win32' ? it.skip : it;
@@ -90,6 +91,21 @@ describe('resolveCommand', () => {
   });
 });
 
+describe('searchDirectories', () => {
+  it('reads relative and empty elements from the session working directory', () => {
+    expect(searchDirectories(['/abs', 'bin', '', '.'], '/work', posix)).toEqual([
+      '/abs',
+      '/work/bin',
+      '/work',
+      '/work',
+    ]);
+  });
+
+  it('leaves relative and empty elements out when the directory is not known yet', () => {
+    expect(searchDirectories(['/abs', 'bin', ''], null, posix)).toEqual(['/abs']);
+  });
+});
+
 describe('requires validation', () => {
   it('accepts bare names only', () => {
     expect(isBareCommandName('fdu')).toBe(true);
@@ -143,9 +159,15 @@ describe('preflightRequires', () => {
     const b = join(root, 'b');
     const { resolutions, failures } = preflightRequires(
       [
-        { filePath: 'one.md', requires: ['tool'], pathEntries: [a], sessions: 3 },
-        { filePath: 'two.md', requires: ['tool'], pathEntries: [a, b], sessions: 4 },
-        { filePath: 'three.md', requires: ['tool', 'absent'], pathEntries: [b, ''], sessions: 1 },
+        { filePath: 'one.md', cwd: null, requires: ['tool'], pathEntries: [a], sessions: 3 },
+        { filePath: 'two.md', cwd: null, requires: ['tool'], pathEntries: [a, b], sessions: 4 },
+        {
+          filePath: 'three.md',
+          cwd: null,
+          requires: ['tool', 'absent'],
+          pathEntries: [b, ''],
+          sessions: 1,
+        },
       ],
       posix,
     );
@@ -252,6 +274,39 @@ hello from greet
     );
     expect(existsSync(marker)).toBe(false);
   });
+
+  posixOnly(
+    'resolves a relative PATH element from the session directory, not the launch one',
+    () => {
+      // Launch directory has bin/greet; each test file's directory decides what runs.
+      writeExecutable(join(root, 'rel', 'bin', 'greet'), '#!/bin/sh\necho "hello from greet"\n');
+      mkdirSync(join(root, 'norel'), { recursive: true });
+      const body = `---
+requires:
+  - greet
+---
+
+\`\`\`console
+$ greet
+hello from greet
+? 0
+\`\`\`
+`;
+      writeFileSync(join(root, 'rel', 'rel.tryscript.md'), body);
+      writeFileSync(join(root, 'norel', 'norel.tryscript.md'), body);
+      const env = { PATH: 'bin:/usr/bin:/bin' };
+
+      const found = run(['rel/rel.tryscript.md'], env);
+      expect(found.stderr).toContain(
+        `resolved greet -> ${join(root, 'rel', 'bin', 'greet')} (1 file, 1 session)`,
+      );
+      expect(found.exitCode).toBe(0);
+
+      const missing = run(['norel/norel.tryscript.md'], env);
+      expect(missing.exitCode).toBe(1);
+      expect(missing.stderr).toContain(`    ${join(root, 'norel', 'bin')}`);
+    },
+  );
 
   it('rejects a path in requires', () => {
     writeFileSync(
