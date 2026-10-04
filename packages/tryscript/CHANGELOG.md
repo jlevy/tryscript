@@ -1,5 +1,17 @@
 # tryscript
 
+## Unreleased
+
+### Features
+
+- Add `requires:` to frontmatter and project config (#54). Each named command must
+  resolve on the PATH its sessions will use before any session runs; otherwise the run
+  stops and names the command, the file, and every directory searched. Each resolution
+  is reported, for example
+  `resolved my-cli -> /repo/target/debug/my-cli (12 files, 129 sessions)`, so a suite
+  shows which build it exercised instead of silently falling through to an installed
+  copy.
+
 ## 0.2.2
 
 ### Fixes

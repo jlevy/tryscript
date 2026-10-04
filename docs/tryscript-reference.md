@@ -255,6 +255,8 @@ after: ./scripts/cleanup-test.sh # Run after all tests
 path:                      # Directories to prepend to PATH
   - ../dist
   - $TRYSCRIPT_PACKAGE_BIN # Access node_modules/.bin via env var
+requires:                  # Commands that must resolve before any test runs
+  - my-cli
 ---
 ```
 
@@ -271,6 +273,7 @@ path:                      # Directories to prepend to PATH
 | `before` | `string` | - | Shell command before the first test |
 | `after` | `string` | - | Shell command after all tests |
 | `path` | `string[]` | `[]` | Directories to prepend to PATH (supports `$VAR` expansion) |
+| `requires` | `string[]` | `[]` | Commands that must resolve on PATH before any session runs |
 
 ## Sandbox Mode
 
@@ -428,6 +431,38 @@ Key behavior:
 - An entry that expands to an empty string, such as a bare `$TOOL_DIR` when `TOOL_DIR`
   is unset, is dropped.
   It does not put the test file’s directory or the working directory on PATH.
+
+### `requires`: Prove Which Program Ran
+
+`path` prepends to the inherited PATH, so when an entry fails to resolve (an unset
+variable, a cleaned build directory, a typo) a command can still be found further along
+PATH, such as an installed copy instead of the build under test.
+Naming the commands a suite is about with `requires` turns that into a hard failure and
+shows where each one landed:
+
+```yaml
+---
+path:
+  - $TRYSCRIPT_GIT_ROOT/target/debug
+requires:
+  - my-cli
+---
+```
+
+```
+resolved my-cli -> /repo/target/debug/my-cli (12 files, 129 sessions)
+```
+
+Key behavior:
+
+- Every required command is looked up before the first session of the run, using the
+  same PATH each file’s sessions get, including its `path` entries.
+- If any command is missing, the run stops before running anything and names the
+  command, the test file, and every directory searched.
+- Entries must be bare command names; a path is rejected.
+  On Windows, lookup tries each `PATHEXT` extension.
+- Project config and frontmatter lists are combined.
+- The `resolved` lines go to stderr and are omitted with `--quiet`.
 
 ### Using `node_modules/.bin`
 

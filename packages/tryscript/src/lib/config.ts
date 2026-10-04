@@ -26,6 +26,11 @@ export interface TryscriptConfig {
    * Supports env var expansion: $VAR or ${VAR} syntax.
    */
   path?: string[];
+  /**
+   * Commands that must resolve on each test file's composed PATH before any session
+   * runs. Project and frontmatter lists are combined.
+   */
+  requires?: string[];
 }
 
 /** Default coverage configuration values. */
@@ -117,6 +122,14 @@ export function mergeConfig(base: TryscriptConfig, frontmatter: TestConfig): Try
     fixtures: [...(base.fixtures ?? []), ...(frontmatter.fixtures ?? [])],
     // Frontmatter paths have higher priority, so they come first
     path: [...(frontmatter.path ?? []), ...(base.path ?? [])],
+    // Union, project entries first. A malformed (non-array) value is reported by the
+    // run preflight; spreading a string here would turn it into one-letter commands.
+    requires: [
+      ...new Set([
+        ...(Array.isArray(base.requires) ? base.requires : []),
+        ...(Array.isArray(frontmatter.requires) ? frontmatter.requires : []),
+      ]),
+    ],
   };
 
   if (frontmatter.cwd !== undefined) {

@@ -17,7 +17,10 @@ import {
   createExecutionContext,
   cleanupExecutionContext,
   runAfterHook,
+  composeSessionEnvironment,
 } from '../../lib/runner.js';
+import { preflightRequires, requiresProblem } from '../../lib/requires.js';
+import type { RequiresTarget } from '../../lib/requires.js';
 import { matchOutput } from '../../lib/matcher.js';
 import { createDiff, reportFile, reportSummary } from '../../lib/reporter.js';
 import { updateTestFile } from '../../lib/updater.js';
@@ -32,6 +35,8 @@ import {
   mergeExternalCoverage,
 } from '../../lib/coverage.js';
 import type {
+  TestBlock,
+  TestFile,
   TestBlockResult,
   TestFileResult,
   TestRunSummary,
@@ -125,6 +130,104 @@ function countUnknownWildcards(expectedOutput: string): number {
   const singleLine = (expectedOutput.match(/\[\?\?]/g) ?? []).length;
   const multiLine = (expectedOutput.match(/\?\?\?\n/g) ?? []).length;
   return singleLine + multiLine;
+}
+
+/** A discovered test file, parsed before any session runs. */
+type PlannedFile =
+  | { filePath: string; parseError: TestParseError }
+  | {
+      filePath: string;
+      parseError?: undefined;
+      testFile: TestFile;
+      config: TryscriptConfig;
+      blocksToRun: TestBlock[];
+    };
+
+/** Apply --filter, then `<!-- only -->`: when any remaining block is marked only, run those. */
+function selectBlocks(blocks: TestBlock[], filter: string | undefined): TestBlock[] {
+  let selected = blocks;
+  if (filter) {
+    const filterPattern = new RegExp(filter, 'i');
+    selected = selected.filter(
+      (block) => block.name !== undefined && filterPattern.test(block.name),
+    );
+  }
+  const onlyBlocks = selected.filter((b) => b.only);
+  return onlyBlocks.length > 0 ? onlyBlocks : selected;
+}
+
+function plural(count: number, noun: string): string {
+  return `${count} ${noun}${count === 1 ? '' : 's'}`;
+}
+
+/**
+ * Check `requires:` for every file that will run, before any session starts, and report
+ * where each command resolved. Returns false, after logging why, when the run must stop.
+ */
+function checkRequires(planned: PlannedFile[], projectConfig: unknown, quiet: boolean): boolean {
+  const problems: string[] = [];
+  const projectProblem =
+    typeof projectConfig === 'object' && projectConfig !== null
+      ? requiresProblem(Reflect.get(projectConfig, 'requires'))
+      : undefined;
+  if (projectProblem) {
+    problems.push(`project config: ${projectProblem}`);
+  }
+
+  const targets: RequiresTarget[] = [];
+  for (const entry of planned) {
+    if (entry.parseError) {
+      continue;
+    }
+    const fileProblem = requiresProblem(entry.testFile.config.requires);
+    if (fileProblem) {
+      problems.push(`${entry.filePath}: ${fileProblem}`);
+      continue;
+    }
+    const sessions = entry.blocksToRun.filter((block) => !block.skip).length;
+    const requires = entry.config.requires ?? [];
+    if (sessions > 0 && requires.length > 0) {
+      targets.push({
+        filePath: entry.filePath,
+        requires,
+        pathEntries: composeSessionEnvironment(entry.config, entry.filePath).pathEntries,
+        sessions,
+      });
+    }
+  }
+
+  const { resolutions, failures } = preflightRequires(targets);
+  for (const failure of failures) {
+    const searched = failure.searched.length > 0 ? failure.searched : ['(PATH is empty)'];
+    problems.push(
+      `required command '${failure.command}' not found for ${failure.filePath}\n` +
+        `  searched:\n${searched.map((dir) => `    ${dir}`).join('\n')}`,
+    );
+  }
+
+  if (problems.length > 0) {
+    for (const problem of problems) {
+      logError(problem);
+    }
+    // Parse errors are otherwise reported as each file is reached; nothing runs now.
+    for (const entry of planned) {
+      if (entry.parseError) {
+        logError(entry.parseError.message);
+      }
+    }
+    return false;
+  }
+
+  if (!quiet) {
+    for (const r of resolutions) {
+      console.error(
+        colors.info(
+          `resolved ${r.command} -> ${r.path} (${plural(r.files, 'file')}, ${plural(r.sessions, 'session')})`,
+        ),
+      );
+    }
+  }
+  return true;
 }
 
 async function runCommand(files: string[], options: RunOptions): Promise<void> {
@@ -261,49 +364,54 @@ async function runCommand(files: string[], options: RunOptions): Promise<void> {
     let parseErrors = 0;
     let artifactFailures = 0;
 
+    // Parse every file before any session runs, so `requires:` can be checked for the
+    // whole run up front. Each entry is reported in its original position below.
+    const planned: PlannedFile[] = [];
     for (const filePath of testFiles) {
-      if (shouldStop) {
-        break;
-      }
-
       const content = await readFile(filePath, 'utf-8');
-
-      let testFile;
       try {
-        testFile = parseTestFile(content, filePath);
+        const testFile = parseTestFile(content, filePath);
+        const config = mergeConfig(globalConfig, testFile.config);
+        planned.push({
+          filePath,
+          testFile,
+          config,
+          blocksToRun: selectBlocks(testFile.blocks, opts.filter),
+        });
       } catch (error) {
         // A malformed file is a failure of that file, not a crash of the whole run.
         if (error instanceof TestParseError) {
-          logError(error.message);
-          parseErrors++;
-          if (opts.failFast) {
-            break;
-          }
+          planned.push({ filePath, parseError: error });
           continue;
         }
         throw error;
       }
+    }
+
+    if (!checkRequires(planned, loadedGlobalConfig, opts.quiet)) {
+      process.exitCode = 1;
+      return;
+    }
+
+    for (const entry of planned) {
+      if (shouldStop) {
+        break;
+      }
+
+      if (entry.parseError) {
+        logError(entry.parseError.message);
+        parseErrors++;
+        if (opts.failFast) {
+          break;
+        }
+        continue;
+      }
+
+      const { filePath, testFile, config, blocksToRun } = entry;
 
       for (const warning of testFile.configWarnings ?? []) {
         const warningPath = warning.path ? `:${warning.path}` : '';
         logWarn(`${filePath}${warningPath}: ${warning.message}`);
-      }
-
-      const config = mergeConfig(globalConfig, testFile.config);
-
-      // Filter blocks by name if specified
-      let blocksToRun = testFile.blocks;
-      if (opts.filter) {
-        const filterPattern = new RegExp(opts.filter, 'i');
-        blocksToRun = blocksToRun.filter(
-          (block) => block.name !== undefined && filterPattern.test(block.name),
-        );
-      }
-
-      // Handle "only" mode - if any block has only=true, run only those
-      const onlyBlocks = blocksToRun.filter((b) => b.only);
-      if (onlyBlocks.length > 0) {
-        blocksToRun = onlyBlocks;
       }
 
       if (blocksToRun.length === 0) {
