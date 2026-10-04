@@ -110,6 +110,26 @@ function recordingReaddir(errors: NodeJS.ErrnoException[]): typeof readdir {
 }
 
 /**
+ * Split a negation whose last segment is a brace list of literal names (`!{a,b}`,
+ * `!dir/{a,b}`) into one negation per name. fast-glob expanded braces before deciding
+ * which negations prune, so each listed directory was excluded whole.
+ */
+function expandLiteralBraces(n: ResolvedPattern): ResolvedPattern[] {
+  const segments = n.rest.split('/');
+  const last = segments.at(-1) ?? '';
+  const list = /^\{([^{}]*,[^{}]*)\}$/.exec(last)?.[1];
+  const names = list?.split(',');
+  if (
+    !names ||
+    names.some((name) => name === '' || isDynamicPattern(name) || name.includes('\\'))
+  ) {
+    return [n];
+  }
+  const prefix = segments.slice(0, -1).join('/');
+  return names.map((name) => ({ ...n, rest: prefix ? `${prefix}/${name}` : name }));
+}
+
+/**
  * Whether a negation excludes whole directories: its last segment is `**` or literal
  * (`!dir/**`, `!dir`). fast-glob pruned only for these (`isAffectDepthOfReadingPattern`);
  * a negation such as `!dir/*` excludes the files it matches but not deeper directories.
@@ -179,7 +199,7 @@ export async function findTestFiles(
     });
 
   const positives = resolved.filter((r) => !r.negated);
-  const negations = resolved.filter((r) => r.negated);
+  const negations = resolved.filter((r) => r.negated).flatMap(expandLiteralBraces);
   const matches = new Set<string>();
   const unapplied = new Set<ResolvedPattern>();
   for (const p of positives) {
@@ -207,7 +227,13 @@ export async function findTestFiles(
   // above a pattern's frame cannot be written relative to it, and one like `!dir/*`
   // must not prune `dir/sub`, which fast-glob still searched. It only subtracts: a directory
   // it cannot read holds nothing the positive patterns found, so those errors are moot.
-  for (const n of unapplied) {
+  // A negation whose base neither contains nor sits inside any positive pattern's base
+  // cannot match anything those patterns found, so its tree is not crawled.
+  const overlaps = (n: ResolvedPattern): boolean =>
+    positives.some(
+      (p) => p.root === n.root && (p.base.startsWith(n.base) || n.base.startsWith(p.base)),
+    );
+  for (const n of [...unapplied].filter(overlaps)) {
     for (const file of await globFrom(frameOf(n), [relativeTo(frameOf(n), n)], [])) {
       matches.delete(file);
     }

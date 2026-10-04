@@ -207,6 +207,20 @@ describe('findTestFiles', () => {
     );
   });
 
+  it('excludes each directory a brace list in a negation names', async () => {
+    expect(await findTestFiles(['**/*.tryscript.md', '!{tests,sub}'], root)).toEqual([
+      abs('a.tryscript.md'),
+      abs('b.tryscript.md'),
+      abs('we[i]rd (dir)/w.tryscript.md'),
+    ]);
+    expect(await findTestFiles(['**/*.tryscript.md', '!tests/{golden,unit}'], root)).toEqual([
+      abs('a.tryscript.md'),
+      abs('b.tryscript.md'),
+      abs('sub/s.tryscript.md'),
+      abs('we[i]rd (dir)/w.tryscript.md'),
+    ]);
+  });
+
   it('resolves parent-relative patterns', async () => {
     expect(await findTestFiles(['../*.tryscript.md'], join(root, 'sub'))).toEqual([
       abs('a.tryscript.md'),
