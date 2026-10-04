@@ -144,10 +144,15 @@ describe('requires validation', () => {
 describe('preflightRequires', () => {
   let root: string;
 
+  // Host lookup semantics with real host paths: on Windows, `tool` resolves through
+  // PATHEXT to `tool.CMD`.
+  const exe = process.platform === 'win32' ? 'tool.CMD' : 'tool';
+  const hostOptions = { pathext: '.CMD' };
+
   beforeAll(() => {
     root = mkdtempSync(join(tmpdir(), 'tryscript-preflight-'));
-    writeExecutable(join(root, 'a', 'tool'));
-    writeExecutable(join(root, 'b', 'tool'));
+    writeExecutable(join(root, 'a', exe));
+    writeExecutable(join(root, 'b', exe));
   });
 
   afterAll(() => {
@@ -169,11 +174,11 @@ describe('preflightRequires', () => {
           sessions: 1,
         },
       ],
-      posix,
+      hostOptions,
     );
     expect(resolutions).toEqual([
-      { command: 'tool', path: join(a, 'tool'), files: 2, sessions: 7 },
-      { command: 'tool', path: join(b, 'tool'), files: 1, sessions: 1 },
+      { command: 'tool', path: join(a, exe), files: 2, sessions: 7 },
+      { command: 'tool', path: join(b, exe), files: 1, sessions: 1 },
     ]);
     expect(failures).toEqual([{ filePath: 'three.md', command: 'absent', searched: [b] }]);
   });
