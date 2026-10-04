@@ -1,5 +1,36 @@
 # tryscript
 
+## 0.2.2
+
+### Fixes
+
+- Drop a `path:` entry that expands to an empty string, such as a bare `$TOOL_DIR`
+  when `TOOL_DIR` is unset (#55). The entry used to resolve to the test file's
+  directory, so a command lookup could find a stray executable among the test's own
+  files instead of failing with "command not found". A run whose inherited `PATH` is
+  unset or empty also no longer gets an empty `PATH` element, which POSIX reads as the
+  working directory.
+
+  **This can turn a false pass into a real failure:** a test that only passed because
+  its command was found in the test directory through an unresolved `path:` entry now
+  reports that the command was not found.
+
+### Dependencies
+
+- Replace `fast-glob` with `tinyglobby` for test discovery (#56). This removes
+  `micromatch` and `braces` from the dependency tree, clearing GHSA-vfj7-8cjw-p6xm
+  (CVE-2026-93687, stack-exhaustion denial of service in `braces`, no patched release)
+  from the audit of every project that depends on tryscript.
+
+  Patterns under the working directory select the same files as before. Two edge cases
+  change:
+
+  - A pattern that climbs above the working directory, such as `../**/*.tryscript.md`,
+    now skips `node_modules` and `dist` directories and honors `!pattern` exclusions,
+    as every other pattern already did.
+  - An absolute pattern no longer matches nothing because a directory above the
+    working directory is named `dist` or `node_modules`.
+
 ## 0.2.1
 
 ### Features
