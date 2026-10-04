@@ -19,6 +19,8 @@ import {
 } from '../src/lib/requires.js';
 
 const posixOnly = process.platform === 'win32' ? it.skip : it;
+/** POSIX lookup semantics, so these cases mean the same thing on every host. */
+const posix = { platform: 'linux' as const };
 
 function writeExecutable(path: string, body = '#!/bin/sh\necho tool\n'): void {
   mkdirSync(dirname(path), { recursive: true });
@@ -45,16 +47,18 @@ describe('resolveCommand', () => {
 
   it('returns the first PATH entry holding the command', () => {
     const entries = [join(root, 'missing'), join(root, 'first'), join(root, 'second')];
-    expect(resolveCommand('tool', entries)).toBe(join(root, 'first', 'tool'));
+    expect(resolveCommand('tool', entries, posix)).toBe(join(root, 'first', 'tool'));
   });
 
   it('skips empty entries instead of reading them as the working directory', () => {
-    expect(resolveCommand('tool', ['', join(root, 'second')])).toBe(join(root, 'second', 'tool'));
+    expect(resolveCommand('tool', ['', join(root, 'second')], posix)).toBe(
+      join(root, 'second', 'tool'),
+    );
   });
 
   posixOnly('skips files without the execute bit and directories', () => {
-    expect(resolveCommand('plain', [join(root, 'second')])).toBeUndefined();
-    expect(resolveCommand('tool', [join(root, 'second', 'dir-named-tool')])).toBeUndefined();
+    expect(resolveCommand('plain', [join(root, 'second')], posix)).toBeUndefined();
+    expect(resolveCommand('tool', [join(root, 'second', 'dir-named-tool')], posix)).toBeUndefined();
   });
 
   it('tries PATHEXT extensions on Windows', () => {
@@ -122,11 +126,14 @@ describe('preflightRequires', () => {
   it('groups resolutions by command and location, and lists searched directories on failure', () => {
     const a = join(root, 'a');
     const b = join(root, 'b');
-    const { resolutions, failures } = preflightRequires([
-      { filePath: 'one.md', requires: ['tool'], pathEntries: [a], sessions: 3 },
-      { filePath: 'two.md', requires: ['tool'], pathEntries: [a, b], sessions: 4 },
-      { filePath: 'three.md', requires: ['tool', 'absent'], pathEntries: [b, ''], sessions: 1 },
-    ]);
+    const { resolutions, failures } = preflightRequires(
+      [
+        { filePath: 'one.md', requires: ['tool'], pathEntries: [a], sessions: 3 },
+        { filePath: 'two.md', requires: ['tool'], pathEntries: [a, b], sessions: 4 },
+        { filePath: 'three.md', requires: ['tool', 'absent'], pathEntries: [b, ''], sessions: 1 },
+      ],
+      posix,
+    );
     expect(resolutions).toEqual([
       { command: 'tool', path: join(a, 'tool'), files: 2, sessions: 7 },
       { command: 'tool', path: join(b, 'tool'), files: 1, sessions: 1 },
