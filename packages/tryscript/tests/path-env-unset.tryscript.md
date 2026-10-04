@@ -7,7 +7,7 @@ path:
 
 # Test: path drops entries that expand to empty
 
-A `path:` entry naming an unset variable contributes nothing. Before v0.2.2 it resolved
+A `path:` entry naming an unset variable contributes nothing. Before v0.3.0 it resolved
 to the test file's directory, so a command lookup could find a stray executable among the
 test's own files instead of reporting that the command was not found.
 

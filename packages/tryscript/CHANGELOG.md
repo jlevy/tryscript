@@ -1,6 +1,6 @@
 # tryscript
 
-## Unreleased
+## 0.3.0
 
 ### Features
 
@@ -11,8 +11,6 @@
   `resolved my-cli -> /repo/target/debug/my-cli (12 files, 129 sessions)`, so a suite
   shows which build it exercised instead of silently falling through to an installed
   copy.
-
-## 0.2.2
 
 ### Fixes
 

@@ -35,8 +35,8 @@ describe('findTestFiles read errors', () => {
 
   beforeAll(async () => {
     root = realpathSync(await mkdtemp(join(tmpdir(), 'tryscript-discovery-errors-')));
-    for (const dir of ['ok', 'locked', 'vanished']) {
-      await mkdir(join(root, dir));
+    for (const dir of ['ok', 'locked', 'vanished', 'gate/proj', 'shared']) {
+      await mkdir(join(root, dir), { recursive: true });
       await writeFile(join(root, dir, 'x.tryscript.md'), '');
     }
   });
@@ -57,13 +57,32 @@ describe('findTestFiles read errors', () => {
     }
   });
 
+  it("never lists directories between cwd and another pattern's base", async () => {
+    // A traversable but unlistable parent (mode 0711) must not fail the run.
+    failures.set('gate', 'EACCES');
+    try {
+      expect(
+        await findTestFiles(
+          ['*.tryscript.md', `${root.replace(/\\/g, '/')}/shared/*.tryscript.md`],
+          join(root, 'gate', 'proj'),
+        ),
+      ).toEqual([
+        join(root, 'gate', 'proj', 'x.tryscript.md').replace(/\\/g, '/'),
+        join(root, 'shared', 'x.tryscript.md').replace(/\\/g, '/'),
+      ]);
+    } finally {
+      failures.clear();
+    }
+  });
+
   it('ignores a directory removed during the crawl (ENOENT), as fast-glob did', async () => {
     failures.set('vanished', 'ENOENT');
     try {
-      expect(await findTestFiles(['**/*.tryscript.md'], root)).toEqual([
-        join(root, 'locked', 'x.tryscript.md').replace(/\\/g, '/'),
-        join(root, 'ok', 'x.tryscript.md').replace(/\\/g, '/'),
-      ]);
+      expect(await findTestFiles(['**/*.tryscript.md'], root)).toEqual(
+        ['gate/proj', 'locked', 'ok', 'shared'].map((dir) =>
+          join(root, dir, 'x.tryscript.md').replace(/\\/g, '/'),
+        ),
+      );
     } finally {
       failures.clear();
     }
