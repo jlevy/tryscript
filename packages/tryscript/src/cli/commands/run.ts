@@ -7,8 +7,8 @@
 import type { Command } from 'commander';
 
 import { readFile } from 'node:fs/promises';
-import fg from 'fast-glob';
 import { loadConfig, mergeConfig } from '../../lib/config.js';
+import { findTestFiles } from '../../lib/discovery.js';
 import type { TryscriptConfig } from '../../lib/config.js';
 import { logWarn, logError, colors, status as statusIndicators } from '../lib/shared.js';
 import { parseTestFile, TestParseError, validateConfig } from '../../lib/parser.js';
@@ -176,16 +176,8 @@ async function runCommand(files: string[], options: RunOptions): Promise<void> {
       ? loadedGlobalConfig
       : {};
 
-  // Find test files. fast-glob returns matches in arbitrary order, so sort the unique
-  // absolute paths before execution to keep reports and --fail-fast deterministic.
   const patterns = files.length > 0 ? files : (globalConfig.tests ?? ['**/*.tryscript.md']);
-  const testFiles = (
-    await fg(patterns, {
-      ignore: ['**/node_modules/**', '**/dist/**'],
-      absolute: true,
-      dot: false,
-    })
-  ).sort((a, b) => (a < b ? -1 : a > b ? 1 : 0));
+  const testFiles = await findTestFiles(patterns);
 
   if (testFiles.length === 0) {
     logError(`No test files matched: ${patterns.join(', ')} (working directory: ${process.cwd()})`);

@@ -1042,6 +1042,13 @@ export default defineConfig({
 
 Explicit CLI file arguments override `tests`; otherwise `tests` overrides the default
 `**/*.tryscript.md` pattern.
+Patterns are globs that resolve from the working directory, or absolute paths written
+with forward slashes on every platform, including Windows.
+A `!pattern` entry excludes matches, resolved the same way; one starting with `**/`
+excludes at any depth.
+Only files match, so a pattern naming a directory selects nothing.
+Discovery never descends into `node_modules`, `dist`, or dot directories unless a
+pattern names a dot directory explicitly.
 Frontmatter values override the project config for a test file.
 Fixture lists are appended, while frontmatter `path` entries are prepended so they have
 higher command-resolution priority.
