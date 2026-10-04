@@ -121,6 +121,17 @@ describe('findTestFiles', () => {
     ]);
   });
 
+  it('keeps matches under a cwd inside dist when another pattern climbs above it', async () => {
+    const cwd = join(root, 'dist');
+    expect(await findTestFiles(['*.tryscript.md', '../sub/*.tryscript.md'], cwd)).toEqual([
+      abs('dist/d.tryscript.md'),
+      abs('sub/s.tryscript.md'),
+    ]);
+    expect(await findTestFiles(['*.tryscript.md', '!../sub/*.tryscript.md'], cwd)).toEqual([
+      abs('dist/d.tryscript.md'),
+    ]);
+  });
+
   it('treats glob characters in the cwd path literally', async () => {
     expect(
       await findTestFiles(['../a.tryscript.md', '*.tryscript.md'], join(root, 'we[i]rd (dir)')),

@@ -4,7 +4,7 @@
 
 import { readdir } from 'node:fs';
 import type { Dirent } from 'node:fs';
-import { posix, win32 } from 'node:path';
+import { win32 } from 'node:path';
 import { escapePath, glob, isDynamicPattern } from 'tinyglobby';
 
 /** Directories never searched for test files. */
@@ -45,7 +45,7 @@ function resolvePattern(pattern: string, cwd: string): ResolvedPattern {
   const absolute = isAbsolutePattern(body);
   const root = rootOf(absolute ? body : cwd);
   const start = absolute ? root : cwd;
-  const segments = body.slice(absolute ? root.length : 0).split('/');
+  const segments = (absolute ? body.slice(root.length) : body).split('/');
 
   let staticCount = 0;
   while (staticCount < segments.length - 1) {
@@ -55,13 +55,34 @@ function resolvePattern(pattern: string, cwd: string): ResolvedPattern {
     }
     staticCount++;
   }
-  const base = posix.join(start, ...segments.slice(0, staticCount));
+  const startParts = start.slice(root.length).split('/');
   return {
     negated,
     root,
-    base: base.endsWith('/') ? base : `${base}/`,
+    base: joinUnder(root, [...startParts, ...segments.slice(0, staticCount)]),
     rest: segments.slice(staticCount).join('/'),
   };
+}
+
+/**
+ * Resolve `.` and `..` segments below `root`, keeping the root intact. `posix.join` would
+ * collapse a UNC root (`//server/share/`) to `/server/share/`.
+ *
+ * @returns An absolute directory ending in `/`.
+ */
+function joinUnder(root: string, parts: string[]): string {
+  const stack: string[] = [];
+  for (const part of parts) {
+    if (part === '' || part === '.') {
+      continue;
+    }
+    if (part === '..') {
+      stack.pop();
+      continue;
+    }
+    stack.push(part);
+  }
+  return stack.length === 0 ? root : `${root}${stack.join('/')}/`;
 }
 
 /**
@@ -107,7 +128,8 @@ function commonDirectory(a: string, b: string): string {
  * negation starting with `**` excludes matches at any depth, as it did with fast-glob.
  * A pattern naming a directory matches nothing; only files are returned.
  * `node_modules` and `dist` directories are skipped below the deepest directory
- * containing `cwd` and every pattern's static base.
+ * containing both `cwd` and the pattern's static base, so a pattern under `cwd` is
+ * filtered exactly as fast-glob filtered it.
  */
 export async function findTestFiles(
   patterns: string[],
@@ -119,26 +141,16 @@ export async function findTestFiles(
   const resolved = patterns
     .filter((p) => p !== '' && !isAnywhereNegation(p))
     .map((p) => resolvePattern(p, cwdSlashed));
+  const readErrors: NodeJS.ErrnoException[] = [];
 
   // tinyglobby 0.2.17 matches paths relative to its own cwd, so a pattern rooted above
-  // that cwd (`../**/x`, or an absolute pattern) cannot match files inside it. Globbing
-  // from a common ancestor keeps every pattern at or below the cwd tinyglobby sees.
-  const matches = new Set<string>();
-  const readErrors: NodeJS.ErrnoException[] = [];
-  for (const root of new Set(resolved.filter((p) => !p.negated).map((p) => p.root))) {
-    const group = resolved.filter((p) => p.root === root);
-    let ancestor = rootOf(cwdSlashed) === root ? cwdSlashed : undefined;
-    for (const p of group) {
-      ancestor = ancestor === undefined ? p.base : commonDirectory(ancestor, p.base);
-    }
-    if (ancestor === undefined) {
-      continue;
-    }
-    const relative = group.map((p) => {
-      const prefix = escapePath(p.base.slice(ancestor.length));
-      return `${p.negated ? '!' : ''}${prefix}${p.rest}`;
-    });
-    const found = await glob([...relative, ...anywhere], {
+  // that cwd (`../**/x`, or an absolute pattern) cannot match files inside it. Each
+  // pattern is therefore globbed on its own from a directory at or above its base. One
+  // call per pattern also keeps tinyglobby from listing directories between patterns'
+  // bases, which fast-glob never read.
+  const globOne = (p: ResolvedPattern, extra: string[]): Promise<string[]> => {
+    const ancestor = rootOf(cwdSlashed) === p.root ? commonDirectory(cwdSlashed, p.base) : p.root;
+    return glob([`${escapePath(p.base.slice(ancestor.length))}${p.rest}`, ...extra], {
       cwd: ancestor,
       ignore: IGNORED,
       absolute: true,
@@ -148,10 +160,21 @@ export async function findTestFiles(
       expandDirectories: false,
       fs: { readdir: recordingReaddir(readErrors) },
     });
-    for (const file of found) {
+  };
+
+  const matches = new Set<string>();
+  for (const p of resolved.filter((r) => !r.negated)) {
+    for (const file of await globOne(p, anywhere)) {
       matches.add(file);
     }
   }
+  // A negation removes exactly the files it would match as a pattern of its own.
+  for (const n of resolved.filter((r) => r.negated)) {
+    for (const file of await globOne(n, [])) {
+      matches.delete(file);
+    }
+  }
+
   const [first] = readErrors;
   if (first) {
     const others = readErrors.length > 1 ? ` (and ${readErrors.length - 1} more)` : '';
