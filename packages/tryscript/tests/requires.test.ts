@@ -5,7 +5,15 @@
 
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { spawnSync } from 'node:child_process';
-import { chmodSync, existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import {
+  chmodSync,
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  rmSync,
+  symlinkSync,
+  writeFileSync,
+} from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -54,6 +62,13 @@ describe('resolveCommand', () => {
     expect(resolveCommand('tool', ['', join(root, 'second')], posix)).toBe(
       join(root, 'second', 'tool'),
     );
+  });
+
+  posixOnly('treats a symlink loop as no command rather than an error', () => {
+    const dir = join(root, 'loop');
+    mkdirSync(dir);
+    symlinkSync(join(dir, 'tool'), join(dir, 'tool'));
+    expect(resolveCommand('tool', [dir], posix)).toBeUndefined();
   });
 
   posixOnly('skips files without the execute bit and directories', () => {

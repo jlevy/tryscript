@@ -19,6 +19,16 @@ export function isBareCommandName(name: string): boolean {
   return name !== '' && !/[\\/]/.test(name);
 }
 
+/** Errors meaning "nothing runnable at this path", as a shell lookup treats them. */
+const NOT_RUNNABLE_CODES = new Set([
+  'ENOENT',
+  'ENOTDIR',
+  'EACCES',
+  'EPERM',
+  'ELOOP',
+  'ENAMETOOLONG',
+]);
+
 function isExecutableFile(candidate: string, windows: boolean): boolean {
   try {
     if (!statSync(candidate).isFile()) {
@@ -29,8 +39,12 @@ function isExecutableFile(candidate: string, windows: boolean): boolean {
       accessSync(candidate, constants.X_OK);
     }
     return true;
-  } catch {
-    return false;
+  } catch (error) {
+    // Anything else (EIO, EMFILE) is a fault to report, not a missing command.
+    if (NOT_RUNNABLE_CODES.has((error as NodeJS.ErrnoException).code ?? '')) {
+      return false;
+    }
+    throw error;
   }
 }
 
@@ -84,10 +98,13 @@ export function requiresProblem(value: unknown): string | undefined {
   if (value === undefined) {
     return undefined;
   }
-  if (!Array.isArray(value) || value.some((entry) => typeof entry !== 'string')) {
+  if (
+    !Array.isArray(value) ||
+    !value.every((entry): entry is string => typeof entry === 'string')
+  ) {
     return 'requires must be a list of command names';
   }
-  const path = (value as string[]).find((entry) => !isBareCommandName(entry));
+  const path = value.find((entry) => !isBareCommandName(entry));
   return path === undefined
     ? undefined
     : `requires entry '${path}' must be a bare command name, not a path`;

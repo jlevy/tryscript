@@ -461,6 +461,8 @@ Key behavior:
   command, the test file, and every directory searched.
 - Entries must be bare command names; a path is rejected.
   On Windows, lookup tries each `PATHEXT` extension.
+  `cmd.exe` also searches the session’s working directory before PATH, which this check
+  does not model.
 - Project config and frontmatter lists are combined.
 - The `resolved` lines go to stderr and are omitted with `--quiet`.
 
