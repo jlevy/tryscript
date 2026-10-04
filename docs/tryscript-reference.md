@@ -425,6 +425,9 @@ Key behavior:
 - `$VAR` and `${VAR}` expand first from tryscript’s built-in variables, then from the
   process environment.
   An undefined variable expands to an empty string.
+- An entry that expands to an empty string, such as a bare `$TOOL_DIR` when `TOOL_DIR`
+  is unset, is dropped.
+  It does not put the test file’s directory or the working directory on PATH.
 
 ### Using `node_modules/.bin`
 

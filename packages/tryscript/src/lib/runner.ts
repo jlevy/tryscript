@@ -205,14 +205,20 @@ export async function createExecutionContext(
     const pathParts: string[] = [];
     if (config.path && config.path.length > 0) {
       // Expand env vars, preserve absolute entries, and resolve the rest from testDir.
-      pathParts.push(
-        ...config.path.map((p) => {
-          const expanded = expandEnvVars(p);
-          return isAbsolute(expanded) ? expanded : resolve(testDir, expanded);
-        }),
-      );
+      // An entry that expands to nothing, such as a bare unset `$TOOL_DIR`, is dropped:
+      // resolving it would put testDir on PATH, a directory the author never named.
+      for (const p of config.path) {
+        const expanded = expandEnvVars(p);
+        if (expanded === '') {
+          continue;
+        }
+        pathParts.push(isAbsolute(expanded) ? expanded : resolve(testDir, expanded));
+      }
     }
-    pathParts.push(process.env.PATH ?? '');
+    // An empty PATH element means the working directory, so never append one.
+    if (process.env.PATH) {
+      pathParts.push(process.env.PATH);
+    }
 
     // Expand env vars in `env:` values, exactly as `path:` entries are expanded above.
     // Without this the two fields disagree about what `$TRYSCRIPT_GIT_ROOT` means: one
