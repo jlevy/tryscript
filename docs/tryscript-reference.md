@@ -1087,7 +1087,10 @@ Patterns are globs that resolve from the working directory, or absolute paths wr
 with forward slashes on every platform, including Windows.
 A `!pattern` entry excludes matches, resolved the same way; one starting with `**/`
 excludes at any depth.
-Only files match, so a pattern naming a directory selects nothing.
+One ending in `**` or a literal name (`!fixtures/**`, `!fixtures`) excludes the whole
+directory without reading it.
+Like inclusions, an exclusion does not match inside a dot directory unless it names that
+directory. Only files match, so a pattern naming a directory selects nothing.
 Discovery never descends into `node_modules`, `dist`, or dot directories unless a
 pattern names a dot directory explicitly.
 Frontmatter values override the project config for a test file.

@@ -75,6 +75,19 @@ describe('findTestFiles read errors', () => {
     }
   });
 
+  it('never reads a directory a negation excludes', async () => {
+    failures.set('locked', 'EACCES');
+    try {
+      expect(await findTestFiles(['**/*.tryscript.md', '!locked/**'], root)).toEqual(
+        ['gate/proj', 'ok', 'shared', 'vanished'].map((dir) =>
+          join(root, dir, 'x.tryscript.md').replace(/\\/g, '/'),
+        ),
+      );
+    } finally {
+      failures.clear();
+    }
+  });
+
   it('ignores a directory removed during the crawl (ENOENT), as fast-glob did', async () => {
     failures.set('vanished', 'ENOENT');
     try {

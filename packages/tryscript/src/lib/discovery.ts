@@ -109,6 +109,16 @@ function recordingReaddir(errors: NodeJS.ErrnoException[]): typeof readdir {
   return recording as unknown as typeof readdir;
 }
 
+/**
+ * Whether a negation excludes whole directories: its last segment is `**` or literal
+ * (`!dir/**`, `!dir`). fast-glob pruned only for these (`isAffectDepthOfReadingPattern`);
+ * a negation such as `!dir/*` excludes the files it matches but not deeper directories.
+ */
+function prunesDirectories(n: ResolvedPattern): boolean {
+  const last = n.rest.split('/').at(-1) ?? '';
+  return last === '**' || (last !== '' && !last.includes('\\') && !isDynamicPattern(last));
+}
+
 /** Deepest directory containing both paths; each ends in `/`. */
 function commonDirectory(a: string, b: string): string {
   const aParts = a.split('/');
@@ -148,29 +158,57 @@ export async function findTestFiles(
   // pattern is therefore globbed on its own from a directory at or above its base. One
   // call per pattern also keeps tinyglobby from listing directories between patterns'
   // bases, which fast-glob never read.
-  const globOne = (p: ResolvedPattern, extra: string[]): Promise<string[]> => {
-    const ancestor = rootOf(cwdSlashed) === p.root ? commonDirectory(cwdSlashed, p.base) : p.root;
-    return glob([`${escapePath(p.base.slice(ancestor.length))}${p.rest}`, ...extra], {
-      cwd: ancestor,
+  const frameOf = (p: ResolvedPattern): string =>
+    rootOf(cwdSlashed) === p.root ? commonDirectory(cwdSlashed, p.base) : p.root;
+  const relativeTo = (frame: string, p: ResolvedPattern): string =>
+    `${escapePath(p.base.slice(frame.length))}${p.rest}`;
+  const globFrom = (
+    frame: string,
+    globPatterns: string[],
+    errors: NodeJS.ErrnoException[],
+  ): Promise<string[]> =>
+    glob(globPatterns, {
+      cwd: frame,
       ignore: IGNORED,
       absolute: true,
       dot: false,
       // tinyglobby expands a directory pattern into its contents by default; fast-glob,
       // which tryscript used through v0.2.1, never did.
       expandDirectories: false,
-      fs: { readdir: recordingReaddir(readErrors) },
+      fs: { readdir: recordingReaddir(errors) },
     });
-  };
 
+  const positives = resolved.filter((r) => !r.negated);
+  const negations = resolved.filter((r) => r.negated);
   const matches = new Set<string>();
-  for (const p of resolved.filter((r) => !r.negated)) {
-    for (const file of await globOne(p, anywhere)) {
+  const unapplied = new Set<ResolvedPattern>();
+  for (const p of positives) {
+    const frame = frameOf(p);
+    // A pruning negation inside this frame goes to tinyglobby, which then skips the
+    // directories it excludes; `!dir` excludes the whole directory.
+    const inFrame = negations.filter(
+      (n) => prunesDirectories(n) && n.root === p.root && n.base.startsWith(frame),
+    );
+    for (const n of negations) {
+      if (!inFrame.includes(n)) {
+        unapplied.add(n);
+      }
+    }
+    const globPatterns = [
+      relativeTo(frame, p),
+      ...inFrame.map((n) => `!${relativeTo(frame, n)}`),
+      ...anywhere,
+    ];
+    for (const file of await globFrom(frame, globPatterns, readErrors)) {
       matches.add(file);
     }
   }
-  // A negation removes exactly the files it would match as a pattern of its own.
-  for (const n of resolved.filter((r) => r.negated)) {
-    for (const file of await globOne(n, [])) {
+  // Any other negation removes the files it matches as a pattern of its own: one rooted
+  // above a pattern's frame cannot be written relative to it, and one like `!dir/*`
+  // must not prune `dir/sub`, which fast-glob still searched. It only subtracts: a directory
+  // it cannot read holds nothing the positive patterns found, so those errors are moot.
+  for (const n of unapplied) {
+    for (const file of await globFrom(frameOf(n), [relativeTo(frameOf(n), n)], [])) {
       matches.delete(file);
     }
   }

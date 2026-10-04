@@ -192,6 +192,21 @@ describe('findTestFiles', () => {
     ]);
   });
 
+  it('excludes a whole directory named by a negation', async () => {
+    expect(await findTestFiles(['**/*.tryscript.md', '!tests'], root)).toEqual([
+      abs('a.tryscript.md'),
+      abs('b.tryscript.md'),
+      abs('sub/s.tryscript.md'),
+      abs('we[i]rd (dir)/w.tryscript.md'),
+    ]);
+  });
+
+  it('excludes files but not deeper directories for a negation ending in a wildcard', async () => {
+    expect(await findTestFiles(['**/*.tryscript.md', '!tests/*'], root)).toEqual(
+      await findTestFiles(['**/*.tryscript.md'], root),
+    );
+  });
+
   it('resolves parent-relative patterns', async () => {
     expect(await findTestFiles(['../*.tryscript.md'], join(root, 'sub'))).toEqual([
       abs('a.tryscript.md'),
