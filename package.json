@@ -39,24 +39,23 @@
     "atomically": "2.1.0",
     "eslint": "10.8.0",
     "eslint-config-prettier": "10.1.8",
-    "lefthook": "2.1.10",
+    "lefthook": "2.1.14",
     "npm-check-updates": "22.2.9",
-    "prettier": "3.9.6",
-    "publint": "0.3.22",
+    "prettier": "3.9.8",
+    "publint": "0.3.24",
     "tsdown": "0.21.10",
     "typescript": "6.0.3",
-    "typescript-eslint": "8.65.0",
-    "vitest": "4.1.10"
+    "typescript-eslint": "8.70.0",
+    "vitest": "4.1.11"
   },
   "pnpm": {
     "overrides": {
-      "minimatch@9.0.7>brace-expansion": "5.0.9",
-      "minimatch@10.2.5>brace-expansion": "5.0.9",
+      "brace-expansion@>=4.0.0 <5.0.12": "5.0.12",
       "postcss>nanoid": "3.3.18",
-      "micromatch>picomatch": "2.3.2",
       "minimatch@>=9.0.0 <9.0.7": "9.0.7",
       "flatted@<3.4.2": "3.4.2",
-      "picomatch@>=4.0.0 <5": "4.0.5",
+      "@humanfs/node@<0.16.8": "0.16.8",
+      "picomatch@>=4.0.0 <4.0.5": "4.0.5",
       "vite@>=7.0.0 <7.3.5": "7.3.5",
       "esbuild@>=0.27.3 <0.28.1": "0.28.1"
     }

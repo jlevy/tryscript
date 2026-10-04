@@ -22,3 +22,7 @@ backups/
 
 # workspaces/ stores state (including outbox) committed to the working branch
 !workspaces/
+
+
+# Lock directories for checkout-local writes
+locks/

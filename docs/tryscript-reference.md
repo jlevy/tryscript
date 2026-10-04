@@ -255,6 +255,8 @@ after: ./scripts/cleanup-test.sh # Run after all tests
 path:                      # Directories to prepend to PATH
   - ../dist
   - $TRYSCRIPT_PACKAGE_BIN # Access node_modules/.bin via env var
+requires:                  # Commands that must resolve before any test runs
+  - my-cli
 ---
 ```
 
@@ -271,6 +273,7 @@ path:                      # Directories to prepend to PATH
 | `before` | `string` | - | Shell command before the first test |
 | `after` | `string` | - | Shell command after all tests |
 | `path` | `string[]` | `[]` | Directories to prepend to PATH (supports `$VAR` expansion) |
+| `requires` | `string[]` | `[]` | Commands that must resolve on PATH before any session runs |
 
 ## Sandbox Mode
 
@@ -425,6 +428,47 @@ Key behavior:
 - `$VAR` and `${VAR}` expand first from tryscript’s built-in variables, then from the
   process environment.
   An undefined variable expands to an empty string.
+- An entry that expands to an empty string, such as a bare `$TOOL_DIR` when `TOOL_DIR`
+  is unset, is dropped.
+  It does not put the test file’s directory or the working directory on PATH.
+
+### `requires`: Prove Which Program Ran
+
+`path` prepends to the inherited PATH, so when an entry fails to resolve (an unset
+variable, a cleaned build directory, a typo) a command can still be found further along
+PATH, such as an installed copy instead of the build under test.
+Naming the commands a suite is about with `requires` turns that into a hard failure and
+shows where each one landed:
+
+```yaml
+---
+path:
+  - $TRYSCRIPT_GIT_ROOT/target/debug
+requires:
+  - my-cli
+---
+```
+
+```
+resolved my-cli -> /repo/target/debug/my-cli (12 files, 129 sessions)
+```
+
+Key behavior:
+
+- Every required command is looked up before the first session of the run, using the
+  same PATH each file’s sessions get, including its `path` entries.
+- A relative or empty element inherited in PATH is read from the session’s working
+  directory, as the shell reads it.
+  In a sandbox, whose directory does not exist yet, such elements are not searched.
+- If any command is missing, the run stops before running anything and names the
+  command, the test file, and every directory searched.
+- Entries must be bare command names; a path is rejected.
+  On Windows, lookup tries each `PATHEXT` extension.
+  `cmd.exe` also searches the session’s working directory before PATH, which this check
+  does not model.
+- Project config and frontmatter lists are combined.
+- The `resolved` lines go to stderr and are omitted with `--quiet`.
+- The check is part of `tryscript run`; the programmatic API does not perform it.
 
 ### Using `node_modules/.bin`
 
@@ -1039,6 +1083,16 @@ export default defineConfig({
 
 Explicit CLI file arguments override `tests`; otherwise `tests` overrides the default
 `**/*.tryscript.md` pattern.
+Patterns are globs that resolve from the working directory, or absolute paths written
+with forward slashes on every platform, including Windows.
+A `!pattern` entry excludes matches, resolved the same way; one starting with `**/`
+excludes at any depth.
+One ending in `**` or a literal name (`!fixtures/**`, `!fixtures`) excludes the whole
+directory without reading it.
+Like inclusions, an exclusion does not match inside a dot directory unless it names that
+directory. Only files match, so a pattern naming a directory selects nothing.
+Discovery never descends into `node_modules`, `dist`, or dot directories unless a
+pattern names a dot directory explicitly.
 Frontmatter values override the project config for a test file.
 Fixture lists are appended, while frontmatter `path` entries are prepended so they have
 higher command-resolution priority.

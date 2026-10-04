@@ -178,6 +178,33 @@ describe('createExecutionContext', () => {
     expect(ctx.env.PATH?.split(delimiter)[0]).toBe(absoluteToolsPath);
   });
 
+  it('drops a path entry that expands to empty instead of putting testDir on PATH (#55)', async () => {
+    const toolsPath = resolve(TEST_DIR, 'tools');
+    delete process.env.TRYSCRIPT_TEST_UNSET_DIR;
+
+    ctx = await createExecutionContext(
+      { path: ['$TRYSCRIPT_TEST_UNSET_DIR', '${TRYSCRIPT_TEST_UNSET_DIR}', 'tools'] },
+      TEST_FILE,
+    );
+
+    const entries = ctx.env.PATH?.split(delimiter) ?? [];
+    expect(entries[0]).toBe(toolsPath);
+    expect(entries).not.toContain(TEST_DIR);
+    expect(entries).not.toContain('');
+    expect(ctx.env.PATH).toBe([toolsPath, process.env.PATH].join(delimiter));
+  });
+
+  it('never appends an empty PATH element when no PATH is inherited', async () => {
+    const originalPath = process.env.PATH;
+    delete process.env.PATH;
+    try {
+      ctx = await createExecutionContext({ path: ['tools'] }, TEST_FILE);
+      expect(ctx.env.PATH).toBe(resolve(TEST_DIR, 'tools'));
+    } finally {
+      process.env.PATH = originalPath;
+    }
+  });
+
   it('removes its temp directory when fixture setup fails', async () => {
     const isolatedTempRoot = mkdtempSync(join(tmpdir(), 'tryscript-runner-test-'));
     const originalTempDir = process.env.TMPDIR;

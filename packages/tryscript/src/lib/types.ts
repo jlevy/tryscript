@@ -96,6 +96,10 @@ export const TestConfigSchema = z.object({
     .optional()
     .describe('Directories to prepend to PATH (relative entries resolve from the test file)'),
   coverage: CoverageConfigSchema.optional().describe('Coverage options used with --coverage'),
+  requires: z
+    .array(z.string().regex(/^[^\\/]+$/, 'requires entries must be bare command names, not paths'))
+    .optional()
+    .describe('Commands that must resolve on PATH before any session runs'),
 });
 
 /**

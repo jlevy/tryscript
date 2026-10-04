@@ -118,6 +118,101 @@ async function setupFixtures(
   }
 }
 
+/** Built-in variables and the composed PATH a test file's sessions run with. */
+export interface SessionEnvironment {
+  /** `TRYSCRIPT_*` variables, which also take precedence in `$VAR` expansion. */
+  tryscriptEnvVars: Record<string, string>;
+  /** Expands `$VAR`/`${VAR}` against `tryscriptEnvVars`, then the process environment. */
+  expandEnvVars: (value: string) => string;
+  /** PATH elements in lookup order: config `path:` entries, then the inherited PATH. */
+  pathEntries: string[];
+  /**
+   * Working directory the sessions will run in, or `null` for a sandbox, whose temporary
+   * directory does not exist until the execution context is created.
+   */
+  cwd: string | null;
+}
+
+/** `cwd:` resolved from the test file's directory, or that directory when unset. */
+function unsandboxedCwd(config: TryscriptConfig, testDir: string): string {
+  return config.cwd ? resolve(testDir, config.cwd) : testDir;
+}
+
+/**
+ * Compose the variables and PATH for a test file without creating its sandbox, so a
+ * preflight check can ask the same lookup question its sessions will.
+ */
+export function composeSessionEnvironment(
+  config: TryscriptConfig,
+  testFilePath: string,
+): SessionEnvironment {
+  const testDir = resolve(dirname(testFilePath));
+
+  // Find package root for TRYSCRIPT_PACKAGE_ROOT (always available)
+  const pkgPath = findPackageJson(testDir);
+  const packageRoot = pkgPath ? dirname(pkgPath) : undefined;
+
+  // Find git root for TRYSCRIPT_GIT_ROOT
+  const gitRoot = findGitRoot(testDir) ?? undefined;
+
+  // TRYSCRIPT_PROJECT_ROOT is the most specific (deepest) of package or git root
+  // Deeper path = longer string = more specific project boundary
+  const projectRoot =
+    packageRoot && gitRoot
+      ? packageRoot.length >= gitRoot.length
+        ? packageRoot
+        : gitRoot
+      : (packageRoot ?? gitRoot);
+
+  // TRYSCRIPT_PACKAGE_BIN points to node_modules/.bin if it exists
+  const packageBinPath = packageRoot ? join(packageRoot, 'node_modules', '.bin') : undefined;
+  const packageBin = packageBinPath && existsSync(packageBinPath) ? packageBinPath : undefined;
+
+  // Build env vars map for path expansion (before building PATH)
+  const tryscriptEnvVars: Record<string, string> = {
+    ...(packageRoot && { TRYSCRIPT_PACKAGE_ROOT: packageRoot }),
+    ...(gitRoot && { TRYSCRIPT_GIT_ROOT: gitRoot }),
+    ...(projectRoot && { TRYSCRIPT_PROJECT_ROOT: projectRoot }),
+    ...(packageBin && { TRYSCRIPT_PACKAGE_BIN: packageBin }),
+    TRYSCRIPT_TEST_DIR: testDir,
+    // `.exe` on Windows, empty elsewhere. Front matter that names a built binary by
+    // path needs this to stay portable; without it the only portable way to reach an
+    // executable is a bare name, which is a PATH lookup the test cannot control.
+    TRYSCRIPT_EXE: process.platform === 'win32' ? '.exe' : '',
+  };
+
+  // Create expander with tryscript env vars taking precedence
+  const expandEnvVars = createEnvExpander(tryscriptEnvVars);
+
+  // Build PATH: config paths > system PATH
+  const pathParts: string[] = [];
+  if (config.path && config.path.length > 0) {
+    // Expand env vars, preserve absolute entries, and resolve the rest from testDir.
+    // An entry that expands to nothing, such as a bare unset `$TOOL_DIR`, is dropped:
+    // resolving it would put testDir on PATH, a directory the author never named.
+    for (const p of config.path) {
+      const expanded = expandEnvVars(p);
+      if (expanded === '') {
+        continue;
+      }
+      pathParts.push(isAbsolute(expanded) ? expanded : resolve(testDir, expanded));
+    }
+  }
+  // An empty PATH element means the working directory, so never append one. Inherited
+  // elements are kept exactly as given, so joining reproduces the inherited PATH.
+  if (process.env.PATH) {
+    pathParts.push(...process.env.PATH.split(delimiter));
+  }
+
+  const sandboxed = config.sandbox === true || typeof config.sandbox === 'string';
+  return {
+    tryscriptEnvVars,
+    expandEnvVars,
+    pathEntries: pathParts,
+    cwd: sandboxed ? null : unsandboxedCwd(config, testDir),
+  };
+}
+
 /**
  * Create an execution context for a test file.
  * @param config - Test configuration
@@ -152,12 +247,8 @@ export async function createExecutionContext(
       await cp(srcPath, tempDir, { recursive: true });
       cwd = tempDir;
       sandbox = true;
-    } else if (config.cwd) {
-      // Run in specified directory (relative to test file)
-      cwd = resolve(testDir, config.cwd);
     } else {
-      // Default: run in test file directory
-      cwd = testDir;
+      cwd = unsandboxedCwd(config, testDir);
     }
 
     // Copy additional fixtures to sandbox (only if sandbox enabled)
@@ -165,54 +256,10 @@ export async function createExecutionContext(
       await setupFixtures(config.fixtures, testDir, tempDir);
     }
 
-    // Find package root for TRYSCRIPT_PACKAGE_ROOT (always available)
-    const pkgPath = findPackageJson(testDir);
-    const packageRoot = pkgPath ? dirname(pkgPath) : undefined;
-
-    // Find git root for TRYSCRIPT_GIT_ROOT
-    const gitRoot = findGitRoot(testDir) ?? undefined;
-
-    // TRYSCRIPT_PROJECT_ROOT is the most specific (deepest) of package or git root
-    // Deeper path = longer string = more specific project boundary
-    const projectRoot =
-      packageRoot && gitRoot
-        ? packageRoot.length >= gitRoot.length
-          ? packageRoot
-          : gitRoot
-        : (packageRoot ?? gitRoot);
-
-    // TRYSCRIPT_PACKAGE_BIN points to node_modules/.bin if it exists
-    const packageBinPath = packageRoot ? join(packageRoot, 'node_modules', '.bin') : undefined;
-    const packageBin = packageBinPath && existsSync(packageBinPath) ? packageBinPath : undefined;
-
-    // Build env vars map for path expansion (before building PATH)
-    const tryscriptEnvVars: Record<string, string> = {
-      ...(packageRoot && { TRYSCRIPT_PACKAGE_ROOT: packageRoot }),
-      ...(gitRoot && { TRYSCRIPT_GIT_ROOT: gitRoot }),
-      ...(projectRoot && { TRYSCRIPT_PROJECT_ROOT: projectRoot }),
-      ...(packageBin && { TRYSCRIPT_PACKAGE_BIN: packageBin }),
-      TRYSCRIPT_TEST_DIR: testDir,
-      // `.exe` on Windows, empty elsewhere. Front matter that names a built binary by
-      // path needs this to stay portable; without it the only portable way to reach an
-      // executable is a bare name, which is a PATH lookup the test cannot control.
-      TRYSCRIPT_EXE: process.platform === 'win32' ? '.exe' : '',
-    };
-
-    // Create expander with tryscript env vars taking precedence
-    const expandEnvVars = createEnvExpander(tryscriptEnvVars);
-
-    // Build PATH: config paths > system PATH
-    const pathParts: string[] = [];
-    if (config.path && config.path.length > 0) {
-      // Expand env vars, preserve absolute entries, and resolve the rest from testDir.
-      pathParts.push(
-        ...config.path.map((p) => {
-          const expanded = expandEnvVars(p);
-          return isAbsolute(expanded) ? expanded : resolve(testDir, expanded);
-        }),
-      );
-    }
-    pathParts.push(process.env.PATH ?? '');
+    const { tryscriptEnvVars, expandEnvVars, pathEntries } = composeSessionEnvironment(
+      config,
+      testFilePath,
+    );
 
     // Expand env vars in `env:` values, exactly as `path:` entries are expanded above.
     // Without this the two fields disagree about what `$TRYSCRIPT_GIT_ROOT` means: one
@@ -243,7 +290,7 @@ export async function createExecutionContext(
         // Provide project roots for manual path construction
         ...tryscriptEnvVars,
         // Custom PATH with config paths
-        PATH: pathParts.join(delimiter),
+        PATH: pathEntries.join(delimiter),
       },
       timeout: config.timeout ?? DEFAULT_TIMEOUT,
       ...(config.before === undefined ? {} : { before: config.before }),
