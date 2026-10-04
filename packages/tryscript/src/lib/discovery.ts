@@ -2,6 +2,8 @@
  * Test file discovery.
  */
 
+import { readdir } from 'node:fs';
+import type { Dirent } from 'node:fs';
 import { posix, win32 } from 'node:path';
 import { escapePath, glob, isDynamicPattern } from 'tinyglobby';
 
@@ -62,6 +64,30 @@ function resolvePattern(pattern: string, cwd: string): ResolvedPattern {
   };
 }
 
+/**
+ * A `readdir` that records failures. fdir, which tinyglobby crawls with, drops readdir
+ * errors, so an unreadable directory would silently remove its tests from the run.
+ * fast-glob, used through v0.2.1, failed instead, ignoring only ENOENT (a directory
+ * removed mid-crawl).
+ */
+function recordingReaddir(errors: NodeJS.ErrnoException[]): typeof readdir {
+  const recording = (
+    path: string,
+    options: { withFileTypes: true },
+    callback: (error: NodeJS.ErrnoException | null, entries: Dirent[]) => void,
+  ): void => {
+    readdir(path, options, (error, entries) => {
+      if (error && error.code !== 'ENOENT') {
+        errors.push(error);
+      }
+      callback(error, entries);
+    });
+  };
+  // fdir calls only this (path, { withFileTypes: true }, callback) form; `readdir`'s
+  // remaining overloads cannot be implemented by one function, hence the single cast.
+  return recording as unknown as typeof readdir;
+}
+
 /** Deepest directory containing both paths; each ends in `/`. */
 function commonDirectory(a: string, b: string): string {
   const aParts = a.split('/');
@@ -98,6 +124,7 @@ export async function findTestFiles(
   // that cwd (`../**/x`, or an absolute pattern) cannot match files inside it. Globbing
   // from a common ancestor keeps every pattern at or below the cwd tinyglobby sees.
   const matches = new Set<string>();
+  const readErrors: NodeJS.ErrnoException[] = [];
   for (const root of new Set(resolved.filter((p) => !p.negated).map((p) => p.root))) {
     const group = resolved.filter((p) => p.root === root);
     let ancestor = rootOf(cwdSlashed) === root ? cwdSlashed : undefined;
@@ -119,10 +146,21 @@ export async function findTestFiles(
       // tinyglobby expands a directory pattern into its contents by default; fast-glob,
       // which tryscript used through v0.2.1, never did.
       expandDirectories: false,
+      fs: { readdir: recordingReaddir(readErrors) },
     });
     for (const file of found) {
       matches.add(file);
     }
+  }
+  const [first] = readErrors;
+  if (first) {
+    const others = readErrors.length > 1 ? ` (and ${readErrors.length - 1} more)` : '';
+    throw new Error(
+      `Test discovery could not read ${first.path?.replace(/[\\/]$/, '') ?? 'a directory'}: ` +
+        `${first.code ?? first.message}${others}. ` +
+        'Fix its permissions or narrow the test patterns.',
+      { cause: first },
+    );
   }
   return [...matches].sort((a, b) => (a < b ? -1 : a > b ? 1 : 0));
 }
