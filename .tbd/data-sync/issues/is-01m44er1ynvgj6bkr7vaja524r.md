@@ -3,9 +3,9 @@ type: is
 id: is-01m44er1ynvgj6bkr7vaja524r
 title: "v0.2.2 patch release: dependency advisories, upgrades, and fixes"
 kind: epic
-status: open
+status: closed
 priority: 1
-version: 10
+version: 11
 labels:
   - release
   - supply-chain
@@ -21,6 +21,10 @@ child_order_hints:
   - is-01m44er4nc8tqwpzwj1g1ffrfs
   - is-01m44gne8wvrmz35xjnpxnrb3m
 created_at: 2026-10-04T21:57:28.661Z
-updated_at: 2026-10-04T22:31:00.123Z
+updated_at: 2026-10-04T23:25:29.799Z
+closed_at: 2026-10-04T23:25:29.798Z
+close_reason: Shipped in v0.3.0.
+resolution: null
+duplicate_of: null
 ---
 Patch release batching every cool-off-eligible upgrade and in-scope fix since v0.2.1. Cool-off cutoff for this release: 2026-09-20T21:55Z (14 days before 2026-10-04). No cool-off exceptions are needed.
