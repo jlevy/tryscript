@@ -1,5 +1,13 @@
 # tryscript
 
+## 0.3.1
+
+### Security
+
+- Use Zod 4.6.6 to address GHSA-mrhx-c7xc-m3w5. Configuration records use explicit
+  string keys, and union validation warnings preserve nested entry paths.
+- Patch development-only Vitest, Vite, and source-map-js security advisories.
+
 ## 0.3.0
 
 ### Features
