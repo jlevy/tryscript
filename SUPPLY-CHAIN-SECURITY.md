@@ -109,6 +109,30 @@ the publish-side controls in `guidelines/hardening-ci-cd.md`.
 Per-ecosystem hardening playbooks, the audit script, and the watch list of recent
 compromises: <https://github.com/jlevy/supply-chain-hardening>.
 
+## Zod Security Exception (October 23, 2026)
+
+Reviewed-by: Joshua Levy, explicit approval on October 23, 2026. Exact Zod 4.6.6
+addresses GHSA-mrhx-c7xc-m3w5 and was published October 11, inside the 14-day cool-off.
+Only `zod@4.6.6` receives an age exclusion; unrelated ceilings remain unchanged.
+Registry integrity is recorded in the lockfile.
+The package retains the colinhacks/zod repository, declares no installation hooks, and
+is not deprecated. Tryscript uses the Zod 4 API directly; it does not import the bundled
+Zod 3 API.
+
+## Test-Tool Security Updates (October 23, 2026)
+
+Reviewed-by: Joshua Levy, explicit approval on October 23, 2026. Vitest 4.1.12 and its
+exact-version siblings address GHSA-qxg6-89mg-rqv8 and GHSA-xp26-3454-mjgp.
+They were published October 15 and receive exact package-version age exclusions.
+This includes the coverage-v8 sibling used by the upstream coverage gate.
+The packages retain the vitest-dev/vitest repository, have no installation hooks, and
+are not deprecated. Unrelated dependency age limits remain unchanged.
+
+Vite 7.3.7 (October 6) addresses the launch-editor advisories in the audit inventory.
+Source-map-js 1.2.2 (September 30) addresses GHSA-68fv-2mgg-jv7q. Both satisfy the
+14-day rule and need no exception.
+These changes affect development tools only.
+
 <!-- This document follows common-doc-guidelines.md.
 See github.com/jlevy/practical-prose and review guidelines before editing.
 -->
