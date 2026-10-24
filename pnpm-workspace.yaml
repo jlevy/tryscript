@@ -13,3 +13,7 @@ packages:
 # minimumReleaseAgeExclude with a documented reason and a Reviewed-by sign-off.
 # See SUPPLY-CHAIN-SECURITY.md.
 minimumReleaseAge: 20160
+
+# Reviewed-by: Joshua Levy, October 23, 2026: Zod security fix GHSA-mrhx-c7xc-m3w5.
+minimumReleaseAgeExclude:
+  - zod@4.6.6

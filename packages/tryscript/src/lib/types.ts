@@ -84,10 +84,10 @@ export const TestConfigSchema = z.object({
   fixtures: z.array(FixtureSchema).optional().describe('Files to copy to sandbox before tests'),
   before: z.string().optional().describe('Script to run before first test'),
   after: z.string().optional().describe('Script to run after all tests'),
-  env: z.record(z.string()).optional().describe('Environment variables'),
+  env: z.record(z.string(), z.string()).optional().describe('Environment variables'),
   timeout: z.number().optional().describe('Timeout per command in ms'),
   patterns: z
-    .record(z.union([z.string(), z.instanceof(RegExp)]))
+    .record(z.string(), z.union([z.string(), z.instanceof(RegExp)]))
     .optional()
     .describe('Custom elision patterns'),
   tests: z.array(z.string()).optional().describe('Test file glob patterns'),

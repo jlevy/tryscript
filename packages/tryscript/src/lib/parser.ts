@@ -1,7 +1,10 @@
 import { parse as parseYaml } from 'yaml';
-import type { ZodIssue } from 'zod';
+import type { core } from 'zod';
+
 import type { TestConfig, TestBlock, TestFile } from './types.js';
 import { BUILT_IN_PATTERN_NAMES, TestConfigSchema } from './types.js';
+
+type ZodIssue = core.$ZodIssue;
 
 const FRONTMATTER_DELIMITER_REGEX = /^---(?:\r?\n|$)/;
 const FRONTMATTER_OPEN_REGEX = /^---\r?\n/;
@@ -54,8 +57,10 @@ function actionableIssues(issue: ZodIssue): ZodIssue[] {
     return [issue];
   }
 
-  const candidates = issue.unionErrors.map((error) =>
-    error.issues.flatMap((candidate) => actionableIssues(candidate)),
+  const candidates = issue.errors.map((errors) =>
+    errors.flatMap((candidate) =>
+      actionableIssues({ ...candidate, path: [...issue.path, ...candidate.path] }),
+    ),
   );
   return candidates.reduce(
     (best, candidate) =>

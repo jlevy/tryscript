@@ -109,6 +109,16 @@ the publish-side controls in `guidelines/hardening-ci-cd.md`.
 Per-ecosystem hardening playbooks, the audit script, and the watch list of recent
 compromises: <https://github.com/jlevy/supply-chain-hardening>.
 
+## Zod Security Exception (October 23, 2026)
+
+Reviewed-by: Joshua Levy, explicit approval on October 23, 2026. Exact Zod 4.6.6
+addresses GHSA-mrhx-c7xc-m3w5 and was published October 11, inside the 14-day cool-off.
+Only `zod@4.6.6` receives an age exclusion; unrelated ceilings remain unchanged.
+Registry integrity is recorded in the lockfile.
+The package retains the colinhacks/zod repository, declares no installation hooks, and
+is not deprecated. Tryscript uses the Zod 4 API directly; it does not import the bundled
+Zod 3 API.
+
 <!-- This document follows common-doc-guidelines.md.
 See github.com/jlevy/practical-prose and review guidelines before editing.
 -->
