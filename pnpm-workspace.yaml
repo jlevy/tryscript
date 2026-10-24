@@ -17,3 +17,12 @@ minimumReleaseAge: 20160
 # Reviewed-by: Joshua Levy, October 23, 2026: Zod security fix GHSA-mrhx-c7xc-m3w5.
 minimumReleaseAgeExclude:
   - zod@4.6.6
+  - 'vitest@4.1.12'
+  - '@vitest/coverage-v8@4.1.12'
+  - '@vitest/expect@4.1.12'
+  - '@vitest/mocker@4.1.12'
+  - '@vitest/pretty-format@4.1.12'
+  - '@vitest/runner@4.1.12'
+  - '@vitest/snapshot@4.1.12'
+  - '@vitest/spy@4.1.12'
+  - '@vitest/utils@4.1.12'
