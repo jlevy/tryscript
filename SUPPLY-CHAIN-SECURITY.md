@@ -135,9 +135,9 @@ These changes affect development tools only.
 
 ## Development-Tool Audit Exception (November 17, 2026)
 
-Reviewed-by: pending; the owner’s sign-off is required before this exception merges.
-GHSA-fc5q-39xc-vjpf (high, published October 19, 2026) reports a ReDoS in picomatch’s
-handling of repeated single-branch extglobs.
+Reviewed-by: Joshua Levy, explicit approval on November 17, 2026. GHSA-fc5q-39xc-vjpf
+(high, published October 19, 2026) reports a ReDoS in picomatch’s handling of repeated
+single-branch extglobs.
 Every picomatch release through 4.0.7, the newest, is affected; none is patched.
 Tryscript 0.4.0 removes picomatch from its runtime dependencies by matching test
 patterns itself, and it rejects extended globs.
