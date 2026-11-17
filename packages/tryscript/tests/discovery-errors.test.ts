@@ -16,7 +16,7 @@ const failures = new Map<string, string>();
 vi.mock('node:fs', async (importOriginal) => {
   const actual = await importOriginal<typeof NodeFs>();
   const readdir = ((path: string, options: unknown, callback: (...args: unknown[]) => void) => {
-    // fdir passes directory paths with a trailing slash.
+    // Discovery passes directory paths with a trailing slash.
     const code = [...failures].find(([name]) => path.replace(/\/$/, '').endsWith(`/${name}`))?.[1];
     if (code) {
       const error = Object.assign(new Error(`${code}: ${path}`), { code, path });
@@ -82,6 +82,34 @@ describe('findTestFiles read errors', () => {
         ['gate/proj', 'ok', 'shared', 'vanished'].map((dir) =>
           join(root, dir, 'x.tryscript.md').replace(/\\/g, '/'),
         ),
+      );
+    } finally {
+      failures.clear();
+    }
+  });
+
+  it('never reads a directory below which no pattern can match', async () => {
+    failures.set('locked', 'EACCES');
+    try {
+      // `locked` is never read: neither `[!lg]*` nor `{ok,shared}` matches its name.
+      expect(
+        await findTestFiles(['{ok,shared}/*.tryscript.md', '[!lg]*/x.tryscript.md'], root),
+      ).toEqual(
+        ['ok', 'shared', 'vanished'].map((dir) =>
+          join(root, dir, 'x.tryscript.md').replace(/\\/g, '/'),
+        ),
+      );
+    } finally {
+      failures.clear();
+    }
+  });
+
+  it('reports every unreadable directory, naming the first in path order', async () => {
+    failures.set('vanished', 'EACCES');
+    failures.set('locked', 'EPERM');
+    try {
+      await expect(findTestFiles(['**/*.tryscript.md'], root)).rejects.toThrow(
+        `Test discovery could not read ${join(root, 'locked')}: EPERM (and 1 more).`,
       );
     } finally {
       failures.clear();

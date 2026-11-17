@@ -2,24 +2,55 @@
  * Test file discovery.
  */
 
-import { readdir } from 'node:fs';
-import type { Dirent } from 'node:fs';
+import { readdir, realpath, stat } from 'node:fs';
+import type { Dirent, Stats } from 'node:fs';
 import { win32 } from 'node:path';
-import { escapePath, glob, isDynamicPattern } from 'tinyglobby';
+import { expandBraces, findUnsupportedSyntax, isStaticSegment, PathMatcher } from './glob.js';
 
 /** Directories never searched for test files. */
-const IGNORED = ['**/node_modules/**', '**/dist/**'];
+const IGNORED_DIRECTORIES = new Set(['node_modules', 'dist']);
+
+/**
+ * Most filesystem calls in flight at once. libuv runs them on a small thread pool, so this
+ * bounds queued work and memory on large trees rather than adding parallelism.
+ */
+const MAX_CONCURRENT_FS_CALLS = 32;
 
 const isWindows = process.platform === 'win32';
 
-/** A pattern resolved to an absolute static directory plus the glob below it. */
-interface ResolvedPattern {
-  negated: boolean;
+/** A pattern resolved to the absolute static directory it starts from. */
+interface Resolved {
+  /** Filesystem root of the pattern, ending in `/`. */
   root: string;
   /** Absolute directory holding every path the pattern can match, ending in `/`. */
   base: string;
-  /** Pattern relative to `base`; never empty. */
-  rest: string;
+  /** Segments below `base`; never empty. */
+  rest: string[];
+  /** Whether the pattern itself names the last directory of `base`, as `fixtures/**` does. */
+  namesBase: boolean;
+}
+
+/** A `!pattern` exclusion. */
+interface Negation {
+  /** Absolute base for a negation resolved from cwd; undefined for one starting with `**`. */
+  base: string | undefined;
+  matcher: PathMatcher;
+  /** Whether it excludes whole directories: its last segment is `**` or a literal name. */
+  prunes: boolean;
+  /**
+   * Whether it may exclude its own base directory. `!fixtures/**` excludes `fixtures`, but
+   * `!**` and `!./**` exclude only what lies below cwd, so a dot directory a pattern names
+   * stays searchable.
+   */
+  namesBase: boolean;
+}
+
+/** Positive patterns sharing one static base, crawled together. */
+interface Crawl {
+  base: string;
+  /** Directory that `node_modules`, `dist`, and `**` negations are measured from. */
+  frame: string;
+  alternatives: string[][];
 }
 
 function toSlashes(path: string): string {
@@ -34,111 +65,6 @@ function isAbsolutePattern(pattern: string): boolean {
   return isWindows ? win32.isAbsolute(pattern) : pattern.startsWith('/');
 }
 
-/**
- * Split a pattern into the absolute directory its static leading segments name and the
- * remainder. A segment is static when it has no glob syntax and no escape.
- */
-function resolvePattern(pattern: string, cwd: string): ResolvedPattern {
-  const negated = pattern.startsWith('!') && !pattern.startsWith('!(');
-  const body = negated ? pattern.slice(1) : pattern;
-  // cwd is a literal directory, so only the pattern's own segments are scanned for globs.
-  const absolute = isAbsolutePattern(body);
-  const root = rootOf(absolute ? body : cwd);
-  const start = absolute ? root : cwd;
-  const segments = (absolute ? body.slice(root.length) : body).split('/');
-
-  let staticCount = 0;
-  while (staticCount < segments.length - 1) {
-    const segment = segments[staticCount] ?? '';
-    if (segment.includes('\\') || isDynamicPattern(segment)) {
-      break;
-    }
-    staticCount++;
-  }
-  const startParts = start.slice(root.length).split('/');
-  return {
-    negated,
-    root,
-    base: joinUnder(root, [...startParts, ...segments.slice(0, staticCount)]),
-    rest: segments.slice(staticCount).join('/'),
-  };
-}
-
-/**
- * Resolve `.` and `..` segments below `root`, keeping the root intact. `posix.join` would
- * collapse a UNC root (`//server/share/`) to `/server/share/`.
- *
- * @returns An absolute directory ending in `/`.
- */
-function joinUnder(root: string, parts: string[]): string {
-  const stack: string[] = [];
-  for (const part of parts) {
-    if (part === '' || part === '.') {
-      continue;
-    }
-    if (part === '..') {
-      stack.pop();
-      continue;
-    }
-    stack.push(part);
-  }
-  return stack.length === 0 ? root : `${root}${stack.join('/')}/`;
-}
-
-/**
- * A `readdir` that records failures. fdir, which tinyglobby crawls with, drops readdir
- * errors, so an unreadable directory would silently remove its tests from the run.
- * fast-glob, used through v0.2.1, failed instead, ignoring only ENOENT (a directory
- * removed mid-crawl).
- */
-function recordingReaddir(errors: NodeJS.ErrnoException[]): typeof readdir {
-  const recording = (
-    path: string,
-    options: { withFileTypes: true },
-    callback: (error: NodeJS.ErrnoException | null, entries: Dirent[]) => void,
-  ): void => {
-    readdir(path, options, (error, entries) => {
-      if (error && error.code !== 'ENOENT') {
-        errors.push(error);
-      }
-      callback(error, entries);
-    });
-  };
-  // fdir calls only this (path, { withFileTypes: true }, callback) form; `readdir`'s
-  // remaining overloads cannot be implemented by one function, hence the single cast.
-  return recording as unknown as typeof readdir;
-}
-
-/**
- * Split a negation whose last segment is a brace list of literal names (`!{a,b}`,
- * `!dir/{a,b}`) into one negation per name. fast-glob expanded braces before deciding
- * which negations prune, so each listed directory was excluded whole.
- */
-function expandLiteralBraces(n: ResolvedPattern): ResolvedPattern[] {
-  const segments = n.rest.split('/');
-  const last = segments.at(-1) ?? '';
-  const list = /^\{([^{}]*,[^{}]*)\}$/.exec(last)?.[1];
-  const names = list?.split(',');
-  if (
-    !names ||
-    names.some((name) => name === '' || isDynamicPattern(name) || name.includes('\\'))
-  ) {
-    return [n];
-  }
-  const prefix = segments.slice(0, -1).join('/');
-  return names.map((name) => ({ ...n, rest: prefix ? `${prefix}/${name}` : name }));
-}
-
-/**
- * Whether a negation excludes whole directories: its last segment is `**` or literal
- * (`!dir/**`, `!dir`). fast-glob pruned only for these (`isAffectDepthOfReadingPattern`);
- * a negation such as `!dir/*` excludes the files it matches but not deeper directories.
- */
-function prunesDirectories(n: ResolvedPattern): boolean {
-  const last = n.rest.split('/').at(-1) ?? '';
-  return last === '**' || (last !== '' && !last.includes('\\') && !isDynamicPattern(last));
-}
-
 /** Deepest directory containing both paths; each ends in `/`. */
 function commonDirectory(a: string, b: string): string {
   const aParts = a.split('/');
@@ -150,100 +76,434 @@ function commonDirectory(a: string, b: string): string {
   return `${aParts.slice(0, i).join('/')}/`;
 }
 
+/** The names of `path` below `base`, `[]` for `base` itself, or undefined outside it. */
+function namesBelow(path: string, base: string): string[] | undefined {
+  if (`${path}/` === base) {
+    return [];
+  }
+  return path.startsWith(base) ? path.slice(base.length).split('/') : undefined;
+}
+
+/** Every directory from the root down to `dir` (which ends in `/`), without trailing `/`. */
+function directoryPrefixes(dir: string, root: string): string[] {
+  const prefixes: string[] = [];
+  for (let i = dir.indexOf('/', root.length); i !== -1; i = dir.indexOf('/', i + 1)) {
+    prefixes.push(dir.slice(0, i));
+  }
+  return prefixes;
+}
+
+/**
+ * Resolve a pattern against cwd. Empty and `.` segments are dropped and `..` removes the
+ * segment before it, as path normalization would, so `../x` climbs above cwd. cwd segments are
+ * literal even when they contain glob characters; the base ends at the first pattern segment
+ * with glob syntax, and the last segment always stays in `rest`.
+ *
+ * @returns undefined when the pattern resolves to a filesystem root.
+ */
+function resolvePattern(body: string, cwd: string): Resolved | undefined {
+  const absolute = isAbsolutePattern(body);
+  const root = rootOf(absolute ? body : cwd);
+  const start = absolute ? [] : cwd.slice(root.length).split('/');
+  const segments: { text: string; literal: boolean }[] = [];
+  const parts = [
+    ...start.map((text) => ({ text, literal: true })),
+    ...(absolute ? body.slice(root.length) : body).split('/').map((text) => ({
+      text,
+      literal: false,
+    })),
+  ];
+  for (const part of parts) {
+    if (part.text === '' || part.text === '.') {
+      continue;
+    }
+    if (part.text === '..' && !part.literal) {
+      segments.pop();
+      continue;
+    }
+    segments.push(part);
+  }
+  if (segments.length === 0) {
+    return undefined;
+  }
+  let staticCount = 0;
+  while (staticCount < segments.length - 1) {
+    const segment = segments[staticCount];
+    if (segment === undefined || !(segment.literal || isStaticSegment(segment.text))) {
+      break;
+    }
+    staticCount++;
+  }
+  const baseNames = segments.slice(0, staticCount).map((s) => s.text);
+  return {
+    root,
+    base: baseNames.length === 0 ? root : `${root}${baseNames.join('/')}/`,
+    rest: segments.slice(staticCount).map((s) => s.text),
+    namesBase: staticCount > 0 && segments[staticCount - 1]?.literal === false,
+  };
+}
+
+/** Last segment `**` or a literal name. */
+function prunesDirectories(segments: readonly string[]): boolean {
+  const last = segments.at(-1) ?? '';
+  return last === '**' || isStaticSegment(last);
+}
+
+/** Whether a pattern has syntax that makes its literal text differ from what it matches. */
+function hasGlobSyntax(pattern: string): boolean {
+  return /[*?[{\\]/.test(pattern);
+}
+
+/** A segment that matches exactly its own text. */
+function escapeSegment(text: string): string {
+  return text.replace(/[*?[\\]/g, '\\$&');
+}
+
+/** Errors that mean a literal path names no file, rather than that it could not be read. */
+const NOT_A_FILE = new Set(['ENOENT', 'ENOTDIR', 'EINVAL', 'ENAMETOOLONG']);
+
+/** Characters no Windows file name contains, so a literal path holding one names no file. */
+const WINDOWS_INVALID_NAME = /[*?"<>|]/;
+
+/** A semaphore bounding concurrent filesystem calls. */
+function createLimiter(max: number): <T>(run: () => Promise<T>) => Promise<T> {
+  let active = 0;
+  const waiting: (() => void)[] = [];
+  return async <T>(run: () => Promise<T>): Promise<T> => {
+    if (active < max) {
+      active++;
+    } else {
+      // A released slot passes straight to the next waiter, so `active` stays accurate.
+      await new Promise<void>((resolve) => waiting.push(resolve));
+    }
+    try {
+      return await run();
+    } finally {
+      const next = waiting.shift();
+      if (next) {
+        next();
+      } else {
+        active--;
+      }
+    }
+  };
+}
+
+/**
+ * A directory on one crawl branch. Real paths are known only for the crawl base and for
+ * directories reached through a link; any other directory's real path extends its parent's,
+ * so it is derived only when a link has to be checked for a cycle.
+ */
+interface Ancestry {
+  name: string;
+  parent: Ancestry | undefined;
+  /** Real path ending in `/`, for a directory reached through a link. */
+  real: string | undefined;
+}
+
+/** Real path, ending in `/`, of a directory on the branch. */
+function realPathOf(node: Ancestry, realBase: string): string {
+  const names: string[] = [];
+  let current: Ancestry | undefined = node;
+  while (current && current.real === undefined) {
+    if (current.parent) {
+      names.push(current.name);
+    }
+    current = current.parent;
+  }
+  const start = current?.real ?? realBase;
+  return names.reverse().reduce((path, name) => `${path}${name}/`, start);
+}
+
+/** Whether a link target is a directory on the branch, or the base or one above it. */
+function isAncestor(
+  target: string,
+  node: Ancestry,
+  realBase: string,
+  above: ReadonlySet<string>,
+): boolean {
+  if (above.has(target)) {
+    return true;
+  }
+  for (let current: Ancestry | undefined = node; current; current = current.parent) {
+    if (realPathOf(current, realBase) === target) {
+      return true;
+    }
+  }
+  return false;
+}
+
 /**
  * Resolve glob patterns to the absolute paths of matching files, sorted by ordinal
  * comparison so reports and --fail-fast selection do not depend on traversal order.
  *
- * Relative patterns and negations (`!pattern`) resolve from `cwd`, except that a
- * negation starting with `**` excludes matches at any depth, as it did with fast-glob.
- * A pattern naming a directory matches nothing; only files are returned.
- * `node_modules` and `dist` directories are skipped below the deepest directory
- * containing both `cwd` and the pattern's static base, so a pattern under `cwd` is
- * filtered exactly as fast-glob filtered it.
+ * Relative patterns and negations (`!pattern`) resolve from `cwd`; a negation starting with
+ * `**` excludes matches at any depth below the directory its positive pattern is searched
+ * from. A negation ending in `**` or a literal name excludes the whole directory it names
+ * without reading it. Only files are returned, so a pattern naming a directory matches
+ * nothing. `node_modules` and `dist` directories are skipped below the deepest directory
+ * containing both `cwd` and the pattern's static base. Symbolic links are followed, and
+ * matches are reported at their link paths. A pattern that is literally the path of an
+ * existing file also matches that file, even when it contains glob characters.
+ *
+ * @throws When a pattern uses unsupported syntax, or a directory that could hold matches
+ *   cannot be read for any reason other than having been removed (ENOENT).
  */
 export async function findTestFiles(
   patterns: string[],
   cwd: string = process.cwd(),
 ): Promise<string[]> {
   const cwdSlashed = toSlashes(cwd).replace(/\/?$/, '/');
-  const isAnywhereNegation = (p: string): boolean => p === '!**' || p.startsWith('!**/');
-  const anywhere = patterns.filter(isAnywhereNegation);
-  const resolved = patterns
-    .filter((p) => p !== '' && !isAnywhereNegation(p))
-    .map((p) => resolvePattern(p, cwdSlashed));
-  const readErrors: NodeJS.ErrnoException[] = [];
+  const crawls = new Map<string, Crawl>();
+  const literals: Resolved[] = [];
+  const negations: Negation[] = [];
+  /** Directory that `node_modules`, `dist`, and `**` negations are measured from. */
+  const frameFor = (dir: string, root: string): string =>
+    rootOf(cwdSlashed) === root ? commonDirectory(cwdSlashed, dir) : root;
 
-  // tinyglobby 0.2.17 matches paths relative to its own cwd, so a pattern rooted above
-  // that cwd (`../**/x`, or an absolute pattern) cannot match files inside it. Each
-  // pattern is therefore globbed on its own from a directory at or above its base. One
-  // call per pattern also keeps tinyglobby from listing directories between patterns'
-  // bases, which fast-glob never read.
-  const frameOf = (p: ResolvedPattern): string =>
-    rootOf(cwdSlashed) === p.root ? commonDirectory(cwdSlashed, p.base) : p.root;
-  const relativeTo = (frame: string, p: ResolvedPattern): string =>
-    `${escapePath(p.base.slice(frame.length))}${p.rest}`;
-  const globFrom = (
-    frame: string,
-    globPatterns: string[],
-    errors: NodeJS.ErrnoException[],
-  ): Promise<string[]> =>
-    glob(globPatterns, {
-      cwd: frame,
-      ignore: IGNORED,
-      absolute: true,
-      dot: false,
-      // tinyglobby expands a directory pattern into its contents by default; fast-glob,
-      // which tryscript used through v0.2.1, never did.
-      expandDirectories: false,
-      fs: { readdir: recordingReaddir(errors) },
+  for (const pattern of patterns) {
+    const negated = pattern.startsWith('!') && !pattern.startsWith('!(');
+    const body = negated ? pattern.slice(1) : pattern;
+    if (body === '') {
+      continue;
+    }
+    const unsupported = findUnsupportedSyntax(body);
+    if (unsupported) {
+      throw new Error(
+        `Test pattern "${pattern}" uses ${unsupported.syntax}, which tryscript does not ` +
+          `support. ${unsupported.hint}`,
+      );
+    }
+    for (const alternative of expandBraces(body)) {
+      if (negated && (alternative === '**' || alternative.startsWith('**/'))) {
+        const segments = alternative.split('/').filter((s) => s !== '' && s !== '.');
+        negations.push({
+          base: undefined,
+          matcher: new PathMatcher([segments]),
+          prunes: prunesDirectories(segments),
+          namesBase: false,
+        });
+        continue;
+      }
+      const resolved = resolvePattern(alternative, cwdSlashed);
+      if (!resolved) {
+        continue;
+      }
+      if (negated) {
+        negations.push({
+          base: resolved.base,
+          matcher: new PathMatcher([resolved.rest]),
+          prunes: prunesDirectories(resolved.rest),
+          namesBase: resolved.namesBase,
+        });
+        continue;
+      }
+      const crawl = crawls.get(resolved.base) ?? {
+        base: resolved.base,
+        frame: frameFor(resolved.base, resolved.root),
+        alternatives: [],
+      };
+      crawl.alternatives.push(resolved.rest);
+      crawls.set(resolved.base, crawl);
+    }
+    // picomatch matched a path equal to the pattern text before compiling it, so a
+    // shell-expanded name such as `test[1].tryscript.md` still selects, or excludes, itself.
+    const literal = hasGlobSyntax(body) ? resolvePattern(body, cwdSlashed) : undefined;
+    if (literal && negated) {
+      negations.push({
+        base: literal.base,
+        matcher: new PathMatcher([literal.rest.map(escapeSegment)]),
+        prunes: true,
+        namesBase: literal.namesBase,
+      });
+    } else if (literal) {
+      literals.push(literal);
+    }
+  }
+
+  const isPruned = (dir: string, frame: string): boolean =>
+    negations.some((n) => {
+      if (!n.prunes) {
+        return false;
+      }
+      const names = namesBelow(dir, n.base ?? frame);
+      if (names === undefined || (names.length === 0 && !n.namesBase)) {
+        return false;
+      }
+      return n.matcher.matches(names);
     });
-
-  const positives = resolved.filter((r) => !r.negated);
-  const negations = resolved.filter((r) => r.negated).flatMap(expandLiteralBraces);
-  const matches = new Set<string>();
-  const unapplied = new Set<ResolvedPattern>();
-  for (const p of positives) {
-    const frame = frameOf(p);
-    // A pruning negation inside this frame goes to tinyglobby, which then skips the
-    // directories it excludes; `!dir` excludes the whole directory.
-    const inFrame = negations.filter(
-      (n) => prunesDirectories(n) && n.root === p.root && n.base.startsWith(frame),
-    );
-    for (const n of negations) {
-      if (!inFrame.includes(n)) {
-        unapplied.add(n);
+  const matchesNegation = (file: string, frame: string): boolean =>
+    negations.some((n) => {
+      const names = namesBelow(file, n.base ?? frame);
+      return names !== undefined && n.matcher.matches(names);
+    });
+  /** Whether `dir`, or a directory above it, is skipped: ignored by name or pruned. */
+  const isExcludedDirectory = (dir: string, root: string, frame: string): boolean => {
+    for (const prefix of directoryPrefixes(dir, root)) {
+      const below = namesBelow(prefix, frame);
+      const name = prefix.slice(prefix.lastIndexOf('/') + 1);
+      if (below !== undefined && below.length > 0 && IGNORED_DIRECTORIES.has(name)) {
+        return true;
+      }
+      if (isPruned(prefix, frame)) {
+        return true;
       }
     }
-    const globPatterns = [
-      relativeTo(frame, p),
-      ...inFrame.map((n) => `!${relativeTo(frame, n)}`),
-      ...anywhere,
-    ];
-    for (const file of await globFrom(frame, globPatterns, readErrors)) {
-      matches.add(file);
-    }
-  }
-  // Any other negation removes the files it matches as a pattern of its own: one rooted
-  // above a pattern's frame cannot be written relative to it, and one like `!dir/*`
-  // must not prune `dir/sub`, which fast-glob still searched. It only subtracts: a directory
-  // it cannot read holds nothing the positive patterns found, so those errors are moot.
-  // A negation whose base neither contains nor sits inside any positive pattern's base
-  // cannot match anything those patterns found, so its tree is not crawled.
-  const overlaps = (n: ResolvedPattern): boolean =>
-    positives.some(
-      (p) => p.root === n.root && (p.base.startsWith(n.base) || n.base.startsWith(p.base)),
-    );
-  for (const n of [...unapplied].filter(overlaps)) {
-    for (const file of await globFrom(frameOf(n), [relativeTo(frameOf(n), n)], [])) {
-      matches.delete(file);
-    }
-  }
+    return false;
+  };
 
-  const [first] = readErrors;
-  if (first) {
-    const others = readErrors.length > 1 ? ` (and ${readErrors.length - 1} more)` : '';
+  const limit = createLimiter(MAX_CONCURRENT_FS_CALLS);
+  const readErrors = new Map<string, NodeJS.ErrnoException>();
+  const record = (error: NodeJS.ErrnoException, path: string): void => {
+    if (error.code !== 'ENOENT' && !readErrors.has(path)) {
+      readErrors.set(path, error);
+    }
+  };
+  const call = <T>(
+    start: (callback: (error: NodeJS.ErrnoException | null, value: T) => void) => void,
+  ) =>
+    limit(
+      () =>
+        new Promise<{ error: NodeJS.ErrnoException | null; value: T }>((resolve) => {
+          start((error, value) => {
+            resolve({ error, value });
+          });
+        }),
+    );
+  const matches = new Set<string>();
+
+  const crawl = async ({ base, frame, alternatives }: Crawl): Promise<void> => {
+    const root = rootOf(base);
+    if (isExcludedDirectory(base, root, frame)) {
+      return;
+    }
+    const matcher = new PathMatcher(alternatives);
+    // A link back to the base, or to a directory above it, would repeat the crawl forever.
+    // Resolving the base costs a call, so it waits for the first link that needs it.
+    let resolvedBase: Promise<{ real: string; above: Set<string> } | undefined> | undefined;
+    const resolveBase = (): Promise<{ real: string; above: Set<string> } | undefined> => {
+      resolvedBase ??= call<string>((done) => {
+        realpath(base, done);
+      }).then(({ error, value }) => {
+        if (error) {
+          record(error, base);
+          return undefined;
+        }
+        const real = `${toSlashes(value).replace(/\/$/, '')}/`;
+        const above = new Set([
+          rootOf(real),
+          ...directoryPrefixes(real, rootOf(real)).map((p) => `${p}/`),
+        ]);
+        return { real, above };
+      });
+      return resolvedBase;
+    };
+
+    /** Follow a link; a broken or unresolvable link is skipped, as fdir skipped it. */
+    const followLink = async (
+      path: string,
+      next: number[],
+      here: Ancestry,
+      name: string,
+    ): Promise<void> => {
+      const target = await call<string>((done) => {
+        realpath(path, done);
+      });
+      const info = target.error
+        ? undefined
+        : await call<Stats>((done) => {
+            stat(target.value, done);
+          });
+      if (!info || info.error) {
+        return;
+      }
+      if (info.value.isFile()) {
+        considerFile(path, next);
+        return;
+      }
+      if (!info.value.isDirectory() || !shouldDescend(path, next, name)) {
+        return;
+      }
+      const resolved = await resolveBase();
+      const real = `${toSlashes(target.value).replace(/\/$/, '')}/`;
+      if (resolved && !isAncestor(real, here, resolved.real, resolved.above)) {
+        await visit(`${path}/`, next, { name, parent: here, real });
+      }
+    };
+
+    const considerFile = (path: string, next: number[]): void => {
+      if (matcher.accepts(next) && !matchesNegation(path, frame)) {
+        matches.add(path);
+      }
+    };
+
+    const shouldDescend = (path: string, next: number[], name: string): boolean =>
+      matcher.canDescend(next) && !IGNORED_DIRECTORIES.has(name) && !isPruned(path, frame);
+
+    const visit = async (dir: string, states: number[], here: Ancestry): Promise<void> => {
+      const listed = await call<Dirent[]>((done) => {
+        readdir(dir, { withFileTypes: true }, done);
+      });
+      if (listed.error) {
+        record(listed.error, dir);
+        return;
+      }
+      const pending: Promise<void>[] = [];
+      for (const entry of listed.value) {
+        const next = matcher.step(states, entry.name);
+        if (next.length === 0) {
+          continue;
+        }
+        const path = `${dir}${entry.name}`;
+        if (entry.isFile()) {
+          considerFile(path, next);
+        } else if (entry.isDirectory()) {
+          if (shouldDescend(path, next, entry.name)) {
+            const child: Ancestry = { name: entry.name, parent: here, real: undefined };
+            pending.push(visit(`${path}/`, next, child));
+          }
+        } else if (entry.isSymbolicLink()) {
+          pending.push(followLink(path, next, here, entry.name));
+        }
+      }
+      await Promise.all(pending);
+    };
+    await visit(base, matcher.initial(), { name: '', parent: undefined, real: undefined });
+  };
+
+  const checkLiteral = async ({ root, base, rest }: Resolved): Promise<void> => {
+    const path = `${base}${rest.join('/')}`;
+    const dir = path.slice(0, path.lastIndexOf('/') + 1);
+    if (isWindows && WINDOWS_INVALID_NAME.test(path.slice(root.length))) {
+      return;
+    }
+    const frame = frameFor(dir, root);
+    if (isExcludedDirectory(dir, root, frame) || matchesNegation(path, frame)) {
+      return;
+    }
+    const info = await call<Stats>((done) => {
+      stat(path, done);
+    });
+    if (info.error) {
+      if (!NOT_A_FILE.has(info.error.code ?? '')) {
+        record(info.error, path);
+      }
+      return;
+    }
+    if (info.value.isFile()) {
+      matches.add(path);
+    }
+  };
+
+  await Promise.all([...[...crawls.values()].map(crawl), ...literals.map(checkLiteral)]);
+
+  const failed = [...readErrors.keys()].sort();
+  const firstPath = failed[0];
+  const first = firstPath === undefined ? undefined : readErrors.get(firstPath);
+  if (firstPath !== undefined && first) {
+    const others = failed.length > 1 ? ` (and ${failed.length - 1} more)` : '';
     throw new Error(
-      `Test discovery could not read ${first.path?.replace(/[\\/]$/, '') ?? 'a directory'}: ` +
+      `Test discovery could not read ${firstPath.replace(/[\\/]$/, '')}: ` +
         `${first.code ?? first.message}${others}. ` +
         'Fix its permissions or narrow the test patterns.',
       { cause: first },
