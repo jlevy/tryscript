@@ -409,6 +409,13 @@ describe('findTestFiles syntax, exclusions, and links', () => {
       await symlink(root, join(root, 'links', 'loop'), 'dir');
       await symlink(join(root, 'links'), join(root, 'target', 'back'), 'dir');
       await symlink(join(root, 'target'), join(root, 'links', 'node_modules'), 'dir');
+      // project/alias leads outside; outside/child/up leads back to the directory holding it.
+      await mkdir(join(root, 'project'), { recursive: true });
+      await mkdir(join(root, 'outside', 'child'), { recursive: true });
+      await writeFile(join(root, 'outside', 'unrelated.tryscript.md'), '');
+      await writeFile(join(root, 'outside', 'child', 'c.tryscript.md'), '');
+      await symlink(join(root, 'outside', 'child'), join(root, 'project', 'alias'), 'dir');
+      await symlink(join(root, 'outside'), join(root, 'outside', 'child', 'up'), 'dir');
     });
 
     it('follows links, except one named node_modules, and reports matches at their link paths', async () => {
@@ -427,6 +434,36 @@ describe('findTestFiles syntax, exclusions, and links', () => {
         abs('links/dir-b/t.tryscript.md'),
         abs('target/t.tryscript.md'),
       ]);
+    });
+
+    it('does not follow a link into a directory the search is already inside', async () => {
+      expect(await findTestFiles(['project/**/*.tryscript.md'], root)).toEqual([
+        abs('project/alias/c.tryscript.md'),
+      ]);
+    });
+
+    it('stops, naming the directory, when links fan out to it along too many paths', async () => {
+      // Twelve levels, each with two links to the next: 2,048 paths to the last level, though
+      // no link loops. The run fails instead of multiplying its work.
+      const fan = realpathSync(await mkdtemp(join(tmpdir(), 'tryscript-discovery-fan-')));
+      try {
+        for (let level = 0; level < 12; level++) {
+          await mkdir(join(fan, `l${level}`));
+        }
+        await writeFile(join(fan, 'l11', 'x.tryscript.md'), '');
+        for (let level = 0; level < 11; level++) {
+          for (const name of ['a', 'b']) {
+            await symlink(join(fan, `l${level + 1}`), join(fan, `l${level}`, name), 'dir');
+          }
+        }
+        await expect(findTestFiles(['l0/**/*.tryscript.md'], fan)).rejects.toThrow(
+          /^Test discovery reached .*\/l\d+ through more than 64 symbolic-link paths\./,
+        );
+        // Below the budget, every path is still reported.
+        expect(await findTestFiles(['l5/**/*.tryscript.md'], fan)).toHaveLength(64);
+      } finally {
+        await rm(fan, { recursive: true, force: true });
+      }
     });
   });
 });

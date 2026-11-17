@@ -11,10 +11,10 @@ import { expandBraces, findUnsupportedSyntax, isStaticSegment, PathMatcher } fro
 const IGNORED_DIRECTORIES = new Set(['node_modules', 'dist']);
 
 /**
- * Most filesystem calls in flight at once. libuv runs them on a small thread pool, so this
- * bounds queued work and memory on large trees rather than adding parallelism.
+ * Workers listing directories at once, each with one filesystem call in flight. libuv runs
+ * the calls on a small thread pool, so this bounds queued work rather than adding parallelism.
  */
-const MAX_CONCURRENT_FS_CALLS = 32;
+const DISCOVERY_WORKERS = 32;
 
 const isWindows = process.platform === 'win32';
 
@@ -165,34 +165,35 @@ const NOT_A_FILE = new Set(['ENOENT', 'ENOTDIR', 'EINVAL', 'ENAMETOOLONG']);
 /** Characters no Windows file name contains, so a literal path holding one names no file. */
 const WINDOWS_INVALID_NAME = /[*?"<>|]/;
 
-/** A semaphore bounding concurrent filesystem calls. */
-function createLimiter(max: number): <T>(run: () => Promise<T>) => Promise<T> {
-  let active = 0;
-  const waiting: (() => void)[] = [];
-  return async <T>(run: () => Promise<T>): Promise<T> => {
-    if (active < max) {
-      active++;
-    } else {
-      // A released slot passes straight to the next waiter, so `active` stays accurate.
-      await new Promise<void>((resolve) => waiting.push(resolve));
-    }
-    try {
-      return await run();
-    } finally {
-      const next = waiting.shift();
-      if (next) {
-        next();
-      } else {
-        active--;
-      }
-    }
-  };
+/** Errors resolving a link that mean it is broken or loops, so it leads nowhere to search. */
+const BROKEN_LINK = new Set(['ENOENT', 'ENOTDIR', 'ELOOP']);
+
+/**
+ * Most times one crawl enters the same directory through symbolic links. Links that fan out
+ * to shared directories can otherwise multiply the work exponentially without any cycle.
+ */
+const MAX_LINK_PATHS_TO_DIRECTORY = 64;
+
+/** A filesystem call's outcome, as a value so a failure can be recorded rather than thrown. */
+interface Outcome<T> {
+  error: NodeJS.ErrnoException | null;
+  value: T;
+}
+
+function settle<T>(
+  start: (callback: (error: NodeJS.ErrnoException | null, value: T) => void) => void,
+): Promise<Outcome<T>> {
+  return new Promise((resolve) => {
+    start((error, value) => {
+      resolve({ error, value });
+    });
+  });
 }
 
 /**
  * A directory on one crawl branch. Real paths are known only for the crawl base and for
  * directories reached through a link; any other directory's real path extends its parent's,
- * so it is derived only when a link has to be checked for a cycle.
+ * so it is derived only when a link has to be checked.
  */
 interface Ancestry {
   name: string;
@@ -215,18 +216,13 @@ function realPathOf(node: Ancestry, realBase: string): string {
   return names.reverse().reduce((path, name) => `${path}${name}/`, start);
 }
 
-/** Whether a link target is a directory on the branch, or the base or one above it. */
-function isAncestor(
-  target: string,
-  node: Ancestry,
-  realBase: string,
-  above: ReadonlySet<string>,
-): boolean {
-  if (above.has(target)) {
-    return true;
-  }
+/**
+ * Whether the search is already inside a link's target: the target is, or contains, a
+ * directory on the branch. Following it would search that directory again, or forever.
+ */
+function isInsideTarget(target: string, node: Ancestry, realBase: string): boolean {
   for (let current: Ancestry | undefined = node; current; current = current.parent) {
-    if (realPathOf(current, realBase) === target) {
+    if (realPathOf(current, realBase).startsWith(target)) {
       return true;
     }
   }
@@ -352,123 +348,164 @@ export async function findTestFiles(
     return false;
   };
 
-  const limit = createLimiter(MAX_CONCURRENT_FS_CALLS);
   const readErrors = new Map<string, NodeJS.ErrnoException>();
   const record = (error: NodeJS.ErrnoException, path: string): void => {
     if (error.code !== 'ENOENT' && !readErrors.has(path)) {
       readErrors.set(path, error);
     }
   };
-  const call = <T>(
-    start: (callback: (error: NodeJS.ErrnoException | null, value: T) => void) => void,
-  ) =>
-    limit(
-      () =>
-        new Promise<{ error: NodeJS.ErrnoException | null; value: T }>((resolve) => {
-          start((error, value) => {
-            resolve({ error, value });
-          });
-        }),
-    );
   const matches = new Set<string>();
+  let fatal: Error | undefined;
 
-  const crawl = async ({ base, frame, alternatives }: Crawl): Promise<void> => {
-    const root = rootOf(base);
-    if (isExcludedDirectory(base, root, frame)) {
+  /** One crawl's matcher and link bookkeeping, shared by its queued directories. */
+  interface CrawlState {
+    base: string;
+    frame: string;
+    matcher: PathMatcher;
+    realBase: Promise<string | undefined> | undefined;
+    linkPaths: Map<string, number>;
+  }
+  type Task =
+    | { kind: 'dir'; crawl: CrawlState; dir: string; states: number[]; here: Ancestry }
+    | { kind: 'link'; crawl: CrawlState; path: string; states: number[]; here: Ancestry }
+    | { kind: 'literal'; literal: Resolved };
+
+  // A fixed pool of workers drains a queue of plain task records, so a wide directory costs
+  // one small record per child rather than a pending promise per child.
+  const queue: (Task | undefined)[] = [];
+  let head = 0;
+  let active = 0;
+  let idle: (() => void)[] = [];
+  const wakeAll = (): void => {
+    const waiting = idle;
+    idle = [];
+    for (const wake of waiting) {
+      wake();
+    }
+  };
+  const enqueue = (task: Task): void => {
+    queue.push(task);
+    wakeAll();
+  };
+  const dequeue = (): Task | undefined => {
+    const task = queue[head];
+    queue[head] = undefined;
+    head++;
+    if (head > 1024 && head * 2 > queue.length) {
+      queue.splice(0, head);
+      head = 0;
+    }
+    return task;
+  };
+
+  const considerFile = (crawl: CrawlState, path: string, states: number[]): void => {
+    if (crawl.matcher.accepts(states) && !matchesNegation(path, crawl.frame)) {
+      matches.add(path);
+    }
+  };
+  const shouldDescend = (crawl: CrawlState, path: string, states: number[]): boolean =>
+    crawl.matcher.canDescend(states) &&
+    !IGNORED_DIRECTORIES.has(path.slice(path.lastIndexOf('/') + 1)) &&
+    !isPruned(path, crawl.frame);
+
+  const listDirectory = async (
+    crawl: CrawlState,
+    dir: string,
+    states: number[],
+    here: Ancestry,
+  ): Promise<void> => {
+    const listed = await settle<Dirent[]>((done) => {
+      readdir(dir, { withFileTypes: true }, done);
+    });
+    if (listed.error) {
+      record(listed.error, dir);
       return;
     }
-    const matcher = new PathMatcher(alternatives);
-    // A link back to the base, or to a directory above it, would repeat the crawl forever.
-    // Resolving the base costs a call, so it waits for the first link that needs it.
-    let resolvedBase: Promise<{ real: string; above: Set<string> } | undefined> | undefined;
-    const resolveBase = (): Promise<{ real: string; above: Set<string> } | undefined> => {
-      resolvedBase ??= call<string>((done) => {
-        realpath(base, done);
-      }).then(({ error, value }) => {
-        if (error) {
-          record(error, base);
-          return undefined;
+    for (const entry of listed.value) {
+      const next = crawl.matcher.step(states, entry.name);
+      if (next.length === 0) {
+        continue;
+      }
+      const path = `${dir}${entry.name}`;
+      if (entry.isFile()) {
+        considerFile(crawl, path, next);
+      } else if (entry.isDirectory()) {
+        if (shouldDescend(crawl, path, next)) {
+          const child: Ancestry = { name: entry.name, parent: here, real: undefined };
+          enqueue({ kind: 'dir', crawl, dir: `${path}/`, states: next, here: child });
         }
-        const real = `${toSlashes(value).replace(/\/$/, '')}/`;
-        const above = new Set([
-          rootOf(real),
-          ...directoryPrefixes(real, rootOf(real)).map((p) => `${p}/`),
-        ]);
-        return { real, above };
-      });
-      return resolvedBase;
-    };
+      } else if (entry.isSymbolicLink()) {
+        enqueue({ kind: 'link', crawl, path, states: next, here });
+      }
+    }
+  };
 
-    /** Follow a link; a broken or unresolvable link is skipped, as fdir skipped it. */
-    const followLink = async (
-      path: string,
-      next: number[],
-      here: Ancestry,
-      name: string,
-    ): Promise<void> => {
-      const target = await call<string>((done) => {
-        realpath(path, done);
-      });
-      const info = target.error
-        ? undefined
-        : await call<Stats>((done) => {
-            stat(target.value, done);
-          });
-      if (!info || info.error) {
-        return;
-      }
-      if (info.value.isFile()) {
-        considerFile(path, next);
-        return;
-      }
-      if (!info.value.isDirectory() || !shouldDescend(path, next, name)) {
-        return;
-      }
-      const resolved = await resolveBase();
-      const real = `${toSlashes(target.value).replace(/\/$/, '')}/`;
-      if (resolved && !isAncestor(real, here, resolved.real, resolved.above)) {
-        await visit(`${path}/`, next, { name, parent: here, real });
+  /** Follow a link; a broken or looping one is skipped, as fdir skipped it. */
+  const followLink = async (
+    crawl: CrawlState,
+    path: string,
+    states: number[],
+    here: Ancestry,
+  ): Promise<void> => {
+    const recordUnlessBroken = (error: NodeJS.ErrnoException): void => {
+      if (!BROKEN_LINK.has(error.code ?? '')) {
+        record(error, path);
       }
     };
-
-    const considerFile = (path: string, next: number[]): void => {
-      if (matcher.accepts(next) && !matchesNegation(path, frame)) {
-        matches.add(path);
+    const target = await settle<string>((done) => {
+      realpath(path, done);
+    });
+    if (target.error) {
+      recordUnlessBroken(target.error);
+      return;
+    }
+    const info = await settle<Stats>((done) => {
+      stat(target.value, done);
+    });
+    if (info.error) {
+      recordUnlessBroken(info.error);
+      return;
+    }
+    const stats = info.value;
+    if (stats.isFile()) {
+      considerFile(crawl, path, states);
+      return;
+    }
+    if (!stats.isDirectory() || !shouldDescend(crawl, path, states)) {
+      return;
+    }
+    crawl.realBase ??= settle<string>((done) => {
+      realpath(crawl.base, done);
+    }).then(({ error, value }) => {
+      if (error) {
+        record(error, crawl.base);
+        return undefined;
       }
-    };
-
-    const shouldDescend = (path: string, next: number[], name: string): boolean =>
-      matcher.canDescend(next) && !IGNORED_DIRECTORIES.has(name) && !isPruned(path, frame);
-
-    const visit = async (dir: string, states: number[], here: Ancestry): Promise<void> => {
-      const listed = await call<Dirent[]>((done) => {
-        readdir(dir, { withFileTypes: true }, done);
-      });
-      if (listed.error) {
-        record(listed.error, dir);
-        return;
-      }
-      const pending: Promise<void>[] = [];
-      for (const entry of listed.value) {
-        const next = matcher.step(states, entry.name);
-        if (next.length === 0) {
-          continue;
-        }
-        const path = `${dir}${entry.name}`;
-        if (entry.isFile()) {
-          considerFile(path, next);
-        } else if (entry.isDirectory()) {
-          if (shouldDescend(path, next, entry.name)) {
-            const child: Ancestry = { name: entry.name, parent: here, real: undefined };
-            pending.push(visit(`${path}/`, next, child));
-          }
-        } else if (entry.isSymbolicLink()) {
-          pending.push(followLink(path, next, here, entry.name));
-        }
-      }
-      await Promise.all(pending);
-    };
-    await visit(base, matcher.initial(), { name: '', parent: undefined, real: undefined });
+      return `${toSlashes(value).replace(/\/$/, '')}/`;
+    });
+    const realBase = await crawl.realBase;
+    const real = `${toSlashes(target.value).replace(/\/$/, '')}/`;
+    if (realBase === undefined || isInsideTarget(real, here, realBase)) {
+      return;
+    }
+    const count = (crawl.linkPaths.get(real) ?? 0) + 1;
+    crawl.linkPaths.set(real, count);
+    if (count > MAX_LINK_PATHS_TO_DIRECTORY) {
+      fatal ??= new Error(
+        `Test discovery reached ${real.replace(/\/$/, '')} through more than ` +
+          `${MAX_LINK_PATHS_TO_DIRECTORY} symbolic-link paths. Remove links that fan out to ` +
+          'the same directory, or narrow the test patterns.',
+      );
+      return;
+    }
+    const name = path.slice(path.lastIndexOf('/') + 1);
+    enqueue({
+      kind: 'dir',
+      crawl,
+      dir: `${path}/`,
+      states,
+      here: { name, parent: here, real },
+    });
   };
 
   const checkLiteral = async ({ root, base, rest }: Resolved): Promise<void> => {
@@ -481,7 +518,7 @@ export async function findTestFiles(
     if (isExcludedDirectory(dir, root, frame) || matchesNegation(path, frame)) {
       return;
     }
-    const info = await call<Stats>((done) => {
+    const info = await settle<Stats>((done) => {
       stat(path, done);
     });
     if (info.error) {
@@ -495,7 +532,62 @@ export async function findTestFiles(
     }
   };
 
-  await Promise.all([...[...crawls.values()].map(crawl), ...literals.map(checkLiteral)]);
+  const run = (task: Task): Promise<void> => {
+    switch (task.kind) {
+      case 'dir':
+        return listDirectory(task.crawl, task.dir, task.states, task.here);
+      case 'link':
+        return followLink(task.crawl, task.path, task.states, task.here);
+      case 'literal':
+        return checkLiteral(task.literal);
+    }
+  };
+  const worker = async (): Promise<void> => {
+    for (;;) {
+      if (fatal) {
+        // Idle workers wait for new tasks; wake them so they see the failure and stop too.
+        wakeAll();
+        return;
+      }
+      const task = head < queue.length ? dequeue() : undefined;
+      if (task) {
+        active++;
+        await run(task);
+        active--;
+        if (active === 0 && head >= queue.length) {
+          wakeAll();
+        }
+        continue;
+      }
+      if (active === 0) {
+        wakeAll();
+        return;
+      }
+      await new Promise<void>((resolve) => idle.push(resolve));
+    }
+  };
+
+  for (const { base, frame, alternatives } of crawls.values()) {
+    if (isExcludedDirectory(base, rootOf(base), frame)) {
+      continue;
+    }
+    const crawl: CrawlState = {
+      base,
+      frame,
+      matcher: new PathMatcher(alternatives),
+      realBase: undefined,
+      linkPaths: new Map(),
+    };
+    const here: Ancestry = { name: '', parent: undefined, real: undefined };
+    enqueue({ kind: 'dir', crawl, dir: base, states: crawl.matcher.initial(), here });
+  }
+  for (const literal of literals) {
+    enqueue({ kind: 'literal', literal });
+  }
+  await Promise.all(Array.from({ length: DISCOVERY_WORKERS }, worker));
+  if (fatal) {
+    throw fatal;
+  }
 
   const failed = [...readErrors.keys()].sort();
   const firstPath = failed[0];

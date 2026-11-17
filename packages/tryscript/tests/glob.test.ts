@@ -6,6 +6,8 @@
 import { describe, it, expect } from 'vitest';
 import {
   MAX_BRACE_ALTERNATIVES,
+  MAX_BRACE_DEPTH,
+  MAX_PATTERN_LENGTH,
   PathMatcher,
   expandBraces,
   findUnsupportedSyntax,
@@ -272,8 +274,8 @@ describe('matching time stays bounded on adversarial patterns', () => {
 
   it('rejects the repeated single-branch extglobs of GHSA-fc5q-39xc-vjpf immediately', () => {
     const start = performance.now();
-    expect(findUnsupportedSyntax(`${'+(a)'.repeat(5000)}b`)).toBeDefined();
-    expect(findUnsupportedSyntax(`${'*(+(a))'.repeat(2000)}b`)).toBeDefined();
+    expect(findUnsupportedSyntax(`${'+(a)'.repeat(1000)}b`)).toBeDefined();
+    expect(findUnsupportedSyntax(`${'*(+(a))'.repeat(500)}b`)).toBeDefined();
     expect(performance.now() - start).toBeLessThan(BOUND_MS);
   });
 
@@ -283,6 +285,40 @@ describe('matching time stays bounded on adversarial patterns', () => {
     expect(findUnsupportedSyntax(pattern)).toBeUndefined();
     expect(segment(pattern, `${'+(a)'.repeat(50)}b`)).toBe(true);
     expect(segment(pattern, 'a'.repeat(5000))).toBe(false);
+    expect(performance.now() - start).toBeLessThan(BOUND_MS);
+  });
+
+  it('refuses a pattern longer than the length limit before parsing it', () => {
+    const start = performance.now();
+    const deep = `${'{a,'.repeat(2000)}b${'}'.repeat(2000)}`;
+    expect(deep.length).toBeGreaterThan(MAX_PATTERN_LENGTH);
+    expect(() => expandBraces(deep)).toThrow(`longer than ${MAX_PATTERN_LENGTH} characters`);
+    expect(() => findUnsupportedSyntax(deep)).toThrow('longer than');
+    expect(performance.now() - start).toBeLessThan(BOUND_MS);
+  });
+
+  it('refuses braces nested deeper than the depth limit', () => {
+    const nest = (depth: number): string =>
+      `${Array.from({ length: depth }, (_, i) => `{a${i},`).join('')}b${'}'.repeat(depth)}`;
+    expect(expandBraces(nest(MAX_BRACE_DEPTH))).toHaveLength(MAX_BRACE_DEPTH + 1);
+    expect(() => expandBraces(nest(MAX_BRACE_DEPTH + 1))).toThrow(
+      `nests braces more than ${MAX_BRACE_DEPTH} deep`,
+    );
+  });
+
+  it.each([
+    ['unclosed classes', '['],
+    ['unclosed braces', '{'],
+    ['unclosed parentheses', '('],
+    ['braces around unclosed classes', '{['],
+    ['parentheses around unclosed classes', '(['],
+    ['escapes', '\\'],
+  ])('parses a maximum-length pattern of %s quickly', (_label, unit) => {
+    const pattern = unit.repeat(Math.floor(MAX_PATTERN_LENGTH / unit.length));
+    const start = performance.now();
+    findUnsupportedSyntax(pattern);
+    expandBraces(pattern);
+    parseSegment(pattern);
     expect(performance.now() - start).toBeLessThan(BOUND_MS);
   });
 });

@@ -21,6 +21,31 @@
 /** Most alternatives one pattern's braces may expand to. */
 export const MAX_BRACE_ALTERNATIVES = 1024;
 
+/**
+ * Longest pattern accepted, longer than any path a test pattern names. Parsing scans are at
+ * worst quadratic in pattern length, so this bounds them.
+ */
+export const MAX_PATTERN_LENGTH = 4096;
+
+/** Deepest brace nesting accepted, so parsing recursion stays shallow. */
+export const MAX_BRACE_DEPTH = 32;
+
+/**
+ * Longest `[...]` class, in characters. A `[` with no `]` within this reach is a literal
+ * `[`, so each `[` costs a bounded scan rather than one to the end of the pattern.
+ */
+const MAX_CLASS_LENGTH = 256;
+
+/** Reject a pattern too long to parse within the bounds above. */
+export function assertPatternLength(pattern: string): void {
+  if (pattern.length > MAX_PATTERN_LENGTH) {
+    throw new Error(
+      `Test pattern "${pattern.slice(0, 60)}..." is longer than ${MAX_PATTERN_LENGTH} ` +
+        'characters. Split it into simpler patterns.',
+    );
+  }
+}
+
 /** POSIX class names, as picomatch defined them, keyed in a Map so no inherited name applies. */
 const POSIX_CLASSES = new Map<string, (cp: number) => boolean>([
   ['alnum', (cp) => isAlpha(cp) || isDigit(cp)],
@@ -85,7 +110,8 @@ function parseClass(text: string, start: number): ParsedClass | undefined {
   const ranges: [number, number][] = [];
   const named: ((cp: number) => boolean)[] = [];
   let first = true;
-  while (i < text.length && text[i] !== '/') {
+  const limit = Math.min(text.length, start + MAX_CLASS_LENGTH);
+  while (i < limit && text[i] !== '/') {
     if (text[i] === ']' && !first) {
       const matches = (cp: number): boolean => {
         const inside = ranges.some(([lo, hi]) => cp >= lo && cp <= hi) || named.some((f) => f(cp));
@@ -324,13 +350,32 @@ export class PathMatcher {
   }
 }
 
+/**
+ * Class parses for the pattern being scanned. Brace, alternation, and syntax scans skip the
+ * same classes repeatedly, and an unclosed `[` scans to the end of its segment, so each
+ * `[` is parsed once per pattern rather than once per scan.
+ */
+let classCache: { text: string; parsed: Map<number, ParsedClass | null> } | undefined;
+
+function classAt(text: string, i: number): ParsedClass | undefined {
+  if (classCache?.text !== text) {
+    classCache = { text, parsed: new Map() };
+  }
+  let parsed = classCache.parsed.get(i);
+  if (parsed === undefined) {
+    parsed = parseClass(text, i) ?? null;
+    classCache.parsed.set(i, parsed);
+  }
+  return parsed ?? undefined;
+}
+
 /** Index just past an escape or a class at `i`, or `i + 1` for any other character. */
 function skipAt(text: string, i: number, end: number): number {
   if (text[i] === '\\') {
     return Math.min(i + 2, end);
   }
   if (text[i] === '[') {
-    const parsed = parseClass(text, i);
+    const parsed = classAt(text, i);
     if (parsed && parsed.end < end) {
       return parsed.end + 1;
     }
@@ -390,7 +435,13 @@ type BraceNode = string | BraceNode[][];
  * Parse brace groups as bash does: a group needs a top-level comma, and a group without one
  * (`{a}`) or without a closing brace is literal text whose contents may still hold groups.
  */
-function parseBraces(text: string, start: number, end: number): BraceNode[] {
+function parseBraces(text: string, start: number, end: number, depth = 0): BraceNode[] {
+  if (depth > MAX_BRACE_DEPTH) {
+    throw new Error(
+      `Test pattern "${text}" nests braces more than ${MAX_BRACE_DEPTH} deep. ` +
+        'Split it into simpler patterns.',
+    );
+  }
   const nodes: BraceNode[] = [];
   let literal = '';
   for (let i = start; i < end;) {
@@ -403,7 +454,7 @@ function parseBraces(text: string, start: number, end: number): BraceNode[] {
           nodes.push(literal);
           literal = '';
         }
-        nodes.push(parts.map(([from, to]) => parseBraces(text, from, to)));
+        nodes.push(parts.map(([from, to]) => parseBraces(text, from, to, depth + 1)));
         i = close + 1;
         continue;
       }
@@ -445,10 +496,12 @@ function generate(nodes: readonly BraceNode[]): string[] {
 
 /**
  * Expand brace alternatives: `a/{b,c}/d` becomes `a/b/d` and `a/c/d`. Escapes and classes are
- * kept for segment matching. Throws before allocating anything when the pattern would expand
- * to more than {@link MAX_BRACE_ALTERNATIVES} alternatives.
+ * kept for segment matching. Throws before generating anything when the pattern is too long,
+ * nests braces too deeply, or would expand to more than {@link MAX_BRACE_ALTERNATIVES}
+ * alternatives.
  */
 export function expandBraces(pattern: string): string[] {
+  assertPatternLength(pattern);
   const nodes = parseBraces(pattern, 0, pattern.length);
   if (countExpansions(nodes) > MAX_BRACE_ALTERNATIVES) {
     throw new Error(
@@ -498,6 +551,7 @@ export interface UnsupportedSyntax {
  * selecting different files.
  */
 export function findUnsupportedSyntax(pattern: string): UnsupportedSyntax | undefined {
+  assertPatternLength(pattern);
   for (let i = 0; i < pattern.length;) {
     const c = pattern[i] ?? '';
     if (c === '\\' || c === '[') {

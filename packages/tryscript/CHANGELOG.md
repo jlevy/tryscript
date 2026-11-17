@@ -8,8 +8,10 @@
   removes `tinyglobby`, `fdir`, and `picomatch` from the dependency tree, clearing
   GHSA-fc5q-39xc-vjpf (ReDoS through repeated single-branch extglobs in `picomatch`, no
   patched release) from the audit of every project that depends on tryscript. The matcher
-  builds no regular expressions from patterns; matching time is bounded by pattern and
-  path length, and brace expansion is capped at 1,024 alternatives per pattern.
+  builds no regular expressions from patterns, so matching time is bounded by pattern and
+  path length. A pattern is limited to 4,096 characters, 32 levels of brace nesting, and
+  1,024 brace alternatives, and links that reach one directory along more than 64 paths
+  stop discovery, so neither a pattern nor a filesystem layout can make discovery hang.
 
 ### Breaking Changes
 
@@ -42,11 +44,14 @@ These edge cases now follow the documented discovery rules:
   names, such as `.config/**/*.tryscript.md`.
 - A brace alternative that climbs above the working directory, such as
   `{../shared,local}/*.tryscript.md`, matches files there.
-- A symbolic link to a directory that contains it is not followed. Such a link was followed
-  once, so every test below it ran a second time under the link path.
+- A symbolic link into a directory the search is already inside is not followed. Such a
+  link was followed once, so every test below it ran a second time under the link path.
+- A symbolic link that cannot be resolved for a reason other than being broken, such as
+  `EACCES`, fails the run and names the link, as an unreadable directory already did.
+  The tests behind it used to be dropped silently.
 
 **This can turn a false pass into a real failure:** tests that the cases above missed now
-run.
+run, and an unresolvable link now stops the run.
 
 ## 0.3.1
 

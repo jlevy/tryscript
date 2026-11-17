@@ -4,7 +4,7 @@
  */
 
 import { describe, it, expect, beforeAll, afterAll, vi } from 'vitest';
-import { mkdtemp, mkdir, rm, writeFile } from 'node:fs/promises';
+import { mkdtemp, mkdir, rm, symlink, writeFile } from 'node:fs/promises';
 import { realpathSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -12,6 +12,9 @@ import type * as NodeFs from 'node:fs';
 
 /** Directory names whose readdir fails, keyed to the error code to report. */
 const failures = new Map<string, string>();
+
+/** Link names whose realpath fails, keyed to the error code to report. */
+const linkFailures = new Map<string, string>();
 
 vi.mock('node:fs', async (importOriginal) => {
   const actual = await importOriginal<typeof NodeFs>();
@@ -25,7 +28,15 @@ vi.mock('node:fs', async (importOriginal) => {
     }
     (actual.readdir as (...args: unknown[]) => void)(path, options, callback);
   }) as typeof actual.readdir;
-  return { ...actual, readdir };
+  const realpath = ((path: string, callback: (...args: unknown[]) => void) => {
+    const code = [...linkFailures].find(([name]) => path.endsWith(`/${name}`))?.[1];
+    if (code) {
+      callback(Object.assign(new Error(`${code}: ${path}`), { code, path }), '');
+      return;
+    }
+    (actual.realpath as (...args: unknown[]) => void)(path, callback);
+  }) as typeof actual.realpath;
+  return { ...actual, readdir, realpath };
 });
 
 const { findTestFiles } = await import('../src/lib/discovery.js');
@@ -127,5 +138,48 @@ describe('findTestFiles read errors', () => {
     } finally {
       failures.clear();
     }
+  });
+
+  describe.skipIf(process.platform === 'win32')('through symbolic links', () => {
+    let linked: string;
+
+    beforeAll(async () => {
+      linked = realpathSync(await mkdtemp(join(tmpdir(), 'tryscript-discovery-link-errors-')));
+      await mkdir(join(linked, 'target'));
+      await writeFile(join(linked, 'target', 'x.tryscript.md'), '');
+      await mkdir(join(linked, 'links'));
+      await symlink(join(linked, 'target'), join(linked, 'links', 'guarded'), 'dir');
+      await symlink(join(linked, 'missing'), join(linked, 'links', 'dangling'), 'dir');
+    });
+
+    afterAll(async () => {
+      await rm(linked, { recursive: true, force: true });
+    });
+
+    it('skips a broken link, as fdir did', async () => {
+      expect(await findTestFiles(['links/**/*.tryscript.md'], linked)).toEqual([
+        join(linked, 'links', 'guarded', 'x.tryscript.md'),
+      ]);
+    });
+
+    it('fails naming a link it cannot resolve instead of dropping the tests behind it', async () => {
+      linkFailures.set('guarded', 'EACCES');
+      try {
+        await expect(findTestFiles(['links/**/*.tryscript.md'], linked)).rejects.toThrow(
+          `Test discovery could not read ${join(linked, 'links', 'guarded')}: EACCES.`,
+        );
+      } finally {
+        linkFailures.clear();
+      }
+    });
+
+    it('skips a link that loops on itself (ELOOP)', async () => {
+      linkFailures.set('guarded', 'ELOOP');
+      try {
+        expect(await findTestFiles(['links/**/*.tryscript.md'], linked)).toEqual([]);
+      } finally {
+        linkFailures.clear();
+      }
+    });
   });
 });
