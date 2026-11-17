@@ -9,9 +9,10 @@
   GHSA-fc5q-39xc-vjpf (ReDoS through repeated single-branch extglobs in `picomatch`, no
   patched release) from the audit of every project that depends on tryscript. The matcher
   builds no regular expressions from patterns, so matching time is bounded by pattern and
-  path length. A pattern is limited to 4,096 characters, 32 levels of brace nesting, and
-  1,024 brace alternatives, and links that reach one directory along more than 64 paths
-  stop discovery, so neither a pattern nor a filesystem layout can make discovery hang.
+  path length. A pattern is limited to 4,096 characters, 256-character classes, 32 levels
+  of brace nesting, and 1,024 brace alternatives, and links that reach one directory along
+  more than 64 paths stop discovery, so neither a pattern nor a filesystem layout can make
+  discovery hang.
 
 ### Breaking Changes
 

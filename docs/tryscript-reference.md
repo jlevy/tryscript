@@ -1121,8 +1121,9 @@ A pattern that is literally the path of an existing file also selects it, so a
 shell-expanded name such as `test[1].tryscript.md` works as a CLI argument.
 Extended globs such as `+(a|b)`, alternation groups such as `(a|b)`, and brace ranges
 such as `{1..3}` are not supported: a pattern using them stops the run with an error
-naming the pattern. So does a pattern longer than 4,096 characters, one nesting braces
-more than 32 deep, or one whose braces expand to more than 1,024 alternatives.
+naming the pattern. So does a pattern longer than 4,096 characters, one with a character
+class longer than 256 characters, one nesting braces more than 32 deep, or one whose
+braces expand to more than 1,024 alternatives.
 Use brace alternatives instead, or escape the parenthesis as `\(` to match it literally.
 
 ## Execution Model

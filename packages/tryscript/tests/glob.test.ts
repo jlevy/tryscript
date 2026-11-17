@@ -7,6 +7,7 @@ import { describe, it, expect } from 'vitest';
 import {
   MAX_BRACE_ALTERNATIVES,
   MAX_BRACE_DEPTH,
+  MAX_CLASS_LENGTH,
   MAX_PATTERN_LENGTH,
   PathMatcher,
   expandBraces,
@@ -308,6 +309,7 @@ describe('matching time stays bounded on adversarial patterns', () => {
 
   it.each([
     ['unclosed classes', '['],
+    ['unclosed POSIX classes', '[:'],
     ['unclosed braces', '{'],
     ['unclosed parentheses', '('],
     ['braces around unclosed classes', '{['],
@@ -320,5 +322,17 @@ describe('matching time stays bounded on adversarial patterns', () => {
     expandBraces(pattern);
     parseSegment(pattern);
     expect(performance.now() - start).toBeLessThan(BOUND_MS);
+  });
+
+  it('accepts a class up to the length limit and rejects a longer one', () => {
+    const inner = MAX_CLASS_LENGTH - 2;
+    expect(segment(`[${'a'.repeat(inner)}].md`, 'a.md')).toBe(true);
+    const long = `[${'a'.repeat(inner + 1)}].md`;
+    expect(() => findUnsupportedSyntax(long)).toThrow(
+      `uses a character class longer than ${MAX_CLASS_LENGTH} characters`,
+    );
+    expect(() => parseSegment(long)).toThrow('character class longer than');
+    // With no closing bracket in the segment, the [ is literal at any length.
+    expect(segment(`[${'a'.repeat(inner + 10)}`, `[${'a'.repeat(inner + 10)}`)).toBe(true);
   });
 });

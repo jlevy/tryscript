@@ -434,7 +434,13 @@ export async function findTestFiles(
           const child: Ancestry = { name: entry.name, parent: here, real: undefined };
           enqueue({ kind: 'dir', crawl, dir: `${path}/`, states: next, here: child });
         }
-      } else if (entry.isSymbolicLink()) {
+      } else if (
+        entry.isSymbolicLink() &&
+        ((crawl.matcher.accepts(next) && !matchesNegation(path, crawl.frame)) ||
+          shouldDescend(crawl, path, next))
+      ) {
+        // A link is resolved only if it could select a file or lead to one, so an excluded
+        // link that cannot be resolved does not fail the run.
         enqueue({ kind: 'link', crawl, path, states: next, here });
       }
     }

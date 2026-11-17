@@ -173,6 +173,17 @@ describe('findTestFiles read errors', () => {
       }
     });
 
+    it('never resolves a link a negation excludes', async () => {
+      linkFailures.set('guarded', 'EACCES');
+      try {
+        for (const negation of ['!links/guarded', '!links/guarded/**', '!**/guarded']) {
+          expect(await findTestFiles(['links/**/*.tryscript.md', negation], linked)).toEqual([]);
+        }
+      } finally {
+        linkFailures.clear();
+      }
+    });
+
     it('skips a link that loops on itself (ELOOP)', async () => {
       linkFailures.set('guarded', 'ELOOP');
       try {

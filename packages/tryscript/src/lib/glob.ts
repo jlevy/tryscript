@@ -31,10 +31,11 @@ export const MAX_PATTERN_LENGTH = 4096;
 export const MAX_BRACE_DEPTH = 32;
 
 /**
- * Longest `[...]` class, in characters. A `[` with no `]` within this reach is a literal
- * `[`, so each `[` costs a bounded scan rather than one to the end of the pattern.
+ * Longest `[...]` class accepted, in characters including its brackets, so each `[` costs a
+ * bounded scan rather than one to the end of the pattern. A longer class is rejected rather
+ * than silently read as literal text.
  */
-const MAX_CLASS_LENGTH = 256;
+export const MAX_CLASS_LENGTH = 256;
 
 /** Reject a pattern too long to parse within the bounds above. */
 export function assertPatternLength(pattern: string): void {
@@ -121,12 +122,12 @@ function parseClass(text: string, start: number): ParsedClass | undefined {
     }
     first = false;
     if (text[i] === '[' && text[i + 1] === ':') {
-      const close = text.indexOf(':]', i + 2);
-      const name = close === -1 ? undefined : text.slice(i + 2, close);
+      // Only the known names are tried, so this never scans past the class.
+      const name = [...POSIX_CLASSES.keys()].find((n) => text.startsWith(`${n}:]`, i + 2));
       const test = name === undefined ? undefined : POSIX_CLASSES.get(name);
-      if (test) {
+      if (name !== undefined && test) {
         named.push(test);
-        i = close + 2;
+        i += name.length + 4;
         continue;
       }
     }
@@ -146,6 +147,18 @@ function parseClass(text: string, start: number): ParsedClass | undefined {
     }
     ranges.push([lo, lo]);
     i = next;
+  }
+  if (i >= limit) {
+    // The scan stopped at the length limit, not at the end of the segment. A `]` further on
+    // means a longer class was intended.
+    const close = text.indexOf(']', i);
+    const slash = text.indexOf('/', i);
+    if (close !== -1 && (slash === -1 || close < slash)) {
+      throw new Error(
+        `Test pattern "${text}" uses a character class longer than ${MAX_CLASS_LENGTH} ` +
+          'characters. Shorten it, or escape the [ as \\[ to match it literally.',
+      );
+    }
   }
   return undefined;
 }
