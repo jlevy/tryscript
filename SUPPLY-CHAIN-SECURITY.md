@@ -133,6 +133,31 @@ Source-map-js 1.2.2 (September 30) addresses GHSA-68fv-2mgg-jv7q. Both satisfy t
 14-day rule and need no exception.
 These changes affect development tools only.
 
+## Development-Tool Audit Exception (November 17, 2026)
+
+Reviewed-by: pending; the owner’s sign-off is required before this exception merges.
+GHSA-fc5q-39xc-vjpf (high, published October 19, 2026) reports a ReDoS in picomatch’s
+handling of repeated single-branch extglobs.
+Every picomatch release through 4.0.7, the newest, is affected; none is patched.
+Tryscript 0.4.0 removes picomatch from its runtime dependencies by matching test
+patterns itself, and it rejects extended globs.
+
+Development tools still depend on picomatch: vite, vitest, tsdown, rolldown-plugin-dts,
+and typescript-eslint, which match only repository-controlled patterns.
+`pnpm-workspace.yaml` therefore ignores this one advisory in `pnpm audit`.
+`packages/tryscript/tests/runtime-dependencies.test.ts` fails if any runtime dependency
+reaches picomatch, or if the ignored advisories change without the test.
+Remove the exception once a patched picomatch reaches the development tools.
+
+## Development Dependency Overrides (November 17, 2026)
+
+minimatch 11.0.4 (published November 2) addresses GHSA-g3hv-75wg-m249 for ESLint and
+c8’s test-exclude, and glob 14.0.3 (October 28) addresses GHSA-3g3m-2fjr-6pw4 for
+test-exclude. Both satisfy the 14-day rule and need no exception.
+minimatch 11 brings @isaacs/nonrecursive-glob-match 1.0.3 (October 28) into the
+development tree. Lint and the coverage gate pass with these versions.
+These changes affect development tools only.
+
 <!-- This document follows common-doc-guidelines.md.
 See github.com/jlevy/practical-prose and review guidelines before editing.
 -->
