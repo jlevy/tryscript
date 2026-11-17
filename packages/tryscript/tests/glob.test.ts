@@ -332,6 +332,11 @@ describe('matching time stays bounded on adversarial patterns', () => {
       `uses a character class longer than ${MAX_CLASS_LENGTH} characters`,
     );
     expect(() => parseSegment(long)).toThrow('character class longer than');
+    // An escaped \] or one inside a POSIX name does not close it, so the [ stays literal.
+    const escaped = `[${'*'.repeat(inner + 1)}\\].tryscript.md`;
+    expect(findUnsupportedSyntax(escaped)).toBeUndefined();
+    expect(segment(escaped, '[].tryscript.md')).toBe(true);
+    expect(() => parseSegment(`[${'a'.repeat(inner + 1)}[:alpha:]x`)).not.toThrow();
     // With no closing bracket in the segment, the [ is literal at any length.
     expect(segment(`[${'a'.repeat(inner + 10)}`, `[${'a'.repeat(inner + 10)}`)).toBe(true);
   });

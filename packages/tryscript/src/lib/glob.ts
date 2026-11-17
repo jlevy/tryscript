@@ -121,15 +121,12 @@ function parseClass(text: string, start: number): ParsedClass | undefined {
       return { end: i, matches };
     }
     first = false;
-    if (text[i] === '[' && text[i + 1] === ':') {
-      // Only the known names are tried, so this never scans past the class.
-      const name = [...POSIX_CLASSES.keys()].find((n) => text.startsWith(`${n}:]`, i + 2));
-      const test = name === undefined ? undefined : POSIX_CLASSES.get(name);
-      if (name !== undefined && test) {
-        named.push(test);
-        i += name.length + 4;
-        continue;
-      }
+    const name = posixNameAt(text, i);
+    const test = name === undefined ? undefined : POSIX_CLASSES.get(name);
+    if (name !== undefined && test) {
+      named.push(test);
+      i += name.length + 4;
+      continue;
     }
     const [lo, next] = readClassChar(text, i);
     if (lo === undefined) {
@@ -148,19 +145,52 @@ function parseClass(text: string, start: number): ParsedClass | undefined {
     ranges.push([lo, lo]);
     i = next;
   }
-  if (i >= limit) {
-    // The scan stopped at the length limit, not at the end of the segment. A `]` further on
-    // means a longer class was intended.
-    const close = text.indexOf(']', i);
-    const slash = text.indexOf('/', i);
-    if (close !== -1 && (slash === -1 || close < slash)) {
-      throw new Error(
-        `Test pattern "${text}" uses a character class longer than ${MAX_CLASS_LENGTH} ` +
-          'characters. Shorten it, or escape the [ as \\[ to match it literally.',
-      );
-    }
+  if (i >= limit && closesLater(text, i)) {
+    throw new Error(
+      `Test pattern "${text}" uses a character class longer than ${MAX_CLASS_LENGTH} ` +
+        'characters. Shorten it, or escape the [ as \\[ to match it literally.',
+    );
   }
   return undefined;
+}
+
+const POSIX_NAMES = [...POSIX_CLASSES.keys()];
+
+/** The POSIX class name of a `[:name:]` at `i`; only known names are tried, so it never scans on. */
+function posixNameAt(text: string, i: number): string | undefined {
+  if (text[i] !== '[' || text[i + 1] !== ':') {
+    return undefined;
+  }
+  return POSIX_NAMES.find((n) => text.startsWith(`${n}:]`, i + 2));
+}
+
+/** For the pattern last asked about: whether a class scan resumed at each index finds a `]`. */
+let closeCache: { text: string; closes: Uint8Array } | undefined;
+
+/**
+ * Whether a class the length limit cut off at `i` would have closed later in its segment,
+ * read with the same escape and POSIX rules, so an escaped `\]` does not count. The answers
+ * for every index are computed right to left in one pass per pattern.
+ */
+function closesLater(text: string, i: number): boolean {
+  if (closeCache?.text !== text) {
+    const closes = new Uint8Array(text.length + 2);
+    for (let j = text.length - 1; j >= 0; j--) {
+      const c = text[j];
+      if (c === '/') {
+        closes[j] = 0;
+      } else if (c === '\\') {
+        closes[j] = text[j + 1] === '/' ? 0 : (closes[j + 2] ?? 0);
+      } else if (c === ']') {
+        closes[j] = 1;
+      } else {
+        const name = posixNameAt(text, j);
+        closes[j] = closes[name === undefined ? j + 1 : j + name.length + 4] ?? 0;
+      }
+    }
+    closeCache = { text, closes };
+  }
+  return closeCache.closes[i] === 1;
 }
 
 /** Read one possibly escaped class member; a `/` ends the segment, so it ends the class. */
