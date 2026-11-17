@@ -26,3 +26,11 @@ minimumReleaseAgeExclude:
   - '@vitest/snapshot@4.1.12'
   - '@vitest/spy@4.1.12'
   - '@vitest/utils@4.1.12'
+
+# picomatch has no release that fixes GHSA-fc5q-39xc-vjpf, and development tools (vite,
+# vitest, tsdown, typescript-eslint) still depend on it. The published package does not:
+# packages/tryscript/tests/runtime-dependencies.test.ts fails if any runtime dependency
+# reaches an excepted package. See SUPPLY-CHAIN-SECURITY.md.
+auditConfig:
+  ignoreGhsas:
+    - GHSA-fc5q-39xc-vjpf

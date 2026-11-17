@@ -1,5 +1,59 @@
 # tryscript
 
+## 0.4.0
+
+### Security
+
+- Match test patterns with tryscript's own glob matcher instead of `tinyglobby`. This
+  removes `tinyglobby`, `fdir`, and `picomatch` from the dependency tree, clearing
+  GHSA-fc5q-39xc-vjpf (ReDoS through repeated single-branch extglobs in `picomatch`, no
+  patched release) from the audit of every project that depends on tryscript. The matcher
+  builds no regular expressions from patterns, so matching time is bounded by pattern and
+  path length. A pattern is limited to 4,096 characters, 256-character classes, 32 levels
+  of brace nesting, and 1,024 brace alternatives, and links that reach one directory along
+  more than 64 paths stop discovery, so neither a pattern nor a filesystem layout can make
+  discovery hang.
+
+### Breaking Changes
+
+- A test pattern that uses an extended glob (`+(a)`, `@(a|b)`, `!(a)`, `*(a)`, `?(a)`), an
+  alternation group (`(a|b)`), or a brace range (`{1..3}`) now stops the run with an error
+  naming the pattern. `picomatch` interpreted this syntax, which tryscript never
+  documented. Use brace alternatives such as `{a,b}`, or escape the parenthesis as `\(` to
+  match it literally.
+- Parentheses in a pattern are literal characters: `copy (1)/*.tryscript.md` selects files
+  in `copy (1)`, where `picomatch` selected files in `copy 1`.
+
+The reference now lists the supported glob syntax.
+
+### Fixes
+
+These edge cases now follow the documented discovery rules:
+
+- A negation that names a directory (`!fixtures`, `!fixtures/**`, `!**/fixtures`) also
+  excludes matches of a pattern that starts inside it, such as
+  `fixtures/golden/*.tryscript.md`.
+- A negation starting with `**/` and ending in a wildcard, such as `!**/fixtures/*`,
+  excludes the files it matches without skipping the directories below them, like every
+  other negation ending in a wildcard.
+- A brace list in a negation is expanded before deciding which alternatives exclude whole
+  directories, as `fast-glob` did, so `!{fixtures,*.tmp.md}` excludes the `fixtures`
+  directory.
+- `**/.config/*.tryscript.md` finds a `.config` directory directly in the working
+  directory, not only deeper ones.
+- `node_modules` and `dist` directories are skipped inside a dot directory that a pattern
+  names, such as `.config/**/*.tryscript.md`.
+- A brace alternative that climbs above the working directory, such as
+  `{../shared,local}/*.tryscript.md`, matches files there.
+- A symbolic link into a directory the search is already inside is not followed. Such a
+  link was followed once, so every test below it ran a second time under the link path.
+- A symbolic link that cannot be resolved for a reason other than being broken, such as
+  `EACCES`, fails the run and names the link, as an unreadable directory already did.
+  The tests behind it used to be dropped silently.
+
+**This can turn a false pass into a real failure:** tests that the cases above missed now
+run, and an unresolvable link now stops the run.
+
 ## 0.3.1
 
 ### Security

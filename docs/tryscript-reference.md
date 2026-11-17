@@ -1088,15 +1088,43 @@ with forward slashes on every platform, including Windows.
 A `!pattern` entry excludes matches, resolved the same way; one starting with `**/`
 excludes at any depth.
 One ending in `**` or a literal name (`!fixtures/**`, `!fixtures`) excludes the whole
-directory without reading it.
+directory, and everything below it, without reading it.
 Like inclusions, an exclusion does not match inside a dot directory unless it names that
 directory. Only files match, so a pattern naming a directory selects nothing.
 Discovery never descends into `node_modules`, `dist`, or dot directories unless a
 pattern names a dot directory explicitly.
+Symbolic links are followed and matches are reported at their link paths, except that a
+link into a directory the search is already inside is not followed.
+An unreadable directory that could hold matches fails the run and names the directory,
+as does a link that cannot be resolved for any reason other than being broken, and a
+directory reached through more than 64 different link paths.
 Frontmatter values override the project config for a test file.
 Fixture lists are appended, while frontmatter `path` entries are prepended so they have
 higher command-resolution priority.
 Coverage CLI flags override project coverage settings.
+
+Test patterns support this glob syntax:
+
+| Syntax | Matches |
+| --- | --- |
+| `*` | Any characters within one path segment |
+| `?` | Any one character |
+| `[abc]`, `[a-z]`, `[!a]`, `[^a]` | One character from, or not from, the class |
+| `[[:digit:]]` and other POSIX class names | One character of that class |
+| `**` as a whole segment | Zero or more directories |
+| `{a,b}` | Each alternative; braces may nest and contain `/` |
+| `\x` | The character `x` literally |
+
+Wildcards, `?`, and `**` never match a name starting with `.`; write the dot explicitly.
+Every other character, including parentheses and `|`, matches itself.
+A pattern that is literally the path of an existing file also selects it, so a
+shell-expanded name such as `test[1].tryscript.md` works as a CLI argument.
+Extended globs such as `+(a|b)`, alternation groups such as `(a|b)`, and brace ranges
+such as `{1..3}` are not supported: a pattern using them stops the run with an error
+naming the pattern. So does a pattern longer than 4,096 characters, one with a character
+class longer than 256 characters, one nesting braces more than 32 deep, or one whose
+braces expand to more than 1,024 alternatives.
+Use brace alternatives instead, or escape the parenthesis as `\(` to match it literally.
 
 ## Execution Model
 
